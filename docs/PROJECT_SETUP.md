@@ -7,6 +7,11 @@ This document explains the current project structure, the tooling choices, the s
 - Package manager: pnpm `11.4.0`
 - Monorepo task runner: Turborepo `2.9.15`
 - Backend app: NestJS API in `apps/api`
+- API runtime port: `3000`
+- API global prefix: `/api/v1`
+- Database: PostgreSQL through Prisma
+- Cache/queue dependency: Redis, used by BullMQ/ioredis dependencies
+- Local infrastructure: Docker Compose in `infra/docker/docker-compose.yml`
 - Workspace file: `pnpm-workspace.yaml`
 - Root task config: `turbo.json`
 
@@ -23,11 +28,15 @@ groundlense/
       tsconfig.json
       tsconfig.build.json
       eslint.config.mjs
+      prisma/
+        schema.prisma
+      prisma.config.ts
     web/                 # Placeholder folder, no package.json yet
     mobile/              # Placeholder folder, no package.json yet
   docs/                  # Project documentation
   infra/
-    docker/              # Placeholder infra folder
+    docker/
+      docker-compose.yml # Local Postgres and Redis services
     nginx/               # Placeholder infra folder
     scripts/             # Placeholder infra scripts folder
   packages/
@@ -53,10 +62,15 @@ packages:
   - "packages/*"
 allowBuilds:
   '@nestjs/core': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  bcrypt: true
+  msgpackr-extract: true
+  prisma: true
   unrs-resolver: true
 ```
 
-The `allowBuilds` section was added because pnpm flagged `@nestjs/core` and `unrs-resolver` as packages that run build/postinstall scripts. Setting these to `true` avoids pnpm asking for that decision interactively.
+The `allowBuilds` section was added because pnpm flagged packages that run build/postinstall scripts. These approvals are set to real boolean values so pnpm can install non-interactively.
 
 ## Root Scripts
 
@@ -73,7 +87,10 @@ Root scripts:
   "dev": "turbo run dev",
   "build": "turbo run build",
   "lint": "turbo run lint",
-  "test": "turbo run test"
+  "test": "turbo run test",
+  "prisma:validate": "pnpm --filter api exec prisma validate",
+  "prisma:generate": "pnpm --filter api exec prisma generate",
+  "prisma:migrate:dev": "pnpm --filter api exec prisma migrate dev"
 }
 ```
 
@@ -83,23 +100,92 @@ The previous `devEngines.packageManager` block was removed because it conflicted
 
 The API app is a NestJS project at `apps/api`.
 
+The app currently boots with:
+
+- Global route prefix: `/api/v1`
+- Validation pipe enabled globally
+- Validation settings: `whitelist`, `transform`, and `forbidNonWhitelisted`
+- HTTP port: `3000`
+
 Important scripts:
 
 ```json
 "scripts": {
   "dev": "nest start --watch",
   "build": "nest build",
+  "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
   "start": "nest start",
   "start:dev": "nest start --watch",
   "start:debug": "nest start --debug --watch",
   "start:prod": "node dist/main",
   "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+  "prisma:validate": "prisma validate",
+  "prisma:generate": "prisma generate",
+  "prisma:migrate:dev": "prisma migrate dev",
   "test": "jest",
+  "test:watch": "jest --watch",
+  "test:cov": "jest --coverage",
+  "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
   "test:e2e": "jest --config ./test/jest-e2e.json"
 }
 ```
 
 The `dev` script was added so the root command `turbo run dev` can discover and run the API app using a standard monorepo task name.
+
+## API Dependencies Added
+
+The backend package includes the NestJS baseline plus dependencies for the expected backend foundation:
+
+- Configuration: `@nestjs/config`
+- Authentication building blocks: `@nestjs/jwt`, `@nestjs/passport`, `passport`, `passport-jwt`
+- Validation and transformation: `class-validator`, `class-transformer`, `zod`
+- Database: `prisma`, `@prisma/client`
+- Password hashing: `bcrypt`
+- Queues/cache clients: `bullmq`, `ioredis`
+- IDs/utilities: `uuid`
+
+Prisma is configured in `apps/api/prisma.config.ts`, with schema at `apps/api/prisma/schema.prisma`.
+
+The current Prisma schema uses PostgreSQL:
+
+```prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+```
+
+The Prisma client generator currently outputs to:
+
+```text
+apps/api/generated/prisma
+```
+
+That generated folder is ignored by `apps/api/.gitignore`.
+
+## Local Docker Services
+
+Local infrastructure was added at `infra/docker/docker-compose.yml`.
+
+Services:
+
+- `postgres`: PostgreSQL 16, exposed on host port `5432`
+- `redis`: Redis 7, exposed on host port `6379`
+- `postgres_data`: named Docker volume for PostgreSQL data
+
+Default local Postgres settings:
+
+```text
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=groundlense
+```
+
+Expected API database URL for local development:
+
+```text
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/groundlense"
+```
 
 ## Commands To Use
 
@@ -111,6 +197,21 @@ pnpm.cmd dev
 pnpm.cmd build
 pnpm.cmd lint
 pnpm.cmd test
+pnpm.cmd prisma:validate
+pnpm.cmd prisma:generate
+pnpm.cmd prisma:migrate:dev
+```
+
+To start local infrastructure:
+
+```powershell
+docker compose -f infra/docker/docker-compose.yml up -d
+```
+
+To stop it:
+
+```powershell
+docker compose -f infra/docker/docker-compose.yml down
 ```
 
 On this Windows machine, `pnpm.cmd` is safer in PowerShell because plain `pnpm` may resolve to `pnpm.ps1`, which can be blocked by PowerShell execution policy.
@@ -188,6 +289,43 @@ During setup, these issues were found and fixed:
 
    `.pnpm-store` and `.turbo` were added to `.gitignore`.
 
+6. API app accidentally contained a nested Git repository
+
+   Error:
+
+   ```text
+   error: 'apps/api/' does not have a commit checked out
+   error: unable to index file 'apps/api/'
+   fatal: adding files failed
+   ```
+
+   Cause: `apps/api` had its own `.git` directory, but this project is intended to be a single monorepo and there was no root `.gitmodules` file.
+
+   Fix: removed only `apps/api/.git`, then staged `apps/api` as normal files in the root repository.
+
+7. Windows line-ending warnings appeared during `git add`
+
+   Example:
+
+   ```text
+   warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+   ```
+
+   These warnings are not fatal. They come from Git line-ending normalization on Windows.
+
+8. Prisma was accidentally initialized at the repo root
+
+   Symptoms:
+
+   ```text
+   prisma.config.ts
+   prisma/schema.prisma
+   ```
+
+   appeared at the repo root, while the intended API schema already lived under `apps/api/prisma/schema.prisma`.
+
+   Fix: removed the accidental root Prisma config/schema and added root scripts that route Prisma commands to the `api` workspace package with `pnpm --filter api exec ...`.
+
 ## Verification Completed
 
 The workspace was refreshed with:
@@ -208,10 +346,31 @@ Result:
 Tasks: 1 successful, 1 total
 ```
 
+Git staging was also verified after removing the accidental nested API repository:
+
+```powershell
+git add .
+git status --short --branch
+```
+
+The API files were staged as normal files under the root repository.
+
+Prisma validation was verified with:
+
+```powershell
+pnpm.cmd prisma:validate
+```
+
+Result:
+
+```text
+The schema at prisma\schema.prisma is valid
+```
+
 ## Notes For Other Developers
 
 - Run commands from the repo root unless you specifically want to work inside `apps/api`.
 - Use `pnpm.cmd` on Windows PowerShell if `pnpm` is blocked.
-- `apps/api` currently contains its own `.git` folder, so the root repo may show `apps/` as untracked or treat the API folder like a nested repository. If this is meant to be a single monorepo, that nested `.git` folder should eventually be removed or converted intentionally into a submodule.
+- `apps/api` previously contained its own `.git` folder. That nested Git metadata has been removed so the root repo tracks the API as normal monorepo files.
 - `.env` is ignored and should remain local.
 - `pnpm-lock.yaml` is currently ignored by `.gitignore`. For most pnpm projects, committing the lockfile is recommended for reproducible installs; decide this as a team before changing it.
