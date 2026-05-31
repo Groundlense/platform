@@ -2,6 +2,14 @@ import { Body, Controller, Post } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 
+import { Get } from '@nestjs/common';
+
+import { UseGuards } from '@nestjs/common';
+
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+
+import { CurrentUser } from './decorators/current-user.decorator';
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -12,5 +20,13 @@ export class AuthController {
       dto.identifier,
       dto.password,
     );
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  getProfile(
+    @CurrentUser() user: any,
+  ) {
+    return user;
   }
 }
