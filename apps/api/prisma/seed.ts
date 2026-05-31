@@ -1,8 +1,96 @@
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
 async function main() {
+  
+  const epcOrg = await prisma.organization.upsert({
+  where: {
+    id: 'epc-seed',
+  },
+  update: {},
+  create: {
+    id: 'epc-seed',
+    name: 'XYZ Infra Pvt Ltd',
+    type: 'EPC_CONTRACTOR',
+  },
+});
+
+const geotechOrg = await prisma.organization.upsert({
+  where: {
+    id: 'geotech-seed',
+  },
+  update: {},
+  create: {
+    id: 'geotech-seed',
+    name: 'ABC Geotech Pvt Ltd',
+    type: 'GEOTECH_CONTRACTOR',
+  },
+});
+
+const passwordHash = await bcrypt.hash(
+  'Password@123',
+  10,
+);
+
+const pinHash = await bcrypt.hash(
+  '1234',
+  10,
+);
+
+const epcAdmin = await prisma.user.upsert({
+  where: {
+    email: 'admin@xyzinfra.com',
+  },
+  update: {},
+  create: {
+    organizationId: epcOrg.id,
+
+    firstName: 'EPC',
+    lastName: 'Admin',
+
+    email: 'admin@xyzinfra.com',
+
+    passwordHash,
+  },
+});
+
+const geotechAdmin = await prisma.user.upsert({
+  where: {
+    email: 'admin@abcgeotech.com',
+  },
+  update: {},
+  create: {
+    organizationId: geotechOrg.id,
+
+    firstName: 'Geo',
+    lastName: 'Admin',
+
+    email: 'admin@abcgeotech.com',
+
+    passwordHash,
+  },
+});
+
+const worker = await prisma.user.upsert({
+  where: {
+    employeeCode: 'GL-W-0001',
+  },
+  update: {},
+  create: {
+    organizationId: geotechOrg.id,
+
+    employeeCode: 'GL-W-0001',
+
+    firstName: 'Field',
+    lastName: 'Worker',
+
+    pinHash,
+    passwordHash: pinHash,
+  },
+});
+
   const roles = [
     {
       code: 'EPC_ADMIN',
@@ -40,6 +128,27 @@ async function main() {
       description: 'Field data collection user',
     },
   ];
+
+  const fieldWorkerRole =
+  await prisma.role.findUnique({
+    where: {
+      code: 'FIELD_WORKER',
+    },
+  });
+
+  await prisma.userRole.upsert({
+  where: {
+    userId_roleId: {
+      userId: worker.id,
+      roleId: fieldWorkerRole!.id,
+    },
+  },
+  update: {},
+  create: {
+    userId: worker.id,
+    roleId: fieldWorkerRole!.id,
+  },
+});
 
   const permissions = [
     'PROJECT_CREATE',
