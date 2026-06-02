@@ -10,6 +10,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 import { CurrentUser } from './decorators/current-user.decorator';
 
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -21,6 +22,26 @@ export class AuthController {
       dto.password,
     );
   }
+
+  @Post('refresh')
+  refresh(
+    @Body()
+    dto: RefreshTokenDto,
+  ) {
+    return this.authService.refresh(
+      dto.refreshToken,
+    );
+  }
+
+  @Post('logout')
+logout(
+  @Body()
+  dto: RefreshTokenDto,
+) {
+  return this.authService.logout(
+    dto.refreshToken,
+  );
+}
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
