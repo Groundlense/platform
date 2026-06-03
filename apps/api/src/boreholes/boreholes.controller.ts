@@ -15,6 +15,9 @@ import { BoreholesService } from './boreholes.service';
 
 import { CreateBoreholeDto } from './dto/create-borehole.dto';
 
+import { Patch } from '@nestjs/common';
+
+import { UpdateIntervalDto } from './dto/update-interval.dto';
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class BoreholesController {
@@ -63,4 +66,28 @@ export class BoreholesController {
       id,
     );
   }
+
+  @Get('boreholes/:id/intervals')
+getIntervals(
+  @Param('id')
+  boreholeId: string,
+) {
+  return this.boreholesService.getIntervals(
+    boreholeId,
+  );
+}
+
+@Patch('intervals/:id')
+updateInterval(
+  @Param('id')
+  id: string,
+
+  @Body()
+  dto: UpdateIntervalDto,
+) {
+  return this.boreholesService.updateInterval(
+    id,
+    dto,
+  );
+}
 }

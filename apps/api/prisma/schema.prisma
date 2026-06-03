@@ -286,8 +286,34 @@ model Borehole {
 
   project Project @relation(fields: [projectId], references: [id])
 
-  createdBy User @relation("BoreholeCreator", fields: [createdByUserId], references: [id])
+  createdBy User               @relation("BoreholeCreator", fields: [createdByUserId], references: [id])
+  intervals BoreholeInterval[]
 
   @@unique([projectId, boreholeCode])
   @@map("boreholes")
+}
+
+model BoreholeInterval {
+  id String @id @default(uuid())
+
+  boreholeId String
+
+  intervalNo Int
+
+  fromDepth Decimal @db.Decimal(10, 2)
+  toDepth   Decimal @db.Decimal(10, 2)
+
+  soilDescription String?
+
+  nValue Int?
+
+  remarks String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  borehole Borehole @relation(fields: [boreholeId], references: [id])
+
+  @@unique([boreholeId, intervalNo])
+  @@map("borehole_intervals")
 }
