@@ -21,6 +21,7 @@ import { UpdateIntervalDto } from './dto/update-interval.dto';
 
 import { CreateSampleDto } from './dto/create-sample.dto';
 
+import { AssignBoreholeDto } from './dto/assign-borehole.dto';
 import {
   ApiBearerAuth,
   ApiTags,
@@ -122,6 +123,22 @@ getSamples(
 ) {
   return this.boreholesService.getSamples(
     intervalId,
+  );
+}
+
+@Patch(
+  'boreholes/:id/assignment',
+)
+assign(
+  @Param('id')
+  boreholeId: string,
+
+  @Body()
+  dto: AssignBoreholeDto,
+) {
+  return this.boreholesService.assign(
+    boreholeId,
+    dto,
   );
 }
 }

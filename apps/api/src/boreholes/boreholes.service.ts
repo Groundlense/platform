@@ -5,6 +5,7 @@ import { DatabaseService } from '../database/database.service';
 import { CreateBoreholeDto } from './dto/create-borehole.dto';
 import { UpdateIntervalDto } from './dto/update-interval.dto';
 import { CreateSampleDto } from './dto/create-sample.dto';
+import { AssignBoreholeDto } from './dto/assign-borehole.dto';
 @Injectable()
 export class BoreholesService {
   constructor(
@@ -174,6 +175,21 @@ async getSamples(
     },
     orderBy: {
       createdAt: 'asc',
+    },
+  });
+}
+
+async assign(
+  boreholeId: string,
+  dto: AssignBoreholeDto,
+) {
+  return this.db.borehole.update({
+    where: {
+      id: boreholeId,
+    },
+    data: {
+      siteId: dto.siteId,
+      teamId: dto.teamId,
     },
   });
 }

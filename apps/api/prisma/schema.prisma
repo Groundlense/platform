@@ -74,6 +74,7 @@ model Organization {
   updatedAt DateTime @updatedAt
 
   users       User[]
+  teams       Team[]
   epcProjects Project[] @relation("ProjectEpcOrganization")
 
   geotechProjects Project[] @relation("ProjectGeotechOrganization")
@@ -112,6 +113,7 @@ model User {
   projectMemberships ProjectMember[]
   createdBoreholes   Borehole[]      @relation("BoreholeCreator")
   uploadedMedia      Media[]         @relation("MediaUploader")
+  teamMemberships    TeamMember[]
 
   @@map("users")
 }
@@ -247,6 +249,7 @@ model Project {
   createdBy User @relation("ProjectCreator", fields: [createdByUserId], references: [id])
 
   members   ProjectMember[]
+  sites     ProjectSite[]
   boreholes Borehole[]
 
   @@map("projects")
@@ -273,10 +276,13 @@ model Borehole {
 
   projectId String
 
+  siteId String?
+
   boreholeCode String
 
   name String?
 
+  teamId    String?
   latitude  Decimal? @db.Decimal(10, 7)
   longitude Decimal? @db.Decimal(10, 7)
 
@@ -295,10 +301,11 @@ model Borehole {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id])
-
+  project   Project            @relation(fields: [projectId], references: [id])
   createdBy User               @relation("BoreholeCreator", fields: [createdByUserId], references: [id])
   intervals BoreholeInterval[]
+  site      ProjectSite?       @relation(fields: [siteId], references: [id])
+  team      Team?              @relation(fields: [teamId], references: [id])
 
   @@unique([projectId, boreholeCode])
   @@map("boreholes")
@@ -372,4 +379,70 @@ model Media {
   uploadedBy User @relation("MediaUploader", fields: [uploadedByUserId], references: [id])
 
   @@map("media")
+}
+
+model ProjectSite {
+  id String @id @default(uuid())
+
+  projectId String
+
+  code String
+  name String
+
+  description String?
+
+  latitude  Decimal? @db.Decimal(10, 7)
+  longitude Decimal? @db.Decimal(10, 7)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  boreholes Borehole[]
+
+  @@unique([projectId, code])
+  @@map("project_sites")
+}
+
+model Team {
+  id String @id @default(uuid())
+
+  organizationId String
+
+  code String
+  name String
+
+  description String?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  members   TeamMember[]
+  boreholes Borehole[]
+
+  @@unique([organizationId, code])
+  @@map("teams")
+}
+
+model TeamMember {
+  id String @id @default(uuid())
+
+  teamId String
+  userId String
+
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id])
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([teamId, userId])
+  @@map("team_members")
 }
