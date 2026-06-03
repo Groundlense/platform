@@ -8,6 +8,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ProjectsModule } from './projects/projects.module';
 import { BoreholesModule } from './boreholes/boreholes.module';
 import { MediaModule } from './media/media.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [ConfigModule.forRoot({
@@ -21,6 +22,7 @@ import { MediaModule } from './media/media.module';
     ProjectsModule,
     BoreholesModule,
     MediaModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

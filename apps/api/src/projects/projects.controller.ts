@@ -14,9 +14,17 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
-import { Param } from '@nestjs/common';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
 
+import { Param } from '@nestjs/common';
+
+import {
+  ApiBearerAuth,
+  ApiTags,
+} from '@nestjs/swagger';
+
+@ApiTags('Projects')
+@ApiBearerAuth()
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
 export class ProjectsController {

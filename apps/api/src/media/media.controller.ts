@@ -20,6 +20,13 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 import { MediaService } from './media.service';
 
+import {
+  ApiBearerAuth,
+  ApiTags,
+} from '@nestjs/swagger';
+
+@ApiTags('Media')
+@ApiBearerAuth()
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class MediaController {
@@ -80,4 +87,5 @@ export class MediaController {
       intervalId,
     );
   }
+  
 }

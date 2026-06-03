@@ -20,6 +20,14 @@ import { Patch } from '@nestjs/common';
 import { UpdateIntervalDto } from './dto/update-interval.dto';
 
 import { CreateSampleDto } from './dto/create-sample.dto';
+
+import {
+  ApiBearerAuth,
+  ApiTags,
+} from '@nestjs/swagger';
+
+@ApiTags('Boreholes')
+@ApiBearerAuth()
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class BoreholesController {

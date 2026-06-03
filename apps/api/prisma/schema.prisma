@@ -318,7 +318,8 @@ model BoreholeInterval {
 
   nValue Int?
 
-  remarks String?
+  remarks     String?
+  isCompleted Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -342,8 +343,7 @@ model Sample {
 
   sampleDepth Decimal @db.Decimal(10, 2)
 
-  remarks String?
-
+  remarks   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

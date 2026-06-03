@@ -138,6 +138,8 @@ async updateInterval(
 
       remarks:
         dto.remarks,
+
+      isCompleted: true,
     },
   });
 }
