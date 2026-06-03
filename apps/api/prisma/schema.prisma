@@ -50,6 +50,11 @@ enum SampleType {
   UNDISTURBED
 }
 
+enum MediaType {
+  PHOTO
+  DOCUMENT
+}
+
 model Organization {
   id   String           @id @default(uuid())
   name String
@@ -106,6 +111,7 @@ model User {
   createdProjects    Project[]       @relation("ProjectCreator")
   projectMemberships ProjectMember[]
   createdBoreholes   Borehole[]      @relation("BoreholeCreator")
+  uploadedMedia      Media[]         @relation("MediaUploader")
 
   @@map("users")
 }
@@ -319,6 +325,7 @@ model BoreholeInterval {
 
   borehole Borehole @relation(fields: [boreholeId], references: [id])
   samples  Sample[]
+  media    Media[]
 
   @@unique([boreholeId, intervalNo])
   @@map("borehole_intervals")
@@ -343,4 +350,26 @@ model Sample {
   interval BoreholeInterval @relation(fields: [intervalId], references: [id])
 
   @@map("samples")
+}
+
+model Media {
+  id String @id @default(uuid())
+
+  intervalId String?
+
+  fileName String
+  filePath String
+  mimeType String
+
+  mediaType MediaType
+
+  uploadedByUserId String
+
+  createdAt DateTime @default(now())
+
+  interval BoreholeInterval? @relation(fields: [intervalId], references: [id])
+
+  uploadedBy User @relation("MediaUploader", fields: [uploadedByUserId], references: [id])
+
+  @@map("media")
 }

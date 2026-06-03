@@ -7,6 +7,7 @@ import { DatabaseModule } from './database/database.module';
 import { ConfigModule } from '@nestjs/config';
 import { ProjectsModule } from './projects/projects.module';
 import { BoreholesModule } from './boreholes/boreholes.module';
+import { MediaModule } from './media/media.module';
 
 @Module({
   imports: [ConfigModule.forRoot({
@@ -19,6 +20,7 @@ import { BoreholesModule } from './boreholes/boreholes.module';
     UsersModule,
     ProjectsModule,
     BoreholesModule,
+    MediaModule,
   ],
   controllers: [AppController],
   providers: [AppService],
