@@ -18,6 +18,8 @@ import { CreateBoreholeDto } from './dto/create-borehole.dto';
 import { Patch } from '@nestjs/common';
 
 import { UpdateIntervalDto } from './dto/update-interval.dto';
+
+import { CreateSampleDto } from './dto/create-sample.dto';
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class BoreholesController {
@@ -88,6 +90,30 @@ updateInterval(
   return this.boreholesService.updateInterval(
     id,
     dto,
+  );
+}
+
+@Post('intervals/:intervalId/samples')
+createSample(
+  @Param('intervalId')
+  intervalId: string,
+
+  @Body()
+  dto: CreateSampleDto,
+) {
+  return this.boreholesService.createSample(
+    intervalId,
+    dto,
+  );
+}
+
+@Get('intervals/:intervalId/samples')
+getSamples(
+  @Param('intervalId')
+  intervalId: string,
+) {
+  return this.boreholesService.getSamples(
+    intervalId,
   );
 }
 }

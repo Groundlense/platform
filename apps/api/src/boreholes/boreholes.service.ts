@@ -4,7 +4,7 @@ import { DatabaseService } from '../database/database.service';
 
 import { CreateBoreholeDto } from './dto/create-borehole.dto';
 import { UpdateIntervalDto } from './dto/update-interval.dto';
-
+import { CreateSampleDto } from './dto/create-sample.dto';
 @Injectable()
 export class BoreholesService {
   constructor(
@@ -138,6 +138,40 @@ async updateInterval(
 
       remarks:
         dto.remarks,
+    },
+  });
+}
+async createSample(
+  intervalId: string,
+  dto: CreateSampleDto,
+) {
+  return this.db.sample.create({
+    data: {
+      intervalId,
+
+      sampleNumber:
+        dto.sampleNumber,
+
+      sampleType:
+        dto.sampleType,
+
+      sampleDepth:
+        dto.sampleDepth,
+
+      remarks:
+        dto.remarks,
+    },
+  });
+}
+async getSamples(
+  intervalId: string,
+) {
+  return this.db.sample.findMany({
+    where: {
+      intervalId,
+    },
+    orderBy: {
+      createdAt: 'asc',
     },
   });
 }

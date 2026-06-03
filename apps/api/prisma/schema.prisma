@@ -45,6 +45,11 @@ enum BoreholeStatus {
   ABANDONED
 }
 
+enum SampleType {
+  DISTURBED
+  UNDISTURBED
+}
+
 model Organization {
   id   String           @id @default(uuid())
   name String
@@ -313,7 +318,29 @@ model BoreholeInterval {
   updatedAt DateTime @updatedAt
 
   borehole Borehole @relation(fields: [boreholeId], references: [id])
+  samples  Sample[]
 
   @@unique([boreholeId, intervalNo])
   @@map("borehole_intervals")
+}
+
+model Sample {
+  id String @id @default(uuid())
+
+  intervalId String
+
+  sampleNumber String
+
+  sampleType SampleType
+
+  sampleDepth Decimal @db.Decimal(10, 2)
+
+  remarks String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  interval BoreholeInterval @relation(fields: [intervalId], references: [id])
+
+  @@map("samples")
 }
