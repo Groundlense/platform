@@ -5,7 +5,7 @@
 
 generator client {
   provider = "prisma-client-js"
-//  output   = "../generated/prisma"
+  //  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -30,6 +30,14 @@ enum DevicePlatform {
   WEB
 }
 
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
 model Organization {
   id   String           @id @default(uuid())
   name String
@@ -48,7 +56,10 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users User[]
+  users       User[]
+  epcProjects Project[] @relation("ProjectEpcOrganization")
+
+  geotechProjects Project[] @relation("ProjectGeotechOrganization")
 
   @@map("organizations")
 }
@@ -77,9 +88,11 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  roles         UserRole[]
-  devices       Device[]
-  refreshTokens RefreshToken[]
+  roles              UserRole[]
+  devices            Device[]
+  refreshTokens      RefreshToken[]
+  createdProjects    Project[]       @relation("ProjectCreator")
+  projectMemberships ProjectMember[]
 
   @@map("users")
 }
@@ -186,4 +199,51 @@ model RefreshToken {
   createdAt DateTime @default(now())
 
   @@map("refresh_tokens")
+}
+
+model Project {
+  id String @id @default(uuid())
+
+  projectCode String  @unique
+  name        String
+  description String?
+
+  status ProjectStatus @default(DRAFT)
+
+  epcOrganizationId     String
+  geotechOrganizationId String
+
+  createdByUserId String
+
+  startDate DateTime?
+  endDate   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  epcOrganization Organization @relation("ProjectEpcOrganization", fields: [epcOrganizationId], references: [id])
+
+  geotechOrganization Organization @relation("ProjectGeotechOrganization", fields: [geotechOrganizationId], references: [id])
+
+  createdBy User @relation("ProjectCreator", fields: [createdByUserId], references: [id])
+
+  members ProjectMember[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id String @id @default(uuid())
+
+  projectId String
+  userId    String
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  user User @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@map("project_members")
 }
