@@ -6,6 +6,7 @@ import { UsersModule } from './users/users.module';
 import { DatabaseModule } from './database/database.module';
 import { ConfigModule } from '@nestjs/config';
 import { ProjectsModule } from './projects/projects.module';
+import { BoreholesModule } from './boreholes/boreholes.module';
 
 @Module({
   imports: [ConfigModule.forRoot({
@@ -17,6 +18,7 @@ import { ProjectsModule } from './projects/projects.module';
     AuthModule,
     UsersModule,
     ProjectsModule,
+    BoreholesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
