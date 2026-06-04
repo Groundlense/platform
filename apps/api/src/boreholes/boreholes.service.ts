@@ -7,6 +7,8 @@ import { UpdateIntervalDto } from './dto/update-interval.dto';
 import { CreateSampleDto } from './dto/create-sample.dto';
 import { AssignBoreholeDto } from './dto/assign-borehole.dto';
 import { ActivityLogsService } from 'src/activity-logs/activity-logs.service';
+import { BadRequestException, } from '@nestjs/common';
+import { BoreholeStatus, } from '@prisma/client';
 @Injectable()
 export class BoreholesService {
   constructor(
@@ -233,5 +235,78 @@ await this.activityLogsService.log(
 );
 return borehole;
 
+}
+async updateStatus(
+  boreholeId: string,
+  status: BoreholeStatus,
+  userId: string,
+) {
+  const borehole =
+    await this.db.borehole.findUnique({
+      where: {
+        id: boreholeId,
+      },
+    });
+
+  if (!borehole) {
+    throw new BadRequestException(
+      'Borehole not found',
+    );
+  }
+
+  const current =
+    borehole.status;
+
+  const validTransitions: Record<
+    BoreholeStatus,
+    BoreholeStatus[]
+  > = {
+    PLANNED: [
+      'IN_PROGRESS',
+      'ABANDONED',
+    ],
+
+    IN_PROGRESS: [
+      'COMPLETED',
+      'ABANDONED',
+    ],
+
+    COMPLETED: [],
+
+    ABANDONED: [],
+  };
+
+  if (
+    !validTransitions[
+      current
+    ].includes(status)
+  ) {
+    throw new BadRequestException(
+      `Cannot change status from ${current} to ${status}`,
+    );
+  }
+
+  const updated =
+    await this.db.borehole.update({
+      where: {
+        id: boreholeId,
+      },
+      data: {
+        status,
+      },
+    });
+
+  await this.activityLogsService.log(
+    userId,
+    'BOREHOLE_STATUS_CHANGED',
+    'BOREHOLE',
+    boreholeId,
+    {
+      from: current,
+      to: status,
+    },
+  );
+
+  return updated;
 }
 }
