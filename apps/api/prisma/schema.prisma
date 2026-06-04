@@ -1,11 +1,8 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client-js"
-  //  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -13,9 +10,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ==========================================
+// ENUMS
+// ==========================================
+
 enum OrganizationType {
   EPC_CONTRACTOR
   GEOTECH_CONTRACTOR
+  SYSTEM_OWNER
+  CLIENT
+  NABL_LAB
+  IE_FIRM
+  STRUCTURAL_CONSULTANT
 }
 
 enum UserStatus {
@@ -45,6 +51,13 @@ enum BoreholeStatus {
   ABANDONED
 }
 
+enum BoringMethod {
+  WASH_BORING
+  ROTARY_DRILLING
+  PERCUSSION_DRILLING
+  AUGER_BORING
+}
+
 enum SampleType {
   DISTURBED
   UNDISTURBED
@@ -55,57 +68,154 @@ enum MediaType {
   DOCUMENT
 }
 
+enum PhotoEntityType {
+  BORING
+  INTERVAL
+  SAMPLE
+  WATER_LEVEL
+}
+
+enum PhotoType {
+  SOIL_SAMPLE
+  CORE_BOX
+  SITE_SETUP
+  WATER_LEVEL
+}
+
+enum WaterReadingType {
+  DRILLING_LEVEL
+  REST_LEVEL
+  STABILIZED_LEVEL
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  RESOLVED
+}
+
+enum ReviewType {
+  ENGINEER_REVIEW
+  CLIENT_REVIEW
+  IE_REVIEW
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+  CONFLICT
+}
+
+enum SyncEntityType {
+  BORING
+  SPT_RECORD
+  SAMPLE
+  PHOTO
+  WATER_LEVEL
+}
+
+enum OperationType {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum ScopeType {
+  SYSTEM
+  ORGANIZATION
+  PROJECT
+}
+
+enum ProjectCompanyRole {
+  INITIATOR
+  CONTRACTOR
+  SUBCONTRACTOR
+  CONSULTANT
+}
+
+// ==========================================
+// CORE IDENTITY LAYER
+// ==========================================
+
 model Organization {
-  id   String           @id @default(uuid())
-  name String
-  type OrganizationType
-
-  email String?
-  phone String?
-
+  id      String           @id @default(uuid())
+  name    String
+  type    OrganizationType
+  email   String?
+  phone   String?
   address String?
   city    String?
   state   String?
   country String?
 
-  isActive Boolean @default(true)
+  // ERD Additional Fields
+  gstin              String?
+  pan                String?
+  registeredAddress  String?   @db.Text
+  pincode            String?
+  logoUrl            String?   @db.Text
+  website            String?
+  isVerified         Boolean   @default(false)
+  verifiedAt         DateTime?
+  subscriptionPlan   String?
+  subscriptionExpiry DateTime?
 
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users       User[]
-  teams       Team[]
-  epcProjects Project[] @relation("ProjectEpcOrganization")
+  users User[]
+  teams Team[]
 
-  geotechProjects Project[] @relation("ProjectGeotechOrganization")
+  // Project relations
+  epcProjects       Project[] @relation("ProjectEpcOrganization")
+  geotechProjects   Project[] @relation("ProjectGeotechOrganization")
+  initiatedProjects Project[] @relation("ProjectInitiatorOrg")
+  billingProjects   Project[] @relation("ProjectBillingOrg")
+
+  // Other relations
+  nablLab          NablLab?
+  userCompanyRoles UserCompanyRole[]
+  userProjectRoles UserProjectRole[]
+  projectCompanies ProjectCompany[]
+  payments         Payment[]
+  activityLogs     ActivityLog[]
 
   @@map("organizations")
 }
 
 model User {
-  id String @id @default(uuid())
-
+  id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
+  employeeCode   String?      @unique
+  firstName      String
+  lastName       String?
+  email          String?      @unique
+  mobile         String?      @unique
+  passwordHash   String
+  pinHash        String?
+  status         UserStatus   @default(ACTIVE)
+  lastLoginAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  employeeCode String? @unique
+  // ERD Additional Fields
+  userType          String?
+  designation       String?
+  profilePhotoUrl   String? @db.Text
+  preferredLanguage String? @default("en")
 
-  firstName String
-  lastName  String?
-
-  email  String? @unique
-  mobile String? @unique
-
-  passwordHash String
-  pinHash      String?
-
-  status UserStatus @default(ACTIVE)
-
-  lastLoginAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  // Relations
   roles              UserRole[]
   devices            Device[]
   refreshTokens      RefreshToken[]
@@ -116,33 +226,81 @@ model User {
   teamMemberships    TeamMember[]
   activityLogs       ActivityLog[]
 
+  // Multi-tier RBAC and Project company associations
+  userCompanyRoles     UserCompanyRole[]
+  userProjectRoles     UserProjectRole[]
+  grantedCompanyRoles  UserCompanyRole[] @relation("GrantedCompanyRole")
+  assignedProjectRoles UserProjectRole[] @relation("AssignedProjectRole")
+  invitedCompanies     ProjectCompany[]  @relation("ProjectCompanyInvitor")
+
+  // Field Operations
+  assignedBorings     Borehole[]              @relation("BoreholeAssignedWorker")
+  boringSessions      BoringSession[]
+  soilDescriptions    SoilDescription[]
+  collectedSamples    Sample[]                @relation("SampleCollector")
+  observedWaterLevels WaterTableObservation[] @relation("WaterObservedBy")
+  resolvedConflicts   ConflictLog[]           @relation("ConflictResolver")
+
+  // Reviews & Comments
+  engineerReviews   EngineerReview[]
+  raisedThreads     ReviewThread[]   @relation("ThreadRaiser")
+  assignedThreads   ReviewThread[]   @relation("ThreadAssignee")
+  reviewMessages    ReviewMessage[]
+  paymentsInitiated Payment[]        @relation("PaymentInitiator")
+
   @@map("users")
 }
 
+model NablLab {
+  id           String       @id @default(uuid())
+  companyId    String       @unique
+  organization Organization @relation(fields: [companyId], references: [id])
+
+  nablCertNumber     String
+  labName            String
+  accreditedTests    Json
+  certValidFrom      DateTime
+  certValidUntil     DateTime
+  isVerified         Boolean  @default(false)
+  verificationDocUrl String?  @db.Text
+  createdAt          DateTime @default(now())
+
+  labResults        LabResult[]
+  dispatchedSamples Sample[]    @relation("DispatchedLab")
+  assignedSamples   Sample[]    @relation("AssignedLab")
+
+  @@map("nabl_labs")
+}
+
+// ==========================================
+// RBAC LAYER
+// ==========================================
+
 model Role {
-  id String @id @default(uuid())
+  id           String    @id @default(uuid())
+  code         String    @unique
+  name         String
+  description  String?
+  scope        ScopeType @default(ORGANIZATION)
+  isSystemRole Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  code        String  @unique
-  name        String
-  description String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  users           UserRole[]
-  rolePermissions RolePermission[]
+  users            UserRole[]
+  rolePermissions  RolePermission[]
+  userCompanyRoles UserCompanyRole[]
+  userProjectRoles UserProjectRole[]
 
   @@map("roles")
 }
 
 model Permission {
-  id String @id @default(uuid())
-
-  code   String @unique
-  module String
-  action String
-
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  code        String   @unique
+  module      String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
 
   rolePermissions RolePermission[]
 
@@ -150,14 +308,11 @@ model Permission {
 }
 
 model UserRole {
-  id String @id @default(uuid())
-
-  userId String
-  roleId String
-
-  user User @relation(fields: [userId], references: [id])
-  role Role @relation(fields: [roleId], references: [id])
-
+  id        String   @id @default(uuid())
+  userId    String
+  roleId    String
+  user      User     @relation(fields: [userId], references: [id])
+  role      Role     @relation(fields: [roleId], references: [id])
   createdAt DateTime @default(now())
 
   @@unique([userId, roleId])
@@ -165,325 +320,590 @@ model UserRole {
 }
 
 model RolePermission {
-  id String @id @default(uuid())
-
+  id           String     @id @default(uuid())
   roleId       String
   permissionId String
-
-  role       Role       @relation(fields: [roleId], references: [id])
-  permission Permission @relation(fields: [permissionId], references: [id])
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
 
   @@unique([roleId, permissionId])
   @@map("role_permissions")
 }
 
+model UserCompanyRole {
+  id              String    @id @default(uuid())
+  userId          String
+  companyId       String
+  roleId          String
+  isPrimary       Boolean   @default(true)
+  grantedByUserId String?
+  grantedAt       DateTime  @default(now())
+  revokedAt       DateTime?
+
+  user      User         @relation(fields: [userId], references: [id])
+  company   Organization @relation(fields: [companyId], references: [id])
+  role      Role         @relation(fields: [roleId], references: [id])
+  grantedBy User?        @relation("GrantedCompanyRole", fields: [grantedByUserId], references: [id])
+
+  @@unique([userId, companyId, roleId])
+  @@map("user_company_roles")
+}
+
+model UserProjectRole {
+  id               String    @id @default(uuid())
+  userId           String
+  projectId        String
+  companyId        String
+  roleId           String
+  assignedByUserId String?
+  assignedAt       DateTime  @default(now())
+  revokedAt        DateTime?
+
+  user       User         @relation(fields: [userId], references: [id])
+  project    Project      @relation(fields: [projectId], references: [id])
+  company    Organization @relation(fields: [companyId], references: [id])
+  role       Role         @relation(fields: [roleId], references: [id])
+  assignedBy User?        @relation("AssignedProjectRole", fields: [assignedByUserId], references: [id])
+
+  @@unique([userId, projectId, companyId, roleId])
+  @@map("user_project_roles")
+}
+
+// ==========================================
+// DEVICE REGISTRY & SYNC LAYER
+// ==========================================
+
 model Device {
-  id String @id @default(uuid())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  deviceUuid String @unique
-
-  platform DevicePlatform
-
+  id         String         @id @default(uuid())
+  userId     String
+  user       User           @relation(fields: [userId], references: [id])
+  deviceUuid String         @unique
+  platform   DevicePlatform
   deviceName String?
-
   appVersion String?
-
   lastSeenAt DateTime?
+  lastSyncAt DateTime?
+  isActive   Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  refreshTokens RefreshToken[]
+  refreshTokens  RefreshToken[]
+  syncOperations SyncOperation[]
+  conflictLogs   ConflictLog[]
 
   @@map("devices")
 }
 
 model RefreshToken {
-  id String @id @default(uuid())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  deviceId String?
-  device   Device? @relation(fields: [deviceId], references: [id])
-
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  deviceId  String?
+  device    Device?   @relation(fields: [deviceId], references: [id])
   tokenHash String
-
   expiresAt DateTime
-
   revokedAt DateTime?
-
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@map("refresh_tokens")
 }
 
-model Project {
-  id String @id @default(uuid())
+// ==========================================
+// PROJECT LAYER
+// ==========================================
 
-  projectCode String  @unique
+model Project {
+  id          String        @id @default(uuid())
+  projectCode String        @unique
   name        String
   description String?
-
-  status ProjectStatus @default(DRAFT)
+  status      ProjectStatus @default(DRAFT)
 
   epcOrganizationId     String
   geotechOrganizationId String
-
-  createdByUserId String
+  createdByUserId       String
 
   startDate DateTime?
   endDate   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // ERD Additional Fields
+  projectType          String?
+  state                String?
+  district             String?
+  chainageFrom         Decimal?  @db.Decimal(10, 3)
+  chainageTo           Decimal?  @db.Decimal(10, 3)
+  initiatedByCompanyId String?
+  initiatedByUserId    String?
+  billingCompanyId     String?
+  totalBoringsPlanned  Int?
+  targetCompletionDate DateTime?
+  lockedAt             DateTime?
 
-  epcOrganization Organization @relation("ProjectEpcOrganization", fields: [epcOrganizationId], references: [id])
+  // Relations
+  epcOrganization     Organization  @relation("ProjectEpcOrganization", fields: [epcOrganizationId], references: [id])
+  geotechOrganization Organization  @relation("ProjectGeotechOrganization", fields: [geotechOrganizationId], references: [id])
+  initiatedByCompany  Organization? @relation("ProjectInitiatorOrg", fields: [initiatedByCompanyId], references: [id])
+  billingCompany      Organization? @relation("ProjectBillingOrg", fields: [billingCompanyId], references: [id])
+  createdBy           User          @relation("ProjectCreator", fields: [createdByUserId], references: [id])
 
-  geotechOrganization Organization @relation("ProjectGeotechOrganization", fields: [geotechOrganizationId], references: [id])
-
-  createdBy User @relation("ProjectCreator", fields: [createdByUserId], references: [id])
-
-  members   ProjectMember[]
-  sites     ProjectSite[]
-  boreholes Borehole[]
+  members          ProjectMember[]
+  sites            ProjectSite[]
+  boreholes        Borehole[]
+  projectCompanies ProjectCompany[]
+  userProjectRoles UserProjectRole[]
+  payments         Payment[]
 
   @@map("projects")
 }
 
 model ProjectMember {
-  id String @id @default(uuid())
-
+  id        String   @id @default(uuid())
   projectId String
   userId    String
-
-  project Project @relation(fields: [projectId], references: [id])
-
-  user User @relation(fields: [userId], references: [id])
-
+  project   Project  @relation(fields: [projectId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
 
   @@unique([projectId, userId])
   @@map("project_members")
 }
 
-model Borehole {
-  id String @id @default(uuid())
+model ProjectCompany {
+  id               String             @id @default(uuid())
+  projectId        String
+  companyId        String
+  role             ProjectCompanyRole @default(CONTRACTOR)
+  invitedByUserId  String?
+  inviteAcceptedAt DateTime?
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
 
-  projectId String
+  project   Project      @relation(fields: [projectId], references: [id])
+  company   Organization @relation(fields: [companyId], references: [id])
+  invitedBy User?        @relation("ProjectCompanyInvitor", fields: [invitedByUserId], references: [id])
 
-  siteId String?
-
-  boreholeCode String
-
-  name String?
-
-  teamId    String?
-  latitude  Decimal? @db.Decimal(10, 7)
-  longitude Decimal? @db.Decimal(10, 7)
-
-  groundLevelRL Decimal? @db.Decimal(10, 2)
-
-  plannedDepth Decimal? @db.Decimal(10, 2)
-  finalDepth   Decimal? @db.Decimal(10, 2)
-
-  status BoreholeStatus @default(PLANNED)
-
-  startedAt   DateTime?
-  completedAt DateTime?
-
-  createdByUserId String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  project                Project                 @relation(fields: [projectId], references: [id])
-  createdBy              User                    @relation("BoreholeCreator", fields: [createdByUserId], references: [id])
-  intervals              BoreholeInterval[]
-  site                   ProjectSite?            @relation(fields: [siteId], references: [id])
-  team                   Team?                   @relation(fields: [teamId], references: [id])
-  waterTableObservations WaterTableObservation[]
-
-  @@unique([projectId, boreholeCode])
-  @@map("boreholes")
-}
-
-model BoreholeInterval {
-  id String @id @default(uuid())
-
-  boreholeId String
-
-  intervalNo Int
-
-  fromDepth Decimal @db.Decimal(10, 2)
-  toDepth   Decimal @db.Decimal(10, 2)
-
-  soilDescription String?
-
-  nValue Int?
-
-  remarks     String?
-  isCompleted Boolean @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  borehole Borehole @relation(fields: [boreholeId], references: [id])
-  samples  Sample[]
-  media    Media[]
-
-  @@unique([boreholeId, intervalNo])
-  @@map("borehole_intervals")
-}
-
-model Sample {
-  id String @id @default(uuid())
-
-  intervalId String
-
-  sampleNumber String
-
-  sampleType SampleType
-
-  sampleDepth Decimal @db.Decimal(10, 2)
-
-  remarks   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  interval BoreholeInterval @relation(fields: [intervalId], references: [id])
-
-  @@map("samples")
-}
-
-model Media {
-  id String @id @default(uuid())
-
-  intervalId String?
-
-  fileName String
-  filePath String
-  mimeType String
-
-  mediaType MediaType
-
-  uploadedByUserId String
-
-  createdAt DateTime @default(now())
-
-  interval BoreholeInterval? @relation(fields: [intervalId], references: [id])
-
-  uploadedBy User @relation("MediaUploader", fields: [uploadedByUserId], references: [id])
-
-  @@map("media")
-}
-
-model ProjectSite {
-  id String @id @default(uuid())
-
-  projectId String
-
-  code String
-  name String
-
-  description String?
-
-  latitude  Decimal? @db.Decimal(10, 7)
-  longitude Decimal? @db.Decimal(10, 7)
-
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  project Project @relation(fields: [projectId], references: [id])
-
-  boreholes Borehole[]
-
-  @@unique([projectId, code])
-  @@map("project_sites")
+  @@unique([projectId, companyId, role])
+  @@map("project_companies")
 }
 
 model Team {
-  id String @id @default(uuid())
-
+  id             String   @id @default(uuid())
   organizationId String
-
-  code String
-  name String
-
-  description String?
-
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  code           String
+  name           String
+  description    String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  members      TeamMember[]
+  boreholes    Borehole[]
 
-  members   TeamMember[]
-  boreholes Borehole[]
+  // ERD Additional Fields
+  projectId        String?
+  teamPrefix       String?
+  supervisorUserId String?
+  notificationSent Boolean @default(false)
 
   @@unique([organizationId, code])
   @@map("teams")
 }
 
 model TeamMember {
-  id String @id @default(uuid())
-
-  teamId String
-  userId String
-
+  id        String   @id @default(uuid())
+  teamId    String
+  userId    String
   createdAt DateTime @default(now())
-
-  team Team @relation(fields: [teamId], references: [id])
-
-  user User @relation(fields: [userId], references: [id])
+  team      Team     @relation(fields: [teamId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 
   @@unique([teamId, userId])
   @@map("team_members")
 }
 
-model ActivityLog {
-  id String @id @default(uuid())
+// ==========================================
+// FIELD DATA LAYER
+// ==========================================
 
-  userId String
+model Borehole {
+  id              String         @id @default(uuid())
+  projectId       String
+  siteId          String?
+  boreholeCode    String
+  name            String?
+  teamId          String?
+  latitude        Decimal?       @db.Decimal(10, 7)
+  longitude       Decimal?       @db.Decimal(10, 7)
+  groundLevelRL   Decimal?       @db.Decimal(10, 2)
+  plannedDepth    Decimal?       @db.Decimal(10, 2)
+  finalDepth      Decimal?       @db.Decimal(10, 2)
+  status          BoreholeStatus @default(PLANNED)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdByUserId String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
-  action String
+  // ERD Additional Fields
+  assignedWorkerId String?
+  method           BoringMethod?
+  rigType          String?
+  startDepth       Decimal?      @db.Decimal(10, 2)
+  lockedAt         DateTime?
 
-  entityType String
+  project        Project      @relation(fields: [projectId], references: [id])
+  createdBy      User         @relation("BoreholeCreator", fields: [createdByUserId], references: [id])
+  assignedWorker User?        @relation("BoreholeAssignedWorker", fields: [assignedWorkerId], references: [id])
+  site           ProjectSite? @relation(fields: [siteId], references: [id])
+  team           Team?        @relation(fields: [teamId], references: [id])
 
-  entityId String
+  intervals              BoreholeInterval[]
+  waterTableObservations WaterTableObservation[]
+  boringSessions         BoringSession[]
+  engineerReviews        EngineerReview[]
+  reviewThreads          ReviewThread[]
 
-  metadata Json?
+  @@unique([projectId, boreholeCode])
+  @@map("boreholes")
+}
 
-  createdAt DateTime @default(now())
+model BoringSession {
+  id                String    @id @default(uuid())
+  boreholeId        String
+  workerId          String
+  startDepth        Decimal   @db.Decimal(10, 2)
+  endDepth          Decimal   @db.Decimal(10, 2)
+  status            String
+  terminationReason String?
+  startedAt         DateTime
+  endedAt           DateTime?
+  createdAt         DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  borehole       Borehole        @relation(fields: [boreholeId], references: [id])
+  worker         User            @relation(fields: [workerId], references: [id])
+  syncOperations SyncOperation[]
 
-  @@map("activity_logs")
+  @@map("boring_sessions")
+}
+
+model BoreholeInterval {
+  id              String   @id @default(uuid())
+  boreholeId      String
+  intervalNo      Int
+  fromDepth       Decimal  @db.Decimal(10, 2)
+  toDepth         Decimal  @db.Decimal(10, 2)
+  soilDescription String?  @db.Text
+  nValue          Int?
+  remarks         String?  @db.Text
+  isCompleted     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // ERD Additional Fields (SFLD_RECORDS)
+  blow1            Int?
+  blow2            Int?
+  blow3            Int?
+  nCorrected       Int?
+  isRefusal        Boolean   @default(false)
+  penetrationMm    Int?
+  dilatancyApplied Boolean   @default(false)
+  gpsLat           Decimal?  @db.Decimal(10, 8)
+  gpsLng           Decimal?  @db.Decimal(11, 8)
+  observedAt       DateTime?
+  prevHash         String?
+  sha256Hash       String?
+
+  borehole         Borehole         @relation(fields: [boreholeId], references: [id])
+  samples          Sample[]
+  media            Media[]
+  soilDescriptions SoilDescription?
+
+  @@unique([boreholeId, intervalNo])
+  @@map("borehole_intervals")
+}
+
+model SoilDescription {
+  id              String   @id @default(uuid())
+  sptRecordId     String   @unique
+  soilType        String
+  uscsCode        String?
+  color           String?
+  consistency     String?
+  description     String   @db.Text
+  remarks         String?  @db.Text
+  enteredByUserId String
+  createdAt       DateTime @default(now())
+
+  sptRecord BoreholeInterval @relation(fields: [sptRecordId], references: [id])
+  enteredBy User             @relation(fields: [enteredByUserId], references: [id])
+
+  @@map("soil_descriptions")
+}
+
+model Sample {
+  id           String     @id @default(uuid())
+  intervalId   String
+  sampleNumber String
+  sampleType   SampleType
+  sampleDepth  Decimal    @db.Decimal(10, 2)
+  remarks      String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // ERD Additional Fields
+  depthFrom         Decimal?  @db.Decimal(10, 2)
+  depthTo           Decimal?  @db.Decimal(10, 2)
+  collectedByUserId String?
+  collectedAt       DateTime?
+  sampleCondition   String?
+  dispatchedToLabId String?
+  dispatchDate      DateTime?
+  assignedLabId     String?
+  status            String?
+
+  interval        BoreholeInterval @relation(fields: [intervalId], references: [id])
+  collectedBy     User?            @relation("SampleCollector", fields: [collectedByUserId], references: [id])
+  dispatchedToLab NablLab?         @relation("DispatchedLab", fields: [dispatchedToLabId], references: [id])
+  assignedLab     NablLab?         @relation("AssignedLab", fields: [assignedLabId], references: [id])
+
+  labResult LabResult?
+
+  @@map("samples")
+}
+
+model Media {
+  id               String    @id @default(uuid())
+  intervalId       String?
+  fileName         String
+  filePath         String
+  mimeType         String
+  mediaType        MediaType
+  uploadedByUserId String
+  createdAt        DateTime  @default(now())
+
+  // ERD Additional Fields
+  entityType   PhotoEntityType?
+  entityId     String?
+  photoType    PhotoType?
+  thumbnailUrl String?          @db.Text
+  gpsLat       Decimal?         @db.Decimal(10, 8)
+  gpsLng       Decimal?         @db.Decimal(11, 8)
+  accuracyM    Decimal?         @db.Decimal(5, 2)
+  sha256Hash   String?
+
+  interval   BoreholeInterval? @relation(fields: [intervalId], references: [id])
+  uploadedBy User              @relation("MediaUploader", fields: [uploadedByUserId], references: [id])
+
+  @@map("media")
+}
+
+model ProjectSite {
+  id          String   @id @default(uuid())
+  projectId   String
+  code        String
+  name        String
+  description String?
+  latitude    Decimal? @db.Decimal(10, 7)
+  longitude   Decimal? @db.Decimal(10, 7)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project   Project    @relation(fields: [projectId], references: [id])
+  boreholes Borehole[]
+
+  @@unique([projectId, code])
+  @@map("project_sites")
 }
 
 model WaterTableObservation {
-  id String @id @default(uuid())
-
-  boreholeId String
-  borehole   Borehole @relation(fields: [boreholeId], references: [id])
-
-  depth Decimal @db.Decimal(8, 2)
-
-  observedAt DateTime
-
-  remarks String?
-
+  id              String   @id @default(uuid())
+  boreholeId      String
+  borehole        Borehole @relation(fields: [boreholeId], references: [id])
+  depth           Decimal  @db.Decimal(8, 2)
+  observedAt      DateTime
+  remarks         String?
   createdByUserId String
+  createdAt       DateTime @default(now())
 
-  createdAt DateTime @default(now())
+  // ERD Additional Fields
+  readingType WaterReadingType?
+  sha256Hash  String?
+
+  observedBy User @relation("WaterObservedBy", fields: [createdByUserId], references: [id])
 
   @@map("water_table_observations")
+}
+
+// ==========================================
+// LAB LAYER
+// ==========================================
+
+model LabResult {
+  id           String   @id @default(uuid())
+  sampleId     String   @unique
+  nablLabId    String
+  testType     String
+  testValues   Json
+  resultValues Json
+  reportNumber String
+  reportPdfUrl String   @db.Text
+  testedOn     DateTime
+  sha256Hash   String?
+  createdAt    DateTime @default(now())
+
+  sample  Sample  @relation(fields: [sampleId], references: [id])
+  nablLab NablLab @relation(fields: [nablLabId], references: [id])
+
+  @@map("lab_results")
+}
+
+model EngineerReview {
+  id               String       @id @default(uuid())
+  boreholeId       String
+  reviewedByUserId String
+  reviewType       ReviewType   @default(ENGINEER_REVIEW)
+  status           ReviewStatus @default(PENDING)
+  comments         String?      @db.Text
+  isCodeMeson      Boolean      @default(false)
+  reviewedAt       DateTime     @default(now())
+
+  borehole   Borehole @relation(fields: [boreholeId], references: [id])
+  reviewedBy User     @relation(fields: [reviewedByUserId], references: [id])
+
+  @@map("engineer_reviews")
+}
+
+model ReviewThread {
+  id               String   @id @default(uuid())
+  boreholeId       String
+  raisedByUserId   String
+  assignedToUserId String
+  threadType       String
+  status           String
+  priority         String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  borehole   Borehole @relation(fields: [boreholeId], references: [id])
+  raisedBy   User     @relation("ThreadRaiser", fields: [raisedByUserId], references: [id])
+  assignedTo User     @relation("ThreadAssignee", fields: [assignedToUserId], references: [id])
+
+  messages ReviewMessage[]
+
+  @@map("review_threads")
+}
+
+model ReviewMessage {
+  id          String   @id @default(uuid())
+  threadId    String
+  senderId    String
+  message     String   @db.Text
+  attachments Json?
+  createdAt   DateTime @default(now())
+
+  thread ReviewThread @relation(fields: [threadId], references: [id])
+  sender User         @relation(fields: [senderId], references: [id])
+
+  @@map("review_messages")
+}
+
+// ==========================================
+// FINANCE LAYER
+// ==========================================
+
+model Payment {
+  id                String        @id @default(uuid())
+  projectId         String
+  companyId         String
+  initiatedByUserId String
+  planType          String
+  boringsPurchased  Int
+  amountPaid        Decimal       @db.Decimal(10, 2)
+  razorpayOrderId   String
+  razorpayPaymentId String?
+  status            PaymentStatus @default(PENDING)
+  invoiceUrl        String?       @db.Text
+  paidAt            DateTime?
+  createdAt         DateTime      @default(now())
+
+  project     Project      @relation(fields: [projectId], references: [id])
+  company     Organization @relation(fields: [companyId], references: [id])
+  initiatedBy User         @relation("PaymentInitiator", fields: [initiatedByUserId], references: [id])
+
+  @@map("payments")
+}
+
+// ==========================================
+// SYNC LAYER (Offline First)
+// ==========================================
+
+model SyncOperation {
+  id            String         @id @default(uuid())
+  deviceId      String
+  operationId   String
+  entityType    SyncEntityType
+  entityId      String
+  operationType OperationType
+  payloadJson   Json
+  status        SyncStatus     @default(PENDING)
+  retryCount    Int            @default(0)
+  createdAt     DateTime       @default(now())
+  syncedAt      DateTime?
+
+  // Optional link to session
+  boringSessionId String?
+
+  device        Device         @relation(fields: [deviceId], references: [id])
+  boringSession BoringSession? @relation(fields: [boringSessionId], references: [id])
+
+  @@map("sync_operations")
+}
+
+model ConflictLog {
+  id               String         @id @default(uuid())
+  deviceId         String
+  entityType       SyncEntityType
+  entityId         String
+  localVersion     Int
+  serverVersion    Int
+  conflictDetails  Json
+  resolution       String?        @db.Text
+  resolvedByUserId String?
+  resolvedAt       DateTime?
+
+  device     Device @relation(fields: [deviceId], references: [id])
+  resolvedBy User?  @relation("ConflictResolver", fields: [resolvedByUserId], references: [id])
+
+  @@map("conflict_logs")
+}
+
+// ==========================================
+// AUDIT LAYER
+// ==========================================
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  userId     String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  // ERD Additional Fields
+  actorCompanyId String?
+  ipAddress      String?
+  userAgent      String?
+  isCodeMeson    Boolean @default(false)
+  oldValue       Json?
+  newValue       Json?
+
+  user    User          @relation(fields: [userId], references: [id])
+  company Organization? @relation(fields: [actorCompanyId], references: [id])
+
+  @@map("activity_logs")
 }

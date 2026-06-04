@@ -13,6 +13,13 @@ import { SitesModule } from './sites/sites.module';
 import { TeamsModule } from './teams/teams.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 
+// New Phase 1 Modules
+import { BoringSessionsModule } from './boring-sessions/boring-sessions.module';
+import { SoilDescriptionsModule } from './soil-descriptions/soil-descriptions.module';
+import { NablLabsModule } from './nabl-labs/nabl-labs.module';
+import { PaymentsModule } from './payments/payments.module';
+import { SyncModule } from './sync/sync.module';
+
 @Module({
   imports: [ConfigModule.forRoot({
       isGlobal: true,
@@ -29,6 +36,11 @@ import { ActivityLogsModule } from './activity-logs/activity-logs.module';
     SitesModule,
     TeamsModule,
     ActivityLogsModule,
+    BoringSessionsModule,
+    SoilDescriptionsModule,
+    NablLabsModule,
+    PaymentsModule,
+    SyncModule,
   ],
   controllers: [AppController],
   providers: [AppService],

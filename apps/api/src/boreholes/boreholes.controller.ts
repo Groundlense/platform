@@ -9,6 +9,8 @@ import {
 } from '@nestjs/common';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
@@ -31,12 +33,13 @@ import { CreateWaterTableDto } from './dto/create-water-table.dto';
 @ApiTags('Boreholes')
 @ApiBearerAuth()
 @Controller()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class BoreholesController {
   constructor(
     private readonly boreholesService: BoreholesService,
   ) {}
 
+  @Permissions('BOREHOLE_CREATE')
   @Post(
     'projects/:projectId/boreholes',
   )
@@ -57,6 +60,7 @@ export class BoreholesController {
     );
   }
 
+  @Permissions('BOREHOLE_VIEW')
   @Get(
     'projects/:projectId/boreholes',
   )
@@ -69,6 +73,7 @@ export class BoreholesController {
     );
   }
 
+  @Permissions('BOREHOLE_VIEW')
   @Get('boreholes/:id')
   findOne(
     @Param('id')
@@ -79,141 +84,150 @@ export class BoreholesController {
     );
   }
 
+  @Permissions('BOREHOLE_VIEW')
   @Get('boreholes/:id/intervals')
-getIntervals(
-  @Param('id')
-  boreholeId: string,
-) {
-  return this.boreholesService.getIntervals(
-    boreholeId,
-  );
-}
-
-@Patch('intervals/:id')
-updateInterval(
-  @Param('id')
-  id: string,
-
-  @Body()
-  dto: UpdateIntervalDto,
-
-  @CurrentUser()
-  user: any,
-) {
-  return this.boreholesService.updateInterval(
-    id,
-    user.id,
-    dto,
-  );
-}
-
-@Post('intervals/:intervalId/samples')
-createSample(
-  @Param('intervalId')
-  intervalId: string,
-
-  @Body()
-  dto: CreateSampleDto,
-
-  @CurrentUser()
-  user: any,
-) {
-  return this.boreholesService.createSample(
-    intervalId,
-    user.id,
-    dto,
-  );
-}
-
-@Get('intervals/:intervalId/samples')
-getSamples(
-  @Param('intervalId')
-  intervalId: string,
-) {
-  return this.boreholesService.getSamples(
-    intervalId,
-  );
-}
-
-@Patch(
-  'boreholes/:id/assignment',
-)
-assign(
-  @Param('id')
-  boreholeId: string,
-
-  @Body()
-  dto: AssignBoreholeDto,
-
-  @CurrentUser()
-  user: any,
-) {
-  return this.boreholesService.assign(
-    boreholeId,
-    user.id,
-    dto,
-  );
-}
-@Patch(
-  'boreholes/:id/status',
-)
-updateStatus(
-  @Param('id')
-  boreholeId: string,
-
-  @Body()
-  dto: UpdateBoreholeStatusDto,
-
-  @CurrentUser()
-  user: any,
-) {
-  return this.boreholesService.updateStatus(
-    boreholeId,
-    dto.status,
-    user.id,
-  );
-}
-@Get(
-  'boreholes/:id/report-data',
-)
-getReportData(
-  @Param('id')
-  boreholeId: string,
-) {
-  return this.boreholesService.getReportData(
-    boreholeId,
-  );
-}
-@Post(
-  'boreholes/:id/water-table',
-)
-createWaterTableObservation(
-  @Param('id')
-  boreholeId: string,
-
-  @Body()
-  dto: CreateWaterTableDto,
-
-  @CurrentUser()
-  user: any,
-) {
-  return this.boreholesService
-    .createWaterTableObservation(
+  getIntervals(
+    @Param('id')
+    boreholeId: string,
+  ) {
+    return this.boreholesService.getIntervals(
       boreholeId,
+    );
+  }
+
+  @Permissions('BOREHOLE_EDIT')
+  @Patch('intervals/:id')
+  updateInterval(
+    @Param('id')
+    id: string,
+
+    @Body()
+    dto: UpdateIntervalDto,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService.updateInterval(
+      id,
+      user.id,
       dto,
+    );
+  }
+
+  @Permissions('BOREHOLE_EDIT')
+  @Post('intervals/:intervalId/samples')
+  createSample(
+    @Param('intervalId')
+    intervalId: string,
+
+    @Body()
+    dto: CreateSampleDto,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService.createSample(
+      intervalId,
+      user.id,
+      dto,
+    );
+  }
+
+  @Permissions('BOREHOLE_VIEW')
+  @Get('intervals/:intervalId/samples')
+  getSamples(
+    @Param('intervalId')
+    intervalId: string,
+  ) {
+    return this.boreholesService.getSamples(
+      intervalId,
+    );
+  }
+
+  @Permissions('WORKER_ASSIGN')
+  @Patch(
+    'boreholes/:id/assignment',
+  )
+  assign(
+    @Param('id')
+    boreholeId: string,
+
+    @Body()
+    dto: AssignBoreholeDto,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService.assign(
+      boreholeId,
+      user.id,
+      dto,
+    );
+  }
+  @Permissions('BOREHOLE_EDIT')
+  @Patch(
+    'boreholes/:id/status',
+  )
+  updateStatus(
+    @Param('id')
+    boreholeId: string,
+
+    @Body()
+    dto: UpdateBoreholeStatusDto,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService.updateStatus(
+      boreholeId,
+      dto.status,
       user.id,
     );
-}
-@Get(
-  'boreholes/:id/water-table',
-)
-getWaterTableObservations(
-  @Param('id')
-  boreholeId: string,
-) {
-  return this.boreholesService
-    .getWaterTableObservations(
+  }
+  @Permissions('REPORT_VIEW')
+  @Get(
+    'boreholes/:id/report-data',
+  )
+  getReportData(
+    @Param('id')
+    boreholeId: string,
+  ) {
+    return this.boreholesService.getReportData(
       boreholeId,
     );
-}
+  }
+  @Permissions('BOREHOLE_EDIT')
+  @Post(
+    'boreholes/:id/water-table',
+  )
+  createWaterTableObservation(
+    @Param('id')
+    boreholeId: string,
+
+    @Body()
+    dto: CreateWaterTableDto,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService
+      .createWaterTableObservation(
+        boreholeId,
+        dto,
+        user.id,
+      );
+  }
+  @Permissions('BOREHOLE_VIEW')
+  @Get(
+    'boreholes/:id/water-table',
+  )
+  getWaterTableObservations(
+    @Param('id')
+    boreholeId: string,
+  ) {
+    return this.boreholesService
+      .getWaterTableObservations(
+        boreholeId,
+      );
+  }
 }
