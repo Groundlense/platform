@@ -45,6 +45,14 @@ export class AuthService {
       );
     }
 
+    if (
+  user.status !== 'ACTIVE'
+) {
+  throw new UnauthorizedException(
+    'User account inactive',
+  );
+}
+
     let valid = false;
 
     if (user.employeeCode) {

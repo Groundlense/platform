@@ -173,4 +173,15 @@ updateStatus(
     user.id,
   );
 }
+@Get(
+  'boreholes/:id/report-data',
+)
+getReportData(
+  @Param('id')
+  boreholeId: string,
+) {
+  return this.boreholesService.getReportData(
+    boreholeId,
+  );
+}
 }

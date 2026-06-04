@@ -309,4 +309,27 @@ async updateStatus(
 
   return updated;
 }
+async getReportData(
+  boreholeId: string,
+) {
+  return this.db.borehole.findUnique({
+    where: {
+      id: boreholeId,
+    },
+
+    include: {
+      site: true,
+
+      team: true,
+
+      intervals: {
+        include: {
+          samples: true,
+
+          media: true,
+        },
+      },
+    },
+  });
+}
 }
