@@ -93,6 +93,11 @@ const worker = await prisma.user.upsert({
 
   const roles = [
     {
+      code: 'SUPER_ADMIN',
+      name: 'Super Admin',
+      description: 'Full access to all organizations',
+    },
+    {
       code: 'EPC_ADMIN',
       name: 'EPC Admin',
       description: 'Full access to EPC organization',
@@ -129,27 +134,6 @@ const worker = await prisma.user.upsert({
     },
   ];
 
-  const fieldWorkerRole =
-  await prisma.role.findUnique({
-    where: {
-      code: 'FIELD_WORKER',
-    },
-  });
-
-  await prisma.userRole.upsert({
-  where: {
-    userId_roleId: {
-      userId: worker.id,
-      roleId: fieldWorkerRole!.id,
-    },
-  },
-  update: {},
-  create: {
-    userId: worker.id,
-    roleId: fieldWorkerRole!.id,
-  },
-});
-
   const permissions = [
     'PROJECT_CREATE',
     'PROJECT_VIEW',
@@ -177,6 +161,47 @@ const worker = await prisma.user.upsert({
     });
   }
 
+  const fieldWorkerRole =
+  await prisma.role.findUnique({
+    where: {
+      code: 'FIELD_WORKER',
+    },
+  });
+
+  await prisma.userRole.upsert({
+  where: {
+    userId_roleId: {
+      userId: worker.id,
+      roleId: fieldWorkerRole!.id,
+    },
+  },
+  update: {},
+  create: {
+    userId: worker.id,
+    roleId: fieldWorkerRole!.id,
+  },
+});
+
+const superAdminRole =
+  await prisma.role.findUnique({
+    where: {
+      code: 'SUPER_ADMIN',
+    },
+  });
+
+await prisma.userRole.upsert({
+  where: {
+    userId_roleId: {
+      userId: geotechAdmin.id,
+      roleId: superAdminRole!.id,
+    },
+  },
+  update: {},
+  create: {
+    userId: geotechAdmin.id,
+    roleId: superAdminRole!.id,
+  },
+});
   for (const permissionCode of permissions) {
     await prisma.permission.upsert({
       where: { code: permissionCode },
@@ -188,7 +213,88 @@ const worker = await prisma.user.upsert({
       },
     });
   }
+  const epcAdminRole =
+  await prisma.role.findUnique({
+    where: {
+      code: 'EPC_ADMIN',
+    },
+  });
 
+const projectCreatePermission =
+  await prisma.permission.findUnique({
+    where: {
+      code: 'PROJECT_CREATE',
+    },
+  });
+
+await prisma.rolePermission.upsert({
+  where: {
+    roleId_permissionId: {
+      roleId: epcAdminRole!.id,
+      permissionId:
+        projectCreatePermission!.id,
+    },
+  },
+  update: {},
+  create: {
+    roleId: epcAdminRole!.id,
+    permissionId:
+      projectCreatePermission!.id,
+  },
+});
+async function assignPermission(
+  roleCode: string,
+  permissionCode: string,
+) {
+  const role =
+    await prisma.role.findUnique({
+      where: {
+        code: roleCode,
+      },
+    });
+
+  const permission =
+    await prisma.permission.findUnique({
+      where: {
+        code: permissionCode,
+      },
+    });
+
+  await prisma.rolePermission.upsert({
+    where: {
+      roleId_permissionId: {
+        roleId: role!.id,
+        permissionId:
+          permission!.id,
+      },
+    },
+    update: {},
+    create: {
+      roleId: role!.id,
+      permissionId:
+        permission!.id,
+    },
+  });
+}
+await assignPermission(
+  'EPC_ADMIN',
+  'PROJECT_CREATE',
+);
+
+await assignPermission(
+  'EPC_ADMIN',
+  'PROJECT_VIEW',
+);
+
+await assignPermission(
+  'EPC_ADMIN',
+  'PROJECT_EDIT',
+);
+
+await assignPermission(
+  'FIELD_WORKER',
+  'MEDIA_UPLOAD',
+);
   console.log('✅ Roles seeded');
   console.log('✅ Permissions seeded');
 }
