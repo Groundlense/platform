@@ -62,4 +62,15 @@ export class SitesController {
   ) {
     return this.sitesService.findOne(id);
   }
+  @Get(
+  'sites/:siteId/dashboard',
+)
+getDashboard(
+  @Param('siteId')
+  siteId: string,
+) {
+  return this.sitesService.getDashboard(
+    siteId,
+  );
+}
 }

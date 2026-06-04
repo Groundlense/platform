@@ -68,4 +68,63 @@ export class TeamsService {
       },
     });
   }
+  async getDashboard(
+  teamId: string,
+) {
+  const team =
+    await this.db.team.findUnique({
+      where: {
+        id: teamId,
+      },
+
+      include: {
+        members: true,
+
+        boreholes: true,
+      },
+    });
+
+  const boreholes =
+    team?.boreholes ?? [];
+
+  return {
+    teamId: team?.id,
+
+    teamName: team?.name,
+
+    members:
+      team?.members.length ?? 0,
+
+    boreholes:
+      boreholes.length,
+
+    planned:
+      boreholes.filter(
+        (b) =>
+          b.status ===
+          'PLANNED',
+      ).length,
+
+    inProgress:
+      boreholes.filter(
+        (b) =>
+          b.status ===
+          'IN_PROGRESS',
+      ).length,
+
+    completed:
+      boreholes.filter(
+        (b) =>
+          b.status ===
+          'COMPLETED',
+      ).length,
+
+    abandoned:
+      boreholes.filter(
+        (b) =>
+          b.status ===
+          'ABANDONED',
+      ).length,
+  };
+}
 }

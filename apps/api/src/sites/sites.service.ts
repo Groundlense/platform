@@ -59,4 +59,58 @@ export class SitesService {
       },
     });
   }
+  async getDashboard(
+  siteId: string,
+) {
+  const site =
+    await this.db.projectSite.findUnique({
+      where: {
+        id: siteId,
+      },
+
+      include: {
+        boreholes: true,
+      },
+    });
+
+  const boreholes =
+    site?.boreholes ?? [];
+
+  return {
+    siteId: site?.id,
+
+    siteName: site?.name,
+
+    boreholes:
+      boreholes.length,
+
+    planned:
+      boreholes.filter(
+        (b) =>
+          b.status ===
+          'PLANNED',
+      ).length,
+
+    inProgress:
+      boreholes.filter(
+        (b) =>
+          b.status ===
+          'IN_PROGRESS',
+      ).length,
+
+    completed:
+      boreholes.filter(
+        (b) =>
+          b.status ===
+          'COMPLETED',
+      ).length,
+
+    abandoned:
+      boreholes.filter(
+        (b) =>
+          b.status ===
+          'ABANDONED',
+      ).length,
+  };
+}
 }

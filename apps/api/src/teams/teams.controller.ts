@@ -82,4 +82,15 @@ export class TeamsController {
       teamId,
     );
   }
+  @Get(
+  'teams/:teamId/dashboard',
+)
+getDashboard(
+  @Param('teamId')
+  teamId: string,
+) {
+  return this.teamsService.getDashboard(
+    teamId,
+  );
+}
 }
