@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
 
 import { DatabaseService } from '../database/database.service';
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 
 @Injectable()
 export class MediaService {
   constructor(
     private readonly db: DatabaseService,
+    private readonly activityLogsService: ActivityLogsService,
   ) {}
 
   async create(
@@ -13,7 +15,7 @@ export class MediaService {
     file: Express.Multer.File,
     userId: string,
   ) {
-    return this.db.media.create({
+    const media = await this.db.media.create({
       data: {
         intervalId,
 
@@ -32,6 +34,13 @@ export class MediaService {
           userId,
       },
     });
+    await this.activityLogsService.log(
+  userId,
+  'MEDIA_UPLOADED',
+  'MEDIA',
+  media.id,
+);
+    return media;
   }
 
   async getByInterval(

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -15,17 +16,18 @@ import { BoreholesService } from './boreholes.service';
 
 import { CreateBoreholeDto } from './dto/create-borehole.dto';
 
-import { Patch } from '@nestjs/common';
-
 import { UpdateIntervalDto } from './dto/update-interval.dto';
 
 import { CreateSampleDto } from './dto/create-sample.dto';
 
+import { AssignBoreholeDto } from './dto/assign-borehole.dto';
 import {
   ApiBearerAuth,
   ApiTags,
 } from '@nestjs/swagger';
 
+import { UpdateBoreholeStatusDto, } from './dto/update-borehole-status.dto';
+import { CreateWaterTableDto } from './dto/create-water-table.dto';
 @ApiTags('Boreholes')
 @ApiBearerAuth()
 @Controller()
@@ -94,9 +96,13 @@ updateInterval(
 
   @Body()
   dto: UpdateIntervalDto,
+
+  @CurrentUser()
+  user: any,
 ) {
   return this.boreholesService.updateInterval(
     id,
+    user.id,
     dto,
   );
 }
@@ -108,9 +114,13 @@ createSample(
 
   @Body()
   dto: CreateSampleDto,
+
+  @CurrentUser()
+  user: any,
 ) {
   return this.boreholesService.createSample(
     intervalId,
+    user.id,
     dto,
   );
 }
@@ -123,5 +133,87 @@ getSamples(
   return this.boreholesService.getSamples(
     intervalId,
   );
+}
+
+@Patch(
+  'boreholes/:id/assignment',
+)
+assign(
+  @Param('id')
+  boreholeId: string,
+
+  @Body()
+  dto: AssignBoreholeDto,
+
+  @CurrentUser()
+  user: any,
+) {
+  return this.boreholesService.assign(
+    boreholeId,
+    user.id,
+    dto,
+  );
+}
+@Patch(
+  'boreholes/:id/status',
+)
+updateStatus(
+  @Param('id')
+  boreholeId: string,
+
+  @Body()
+  dto: UpdateBoreholeStatusDto,
+
+  @CurrentUser()
+  user: any,
+) {
+  return this.boreholesService.updateStatus(
+    boreholeId,
+    dto.status,
+    user.id,
+  );
+}
+@Get(
+  'boreholes/:id/report-data',
+)
+getReportData(
+  @Param('id')
+  boreholeId: string,
+) {
+  return this.boreholesService.getReportData(
+    boreholeId,
+  );
+}
+@Post(
+  'boreholes/:id/water-table',
+)
+createWaterTableObservation(
+  @Param('id')
+  boreholeId: string,
+
+  @Body()
+  dto: CreateWaterTableDto,
+
+  @CurrentUser()
+  user: any,
+) {
+  return this.boreholesService
+    .createWaterTableObservation(
+      boreholeId,
+      dto,
+      user.id,
+    );
+}
+@Get(
+  'boreholes/:id/water-table',
+)
+getWaterTableObservations(
+  @Param('id')
+  boreholeId: string,
+) {
+  return this.boreholesService
+    .getWaterTableObservations(
+      boreholeId,
+    );
 }
 }

@@ -23,19 +23,28 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
+import { Permissions } from '../auth/decorators/permissions.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 @ApiTags('Projects')
 @ApiBearerAuth()
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
+
 export class ProjectsController {
   constructor(
     private readonly projectsService: ProjectsService,
   ) {}
 
+  @Permissions('PROJECT_CREATE')
+  @UseGuards(
+    JwtAuthGuard,
+    PermissionsGuard,
+  )
   @Post()
   create(
     @Body() dto: CreateProjectDto,
     @CurrentUser() user: any,
+    
   ) {
     return this.projectsService.create(
       dto,
@@ -43,6 +52,7 @@ export class ProjectsController {
       user.organizationId,
     );
   }
+  
 
   @Get()
   findAll() {

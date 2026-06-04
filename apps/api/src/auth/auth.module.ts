@@ -8,12 +8,15 @@ import { UsersModule } from '../users/users.module';
 
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { DatabaseModule } from '../database/database.module';
+import { ActivityLogsModule } from '../activity-logs/activity-logs.module';
 
 @Module({
   imports: [
-    
     UsersModule,
     PassportModule,
+    DatabaseModule,
+    ActivityLogsModule,
 
     JwtModule.registerAsync({
       imports: [ConfigModule],

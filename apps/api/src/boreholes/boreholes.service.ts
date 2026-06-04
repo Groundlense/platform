@@ -5,10 +5,16 @@ import { DatabaseService } from '../database/database.service';
 import { CreateBoreholeDto } from './dto/create-borehole.dto';
 import { UpdateIntervalDto } from './dto/update-interval.dto';
 import { CreateSampleDto } from './dto/create-sample.dto';
+import { AssignBoreholeDto } from './dto/assign-borehole.dto';
+import { CreateWaterTableDto } from './dto/create-water-table.dto';
+import { ActivityLogsService } from 'src/activity-logs/activity-logs.service';
+import { BadRequestException, } from '@nestjs/common';
+import { BoreholeStatus, } from '@prisma/client';
 @Injectable()
 export class BoreholesService {
   constructor(
     private readonly db: DatabaseService,
+    private readonly activityLogsService: ActivityLogsService,
   ) {}
 
   async findByProject(
@@ -105,6 +111,13 @@ export class BoreholesService {
     });
   }
 
+  await this.activityLogsService.log(
+  userId,
+  'BOREHOLE_CREATED',
+  'BOREHOLE',
+  borehole.id,
+);
+
   return borehole;
 }
 
@@ -123,9 +136,10 @@ async getIntervals(
 
 async updateInterval(
   id: string,
+  userId: string,
   dto: UpdateIntervalDto,
 ) {
-  return this.db.boreholeInterval.update({
+  const interval = await this.db.boreholeInterval.update({
     where: {
       id,
     },
@@ -142,12 +156,22 @@ async updateInterval(
       isCompleted: true,
     },
   });
+
+  await this.activityLogsService.log(
+    userId,
+    'INTERVAL_UPDATED',
+    'INTERVAL',
+    interval.id,
+  );
+
+  return interval;
 }
 async createSample(
   intervalId: string,
+  userId: string,
   dto: CreateSampleDto,
 ) {
-  return this.db.sample.create({
+    const sample = await this.db.sample.create({
     data: {
       intervalId,
 
@@ -164,6 +188,13 @@ async createSample(
         dto.remarks,
     },
   });
+  await this.activityLogsService.log(
+    userId,
+    'SAMPLE_CREATED',
+    'SAMPLE',
+    sample.id,
+  );
+  return sample;
 }
 async getSamples(
   intervalId: string,
@@ -174,6 +205,182 @@ async getSamples(
     },
     orderBy: {
       createdAt: 'asc',
+    },
+  });
+}
+
+async assign(
+  boreholeId: string,
+  userId: string,
+  dto: AssignBoreholeDto,
+) {
+  const borehole = await this.db.borehole.update({
+    where: {
+      id: boreholeId,
+    },
+    data: {
+      siteId: dto.siteId,
+      teamId: dto.teamId,
+    },
+  }
+);
+await this.activityLogsService.log(
+  userId,
+  'BOREHOLE_ASSIGNED',
+  'BOREHOLE',
+  borehole.id,
+  {
+    teamId: dto.teamId,
+    siteId: dto.siteId,
+  },
+);
+return borehole;
+
+}
+async updateStatus(
+  boreholeId: string,
+  status: BoreholeStatus,
+  userId: string,
+) {
+  const borehole =
+    await this.db.borehole.findUnique({
+      where: {
+        id: boreholeId,
+      },
+    });
+
+  if (!borehole) {
+    throw new BadRequestException(
+      'Borehole not found',
+    );
+  }
+
+  const current =
+    borehole.status;
+
+  const validTransitions: Record<
+    BoreholeStatus,
+    BoreholeStatus[]
+  > = {
+    PLANNED: [
+      'IN_PROGRESS',
+      'ABANDONED',
+    ],
+
+    IN_PROGRESS: [
+      'COMPLETED',
+      'ABANDONED',
+    ],
+
+    COMPLETED: [],
+
+    ABANDONED: [],
+  };
+
+  if (
+    !validTransitions[
+      current
+    ].includes(status)
+  ) {
+    throw new BadRequestException(
+      `Cannot change status from ${current} to ${status}`,
+    );
+  }
+
+  const updated =
+    await this.db.borehole.update({
+      where: {
+        id: boreholeId,
+      },
+      data: {
+        status,
+      },
+    });
+
+  await this.activityLogsService.log(
+    userId,
+    'BOREHOLE_STATUS_CHANGED',
+    'BOREHOLE',
+    boreholeId,
+    {
+      from: current,
+      to: status,
+    },
+  );
+
+  return updated;
+}
+async getReportData(
+  boreholeId: string,
+) {
+  return this.db.borehole.findUnique({
+    where: {
+      id: boreholeId,
+    },
+
+    include: {
+      site: true,
+
+      team: true,
+
+      intervals: {
+        include: {
+          samples: true,
+
+          media: true,
+        },
+      },
+      waterTableObservations: true,
+    },
+  });
+}
+async createWaterTableObservation(
+  boreholeId: string,
+  dto: CreateWaterTableDto,
+  userId: string,
+) {
+  const observation =
+    await this.db.waterTableObservation.create({
+      data: {
+        boreholeId,
+
+        depth: dto.depth,
+
+        observedAt:
+          new Date(
+            dto.observedAt,
+          ),
+
+        remarks:
+          dto.remarks,
+
+        createdByUserId:
+          userId,
+      },
+    });
+
+  await this.activityLogsService.log(
+    userId,
+    'WATER_TABLE_OBSERVED',
+    'BOREHOLE',
+    boreholeId,
+    {
+      depth: dto.depth,
+    },
+  );
+
+  return observation;
+}
+async getWaterTableObservations(
+  boreholeId: string,
+) {
+  return this.db.waterTableObservation.findMany({
+    where: {
+      boreholeId,
+    },
+
+    orderBy: {
+      observedAt: 'desc',
     },
   });
 }

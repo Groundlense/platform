@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { DashboardService } from './dashboard.service';
 
 import { Param } from '@nestjs/common';
+import { Request } from '@nestjs/common';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth()
@@ -37,5 +38,12 @@ getProjectDashboard(
   return this.dashboardService.getProjectDashboard(
     projectId,
   );
+}
+
+@Get('me')
+getMe(
+  @Request() req,
+) {
+  return req.user;
 }
 }

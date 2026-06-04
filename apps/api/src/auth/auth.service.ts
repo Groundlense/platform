@@ -9,14 +9,15 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
 import { UsersService } from '../users/users.service';
-import { DatabaseService } from '../database/database.service';
-
+import { DatabaseService } from '../database/database.service'
+import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly db: DatabaseService,
+    private readonly activityLogsService: ActivityLogsService,
   ) {}
 
   private async hashToken(
@@ -43,6 +44,14 @@ export class AuthService {
         'Invalid credentials',
       );
     }
+
+    if (
+  user.status !== 'ACTIVE'
+) {
+  throw new UnauthorizedException(
+    'User account inactive',
+  );
+}
 
     let valid = false;
 
@@ -81,6 +90,13 @@ export class AuthService {
       await this.hashToken(
         refreshToken,
       );
+    
+    await this.activityLogsService.log(
+  user.id,
+  'LOGIN',
+  'USER',
+  user.id,
+);
 
     await this.db.refreshToken.create({
       data: {
