@@ -6,10 +6,12 @@ import { CreateBoreholeDto } from './dto/create-borehole.dto';
 import { UpdateIntervalDto } from './dto/update-interval.dto';
 import { CreateSampleDto } from './dto/create-sample.dto';
 import { AssignBoreholeDto } from './dto/assign-borehole.dto';
+import { ActivityLogsService } from 'src/activity-logs/activity-logs.service';
 @Injectable()
 export class BoreholesService {
   constructor(
     private readonly db: DatabaseService,
+    private readonly activityLogsService: ActivityLogsService,
   ) {}
 
   async findByProject(
@@ -106,6 +108,13 @@ export class BoreholesService {
     });
   }
 
+  await this.activityLogsService.log(
+  userId,
+  'BOREHOLE_CREATED',
+  'BOREHOLE',
+  borehole.id,
+);
+
   return borehole;
 }
 
@@ -124,9 +133,10 @@ async getIntervals(
 
 async updateInterval(
   id: string,
+  userId: string,
   dto: UpdateIntervalDto,
 ) {
-  return this.db.boreholeInterval.update({
+  const interval = await this.db.boreholeInterval.update({
     where: {
       id,
     },
@@ -143,12 +153,22 @@ async updateInterval(
       isCompleted: true,
     },
   });
+
+  await this.activityLogsService.log(
+    userId,
+    'INTERVAL_UPDATED',
+    'INTERVAL',
+    interval.id,
+  );
+
+  return interval;
 }
 async createSample(
   intervalId: string,
+  userId: string,
   dto: CreateSampleDto,
 ) {
-  return this.db.sample.create({
+    const sample = await this.db.sample.create({
     data: {
       intervalId,
 
@@ -165,6 +185,13 @@ async createSample(
         dto.remarks,
     },
   });
+  await this.activityLogsService.log(
+    userId,
+    'SAMPLE_CREATED',
+    'SAMPLE',
+    sample.id,
+  );
+  return sample;
 }
 async getSamples(
   intervalId: string,
@@ -181,9 +208,10 @@ async getSamples(
 
 async assign(
   boreholeId: string,
+  userId: string,
   dto: AssignBoreholeDto,
 ) {
-  return this.db.borehole.update({
+  const borehole = await this.db.borehole.update({
     where: {
       id: boreholeId,
     },
@@ -191,6 +219,19 @@ async assign(
       siteId: dto.siteId,
       teamId: dto.teamId,
     },
-  });
+  }
+);
+await this.activityLogsService.log(
+  userId,
+  'BOREHOLE_ASSIGNED',
+  'BOREHOLE',
+  borehole.id,
+  {
+    teamId: dto.teamId,
+    siteId: dto.siteId,
+  },
+);
+return borehole;
+
 }
 }

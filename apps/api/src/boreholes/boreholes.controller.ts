@@ -95,9 +95,13 @@ updateInterval(
 
   @Body()
   dto: UpdateIntervalDto,
+
+  @CurrentUser()
+  user: any,
 ) {
   return this.boreholesService.updateInterval(
     id,
+    user.id,
     dto,
   );
 }
@@ -109,9 +113,13 @@ createSample(
 
   @Body()
   dto: CreateSampleDto,
+
+  @CurrentUser()
+  user: any,
 ) {
   return this.boreholesService.createSample(
     intervalId,
+    user.id,
     dto,
   );
 }
@@ -135,9 +143,13 @@ assign(
 
   @Body()
   dto: AssignBoreholeDto,
+
+  @CurrentUser()
+  user: any,
 ) {
   return this.boreholesService.assign(
     boreholeId,
+    user.id,
     dto,
   );
 }

@@ -114,6 +114,7 @@ model User {
   createdBoreholes   Borehole[]      @relation("BoreholeCreator")
   uploadedMedia      Media[]         @relation("MediaUploader")
   teamMemberships    TeamMember[]
+  activityLogs       ActivityLog[]
 
   @@map("users")
 }
@@ -445,4 +446,24 @@ model TeamMember {
 
   @@unique([teamId, userId])
   @@map("team_members")
+}
+
+model ActivityLog {
+  id String @id @default(uuid())
+
+  userId String
+
+  action String
+
+  entityType String
+
+  entityId String
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("activity_logs")
 }

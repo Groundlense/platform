@@ -11,6 +11,7 @@ import { MediaModule } from './media/media.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { SitesModule } from './sites/sites.module';
 import { TeamsModule } from './teams/teams.module';
+import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 
 @Module({
   imports: [ConfigModule.forRoot({
@@ -27,6 +28,7 @@ import { TeamsModule } from './teams/teams.module';
     DashboardModule,
     SitesModule,
     TeamsModule,
+    ActivityLogsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
