@@ -27,7 +27,7 @@ import {
 } from '@nestjs/swagger';
 
 import { UpdateBoreholeStatusDto, } from './dto/update-borehole-status.dto';
-
+import { CreateWaterTableDto } from './dto/create-water-table.dto';
 @ApiTags('Boreholes')
 @ApiBearerAuth()
 @Controller()
@@ -183,5 +183,37 @@ getReportData(
   return this.boreholesService.getReportData(
     boreholeId,
   );
+}
+@Post(
+  'boreholes/:id/water-table',
+)
+createWaterTableObservation(
+  @Param('id')
+  boreholeId: string,
+
+  @Body()
+  dto: CreateWaterTableDto,
+
+  @CurrentUser()
+  user: any,
+) {
+  return this.boreholesService
+    .createWaterTableObservation(
+      boreholeId,
+      dto,
+      user.id,
+    );
+}
+@Get(
+  'boreholes/:id/water-table',
+)
+getWaterTableObservations(
+  @Param('id')
+  boreholeId: string,
+) {
+  return this.boreholesService
+    .getWaterTableObservations(
+      boreholeId,
+    );
 }
 }

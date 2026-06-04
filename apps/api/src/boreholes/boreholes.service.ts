@@ -6,6 +6,7 @@ import { CreateBoreholeDto } from './dto/create-borehole.dto';
 import { UpdateIntervalDto } from './dto/update-interval.dto';
 import { CreateSampleDto } from './dto/create-sample.dto';
 import { AssignBoreholeDto } from './dto/assign-borehole.dto';
+import { CreateWaterTableDto } from './dto/create-water-table.dto';
 import { ActivityLogsService } from 'src/activity-logs/activity-logs.service';
 import { BadRequestException, } from '@nestjs/common';
 import { BoreholeStatus, } from '@prisma/client';
@@ -329,6 +330,57 @@ async getReportData(
           media: true,
         },
       },
+      waterTableObservations: true,
+    },
+  });
+}
+async createWaterTableObservation(
+  boreholeId: string,
+  dto: CreateWaterTableDto,
+  userId: string,
+) {
+  const observation =
+    await this.db.waterTableObservation.create({
+      data: {
+        boreholeId,
+
+        depth: dto.depth,
+
+        observedAt:
+          new Date(
+            dto.observedAt,
+          ),
+
+        remarks:
+          dto.remarks,
+
+        createdByUserId:
+          userId,
+      },
+    });
+
+  await this.activityLogsService.log(
+    userId,
+    'WATER_TABLE_OBSERVED',
+    'BOREHOLE',
+    boreholeId,
+    {
+      depth: dto.depth,
+    },
+  );
+
+  return observation;
+}
+async getWaterTableObservations(
+  boreholeId: string,
+) {
+  return this.db.waterTableObservation.findMany({
+    where: {
+      boreholeId,
+    },
+
+    orderBy: {
+      observedAt: 'desc',
     },
   });
 }

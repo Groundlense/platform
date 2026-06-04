@@ -302,11 +302,12 @@ model Borehole {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  project   Project            @relation(fields: [projectId], references: [id])
-  createdBy User               @relation("BoreholeCreator", fields: [createdByUserId], references: [id])
-  intervals BoreholeInterval[]
-  site      ProjectSite?       @relation(fields: [siteId], references: [id])
-  team      Team?              @relation(fields: [teamId], references: [id])
+  project                Project                 @relation(fields: [projectId], references: [id])
+  createdBy              User                    @relation("BoreholeCreator", fields: [createdByUserId], references: [id])
+  intervals              BoreholeInterval[]
+  site                   ProjectSite?            @relation(fields: [siteId], references: [id])
+  team                   Team?                   @relation(fields: [teamId], references: [id])
+  waterTableObservations WaterTableObservation[]
 
   @@unique([projectId, boreholeCode])
   @@map("boreholes")
@@ -466,4 +467,23 @@ model ActivityLog {
   user User @relation(fields: [userId], references: [id])
 
   @@map("activity_logs")
+}
+
+model WaterTableObservation {
+  id String @id @default(uuid())
+
+  boreholeId String
+  borehole   Borehole @relation(fields: [boreholeId], references: [id])
+
+  depth Decimal @db.Decimal(8, 2)
+
+  observedAt DateTime
+
+  remarks String?
+
+  createdByUserId String
+
+  createdAt DateTime @default(now())
+
+  @@map("water_table_observations")
 }
