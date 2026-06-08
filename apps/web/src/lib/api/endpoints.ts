@@ -101,6 +101,17 @@ export async function updateInterval(intervalId: string, data: Record<string, un
 }
 
 // ═══════════════════════════════════════
+// SOIL DESCRIPTIONS
+// ═══════════════════════════════════════
+export async function getSoilDescription(intervalId: string, token: string) {
+  return apiGet<any>(`/intervals/${intervalId}/soil-description`, token);
+}
+
+export async function upsertSoilDescription(intervalId: string, data: Record<string, unknown>, token: string) {
+  return apiPost(`/intervals/${intervalId}/soil-description`, data, token);
+}
+
+// ═══════════════════════════════════════
 // SAMPLES
 // ═══════════════════════════════════════
 export async function getIntervalSamples(intervalId: string, token: string) {
@@ -112,6 +123,24 @@ export async function createSample(intervalId: string, data: Record<string, unkn
 }
 
 // ═══════════════════════════════════════
+// LAB RESULTS
+// ═══════════════════════════════════════
+export async function getLabResult(sampleId: string, token: string) {
+  return apiGet<any>(`/samples/${sampleId}/lab-results`, token);
+}
+
+export async function submitLabResult(sampleId: string, data: Record<string, unknown>, token: string) {
+  return apiPost(`/samples/${sampleId}/lab-results`, data, token);
+}
+
+// ═══════════════════════════════════════
+// MEDIA
+// ═══════════════════════════════════════
+export async function getIntervalMedia(intervalId: string, token: string) {
+  return apiGet<any[]>(`/intervals/${intervalId}/media`, token);
+}
+
+// ═══════════════════════════════════════
 // WATER TABLE
 // ═══════════════════════════════════════
 export async function getWaterTableObservations(boreholeId: string, token: string) {
@@ -120,6 +149,13 @@ export async function getWaterTableObservations(boreholeId: string, token: strin
 
 export async function createWaterTableObservation(boreholeId: string, data: Record<string, unknown>, token: string) {
   return apiPost(`/boreholes/${boreholeId}/water-table`, data, token);
+}
+
+// ═══════════════════════════════════════
+// BORING SESSIONS
+// ═══════════════════════════════════════
+export async function getBoreholesSessions(boreholeId: string, token: string) {
+  return apiGet<any[]>(`/boreholes/${boreholeId}/sessions`, token);
 }
 
 // ═══════════════════════════════════════
@@ -173,6 +209,10 @@ export async function getActivityLogs(token: string) {
 
 export async function getRecentLogs(token: string) {
   return apiGet<any[]>("/activity-logs/recent", token);
+}
+
+export async function getUserActivityLogs(userId: string, token: string) {
+  return apiGet<any[]>(`/activity-logs/user/${userId}`, token);
 }
 
 // ═══════════════════════════════════════

@@ -1,22 +1,20 @@
 "use client";
 
 import { RiSettings4Line, RiRadarLine, RiCheckDoubleLine, RiFlaskLine, RiFileTextLine, RiSettingsLine } from "react-icons/ri";
-
-interface PortalSidebarProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
-}
+import { usePortalTab } from "./PortalContext";
 
 const SIDEBAR_ITEMS = [
-  { key: "setup", icon: RiSettings4Line, label: "Setup" },
-  { key: "monitor", icon: RiRadarLine, label: "Monitor" },
-  { key: "review", icon: RiCheckDoubleLine, label: "Review" },
-  { key: "lab", icon: RiFlaskLine, label: "Lab" },
-  { key: "report", icon: RiFileTextLine, label: "Report" },
+  { key: "setup" as const, icon: RiSettings4Line, label: "Setup" },
+  { key: "monitor" as const, icon: RiRadarLine, label: "Monitor" },
+  { key: "review" as const, icon: RiCheckDoubleLine, label: "Review" },
+  { key: "lab" as const, icon: RiFlaskLine, label: "Lab" },
+  { key: "report" as const, icon: RiFileTextLine, label: "Report" },
 ];
 
 /* Matches .sidebar: width 48px, bg-surface, border-right, padding 10px 0, gap 2px */
-export default function PortalSidebar({ activeTab, setActiveTab }: PortalSidebarProps) {
+export default function PortalSidebar() {
+  const { activeTab, setActiveTab } = usePortalTab();
+
   return (
     <div className="w-12 bg-bg-surface border-r border-border flex flex-col items-center gap-[2px] shrink-0" style={{ padding: "10px 0" }}>
       {SIDEBAR_ITEMS.map((item) => {
