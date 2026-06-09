@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <div className="flex flex-row min-h-screen">
+    <div className="flex flex-row !min-h-screen">
       <LoginLeftPanel />
       <LoginForm />
     </div>

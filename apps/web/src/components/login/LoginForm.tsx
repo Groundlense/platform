@@ -66,19 +66,19 @@ export default function LoginForm() {
 
   return (
     /* Matches .lp-right: width 440px, padding 48px 40px, flex column, justify-center, bg-base */
-    <div className="flex flex-col justify-center bg-bg-base" style={{ width: "440px", padding: "48px 40px" }}>
+    <div className="flex flex-col justify-center bg-bg-base !max-w-[440px] !p-[48px_40px]" >
       {/* Screen 0: Role Select */}
       {screen === 0 && (
         <div className="animate-fade-up">
-          <div className="font-display text-[24px] font-semibold mb-[5px]">Welcome</div>
-          <p className="text-[12px] text-text-sec mb-6 leading-relaxed">Select your role to continue.</p>
+          <div className="font-display text-[24px] font-semibold !mb-[5px]">Welcome</div>
+          <p className="text-[12px] text-text-sec !mb-6 leading-relaxed">Select your role to continue.</p>
 
-          <div className="grid grid-cols-3 gap-[7px] mb-5">
+          <div className="!grid !grid-cols-3 !gap-[7px] !mb-5">
             {ROLES.map((r) => (
               <div
                 key={r.key}
                 onClick={() => setRole(r.key)}
-                className={`relative p-[14px_12px] border rounded-lg bg-bg-card cursor-pointer transition-all duration-150
+                className={`relative !p-[14px_12px] border rounded-lg bg-bg-card cursor-pointer transition-all duration-150
                   ${role === r.key ? "border-rust-mid bg-[rgba(153,60,29,.08)]" : "border-border hover:border-border-mid"}`}
               >
                 {role === r.key && (
@@ -92,10 +92,10 @@ export default function LoginForm() {
             ))}
           </div>
 
-          <button onClick={goLogin} className="w-full py-3 bg-rust-mid rounded-[7px] text-[13px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-all">
+          <button onClick={goLogin} className="w-full !py-3 bg-rust-mid !rounded-[7px] !text-[13px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-all">
             Continue →
           </button>
-          <div className="text-center mt-3">
+          <div className="text-center !mt-3">
             <span className="text-[11px] text-text-ter">No account? </span>
             <span className="text-[11px] text-rust-d cursor-pointer" onClick={() => setScreen(2)}>Create account</span>
           </div>
