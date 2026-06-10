@@ -24,12 +24,12 @@ export class JwtStrategy extends PassportStrategy(
 }
 
   async validate(payload: any) {
-  const user =
-    await this.db.user.findUnique({
+    const user = await this.db.user.findUnique({
       where: {
         id: payload.sub,
       },
       include: {
+        organization: true,
         roles: {
           include: {
             role: {
@@ -46,30 +46,31 @@ export class JwtStrategy extends PassportStrategy(
       },
     });
 
-  const roles =
-    user?.roles.map(
-      (r) => r.role.code,
-    ) ?? [];
+    const roles =
+      user?.roles.map(
+        (r) => r.role.code,
+      ) ?? [];
 
-  const permissions =
-    user?.roles.flatMap(
-      (r) =>
-        r.role.rolePermissions.map(
-          (rp) =>
-            rp.permission.code,
-        ),
-    ) ?? [];
+    const permissions =
+      user?.roles.flatMap(
+        (r) =>
+          r.role.rolePermissions.map(
+            (rp) =>
+              rp.permission.code,
+          ),
+      ) ?? [];
 
-  return {
-    id: payload.sub,
-
-    organizationId:
-      payload.organizationId,
-
-    roles,
-
-    permissions,
-  };
-}
+    return {
+      id: payload.sub,
+      organizationId: payload.organizationId,
+      firstName: user?.firstName,
+      lastName: user?.lastName,
+      employeeCode: user?.employeeCode,
+      email: user?.email,
+      organization: user?.organization,
+      roles,
+      permissions,
+    };
+  }
 }
 

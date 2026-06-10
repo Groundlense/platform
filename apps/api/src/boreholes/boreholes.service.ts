@@ -325,10 +325,15 @@ async getReportData(
 
       intervals: {
         include: {
-          samples: true,
-
+          samples: {
+            include: {
+              labResult: true,
+            },
+          },
           media: true,
+          soilDescriptions: true,
         },
+        orderBy: { fromDepth: 'asc' },
       },
       waterTableObservations: true,
     },
