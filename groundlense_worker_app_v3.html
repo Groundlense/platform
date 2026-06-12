@@ -1,0 +1,2180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Groundlense — Worker App Specification</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Playfair+Display:wght@600&display=swap');
+
+:root {
+  --rust: #993C1D;
+  --rust-mid: #D85A30;
+  --rust-light: #FAECE7;
+  --amber: #BA7517;
+  --amber-light: #FAEEDA;
+  --green-dark: #27500A;
+  --green-mid: #3B6D11;
+  --green-light: #EAF3DE;
+  --blue-dark: #185FA5;
+  --blue-light: #E6F1FB;
+  --gray-dark: #2C2C2A;
+  --gray-mid: #5F5E5A;
+  --gray-light: #F1EFE8;
+  --gray-border: #D3D1C7;
+  --red-light: #FCEBEB;
+  --red-mid: #A32D2D;
+  --page-bg: #F5F3EE;
+  --white: #FFFFFF;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--page-bg);
+  color: var(--gray-dark);
+  min-height: 100vh;
+}
+
+/* ── HEADER ── */
+.site-header {
+  background: var(--rust);
+  padding: 0 40px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.site-logo { font-family: 'Playfair Display', serif; font-size: 18px; color: white; letter-spacing: 0.5px; }
+.site-sub { font-size: 11px; color: #F5C4B3; letter-spacing: 1px; text-transform: uppercase; }
+.page-badge { background: rgba(255,255,255,0.15); color: white; font-size: 11px; padding: 4px 12px; border-radius: 20px; }
+
+/* ── NAV SIDEBAR ── */
+.layout { display: flex; min-height: calc(100vh - 56px); }
+
+.sidebar {
+  width: 220px;
+  background: var(--gray-dark);
+  padding: 24px 0;
+  position: sticky;
+  top: 56px;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.sidebar-section { padding: 8px 20px 4px; font-size: 10px; color: #888780; letter-spacing: 1px; text-transform: uppercase; margin-top: 12px; }
+.nav-item {
+  display: block;
+  padding: 8px 20px;
+  font-size: 12px;
+  color: #B4B2A9;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+.nav-item:hover { color: white; background: rgba(255,255,255,0.05); }
+.nav-item.active { color: #F0997B; border-left-color: var(--rust-mid); background: rgba(153,60,29,0.15); }
+.nav-item .screen-num { font-family: 'DM Mono', monospace; font-size: 10px; color: #5F5E5A; display: block; }
+
+/* ── MAIN ── */
+.main { flex: 1; padding: 40px; overflow-x: hidden; }
+
+.section-header {
+  margin-bottom: 32px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--gray-border);
+}
+.section-header h2 { font-family: 'Playfair Display', serif; font-size: 26px; color: var(--rust); margin-bottom: 4px; }
+.section-header p { font-size: 13px; color: var(--gray-mid); }
+
+/* ── SCREEN SECTION ── */
+.screen-section {
+  display: none;
+  animation: fadeIn 0.2s ease;
+}
+.screen-section.active { display: block; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── SCREEN LAYOUT ── */
+.screen-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 32px;
+  align-items: start;
+  margin-bottom: 48px;
+}
+.screen-layout.wide { grid-template-columns: 260px 1fr; }
+
+/* ── PHONE FRAME ── */
+.phone-frame {
+  width: 220px;
+  background: var(--gray-dark);
+  border-radius: 32px;
+  padding: 10px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 4px 16px rgba(0,0,0,0.15);
+  flex-shrink: 0;
+}
+.phone-inner {
+  background: white;
+  border-radius: 24px;
+  overflow: hidden;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+}
+.phone-notch {
+  background: var(--gray-dark);
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.phone-notch-pill { width: 48px; height: 6px; background: #444441; border-radius: 3px; }
+.phone-bar {
+  background: var(--rust);
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.phone-bar-title { font-size: 11px; font-weight: 600; color: white; }
+.phone-bar-sub { font-size: 9px; color: #F5C4B3; }
+.phone-bar.amber-bar { background: var(--amber); }
+.phone-bar.green-bar { background: var(--green-dark); }
+.phone-bar.blue-bar { background: var(--blue-dark); }
+.phone-body { padding: 10px; flex: 1; }
+
+/* ── PHONE COMPONENTS ── */
+.field-group { margin-bottom: 10px; }
+.field-label { font-size: 9px; color: var(--gray-mid); margin-bottom: 3px; display: block; }
+.field-input {
+  background: var(--gray-light);
+  border: 0.5px solid var(--gray-border);
+  border-radius: 6px;
+  padding: 7px 8px;
+  font-size: 11px;
+  color: var(--gray-dark);
+  width: 100%;
+  font-family: 'DM Sans', sans-serif;
+}
+.field-input.large { font-size: 18px; font-weight: 600; text-align: center; color: var(--rust); padding: 10px; }
+
+.btn-primary {
+  background: var(--rust-mid);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  width: 100%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-family: 'DM Sans', sans-serif;
+  margin-top: 4px;
+}
+.btn-secondary {
+  background: var(--gray-light);
+  color: var(--rust);
+  border: 0.5px solid var(--rust-mid);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  width: 100%;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  margin-top: 4px;
+}
+.btn-green { background: var(--green-mid); }
+.btn-blue { background: var(--blue-dark); }
+.btn-red { background: var(--red-mid); }
+.btn-amber { background: var(--amber); color: white; border: none; border-radius: 6px; padding: 6px 10px; font-size: 10px; font-weight: 600; cursor: pointer; }
+
+.tab-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 0.5px solid var(--rust-mid);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.tab-btn { padding: 7px; text-align: center; font-size: 10px; font-weight: 600; cursor: pointer; }
+.tab-btn.active { background: var(--rust-mid); color: white; }
+.tab-btn.inactive { background: white; color: var(--rust); }
+
+.boring-item {
+  background: var(--gray-light);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-left: 3px solid var(--gray-border);
+}
+.boring-item.done { border-left-color: var(--green-mid); background: var(--green-light); }
+.boring-item.active { border-left-color: var(--rust-mid); background: var(--rust-light); }
+.boring-item.terminated { border-left-color: var(--amber); background: var(--amber-light); }
+.boring-item.pending { border-left-color: var(--gray-border); }
+.boring-id-mono { font-family: 'DM Mono', monospace; font-size: 8px; color: var(--gray-mid); }
+.boring-name { font-size: 11px; font-weight: 600; color: var(--gray-dark); }
+.boring-status { font-size: 9px; color: var(--gray-mid); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-done { background: var(--green-mid); }
+.dot-active { background: var(--rust-mid); }
+.dot-term { background: var(--amber); }
+.dot-pend { background: var(--gray-border); }
+
+.depth-bar {
+  background: var(--rust);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.depth-big { font-size: 24px; font-weight: 700; color: white; }
+.depth-sub { font-size: 9px; color: #F5C4B3; }
+
+.blow-current {
+  background: var(--rust-light);
+  border: 1.5px solid var(--rust-mid);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.blow-num { font-size: 32px; font-weight: 700; color: var(--rust); }
+.blow-lbl { font-size: 10px; color: var(--rust-mid); font-weight: 600; }
+
+.n-result {
+  background: var(--amber-light);
+  border: 0.5px solid var(--amber);
+  border-radius: 6px;
+  padding: 6px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.n-left { font-size: 10px; color: var(--amber); }
+.n-right { font-size: 10px; font-weight: 600; color: var(--green-mid); }
+
+.soil-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 8px; }
+.soil-tile {
+  background: var(--gray-light);
+  border: 0.5px solid var(--gray-border);
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
+  cursor: pointer;
+}
+.soil-tile.selected { background: var(--rust-light); border: 1.5px solid var(--rust-mid); }
+.soil-icon { font-size: 18px; margin-bottom: 2px; }
+.soil-name { font-size: 10px; font-weight: 600; }
+.soil-hindi { font-size: 9px; color: var(--gray-mid); }
+
+.sample-id-box {
+  background: var(--green-dark);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.sample-id-lbl { font-size: 9px; color: #A5D6A7; margin-bottom: 4px; }
+.sample-id-val { font-family: 'DM Mono', monospace; font-size: 16px; font-weight: 600; color: white; letter-spacing: 1px; }
+.sample-id-hint { font-size: 9px; color: #C8E6C9; margin-top: 4px; }
+
+.timer-box {
+  background: var(--amber-light);
+  border: 0.5px solid var(--amber);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}
+.timer-title { font-size: 10px; font-weight: 600; color: var(--amber); }
+.timer-sub { font-size: 9px; color: #633806; }
+
+.info-box {
+  border-radius: 6px;
+  padding: 7px 9px;
+  margin-bottom: 8px;
+}
+.info-box.blue { background: var(--blue-light); border: 0.5px solid #85B7EB; }
+.info-box.green { background: var(--green-light); border: 0.5px solid #97C459; }
+.info-box.red { background: var(--red-light); border: 0.5px solid #F09595; }
+.info-box.amber { background: var(--amber-light); border: 0.5px solid var(--amber); }
+.info-box .ib-title { font-size: 10px; font-weight: 600; }
+.info-box.blue .ib-title { color: var(--blue-dark); }
+.info-box.green .ib-title { color: var(--green-mid); }
+.info-box.red .ib-title { color: var(--red-mid); }
+.info-box.amber .ib-title { color: var(--amber); }
+.info-box .ib-sub { font-size: 9px; margin-top: 2px; color: var(--gray-mid); }
+
+.sum-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 0.5px solid var(--gray-light);
+  font-size: 10px;
+}
+.sum-lbl { color: var(--gray-mid); }
+.sum-val { font-weight: 600; color: var(--gray-dark); }
+
+.loop-bar {
+  background: var(--amber-light);
+  border: 0.5px solid var(--amber);
+  border-radius: 6px;
+  padding: 5px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.loop-text { font-size: 10px; font-weight: 600; color: var(--amber); }
+.loop-dots { display: flex; gap: 4px; }
+.loop-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gray-border); }
+.loop-dot.ld-done { background: var(--green-mid); }
+.loop-dot.ld-cur { background: var(--rust-mid); }
+.loop-dot.ld-term { background: var(--amber); }
+
+.proj-card {
+  background: var(--gray-light);
+  border: 0.5px solid var(--gray-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+.proj-card.active-proj { border: 1.5px solid var(--rust-mid); background: var(--rust-light); }
+.proj-id-mono { font-family: 'DM Mono', monospace; font-size: 8px; color: var(--amber); }
+.proj-name { font-size: 11px; font-weight: 600; color: var(--gray-dark); }
+.proj-sub { font-size: 9px; color: var(--gray-mid); }
+
+.chip {
+  display: inline-block;
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  margin-top: 3px;
+  margin-right: 3px;
+}
+.chip-rust { background: var(--rust-light); color: var(--rust); }
+.chip-blue { background: var(--blue-light); color: var(--blue-dark); }
+.chip-gray { background: var(--gray-light); color: var(--gray-mid); border: 0.5px solid var(--gray-border); }
+.chip-green { background: var(--green-light); color: var(--green-mid); }
+
+.search-row { display: flex; gap: 6px; margin-bottom: 10px; }
+.search-inp {
+  flex: 1;
+  background: white;
+  border: 1.5px solid var(--rust-mid);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 10px;
+  font-family: 'DM Mono', monospace;
+}
+.search-btn {
+  background: var(--rust-mid);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.search-result {
+  background: var(--blue-light);
+  border: 1.5px solid var(--blue-dark);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.sr-id { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--blue-dark); font-weight: 600; }
+.sr-name { font-size: 11px; font-weight: 600; color: #0C447C; }
+.sr-sub { font-size: 9px; color: #378ADD; }
+
+.popup-overlay {
+  background: rgba(0,0,0,0.5);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+.popup-card {
+  background: white;
+  border-radius: 12px;
+  padding: 14px;
+  width: 100%;
+  border: 1px solid var(--gray-border);
+}
+.popup-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.popup-sub { font-size: 9px; color: var(--gray-mid); margin-bottom: 10px; }
+
+.edu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px; }
+.edu-tile {
+  background: var(--gray-light);
+  border: 0.5px solid var(--gray-border);
+  border-radius: 6px;
+  padding: 6px;
+  text-align: center;
+  font-size: 10px;
+  cursor: pointer;
+}
+.edu-tile.sel { background: var(--rust-light); border: 1.5px solid var(--rust-mid); color: var(--rust); font-weight: 600; }
+
+.step-indicator { display: flex; align-items: center; gap: 4px; margin-bottom: 12px; }
+.step-dot-ind { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+.step-done { background: var(--green-mid); color: white; }
+.step-cur { background: var(--rust-mid); color: white; }
+.step-pend { background: var(--gray-light); color: var(--gray-mid); border: 0.5px solid var(--gray-border); }
+.step-line-ind { flex: 1; height: 1px; background: var(--gray-border); }
+.step-lbl { font-size: 8px; color: var(--gray-mid); margin-top: 2px; text-align: center; }
+
+.map-mock {
+  height: 80px;
+  background: linear-gradient(135deg, #C8E6C9 0%, #A5D6A7 40%, #81C784 70%, #B5D4F4 100%);
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.map-grid-line { position: absolute; background: rgba(255,255,255,0.3); }
+.map-planned-pin { position: absolute; top: 20px; left: 40%; font-size: 16px; }
+.map-me-pin { position: absolute; top: 35px; left: 58%; font-size: 14px; }
+.map-distance-line { position: absolute; top: 29px; left: 47%; width: 28px; height: 1px; background: var(--rust-mid); transform: rotate(20deg); }
+.map-info { background: var(--blue-light); border-radius: 6px; padding: 5px 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.map-dist { font-size: 10px; font-weight: 600; color: var(--blue-dark); }
+
+.gps-stamp {
+  background: var(--gray-dark);
+  border-radius: 5px;
+  padding: 5px 7px;
+  margin-bottom: 8px;
+}
+.gps-line { font-family: 'DM Mono', monospace; font-size: 8px; color: #FAC775; line-height: 1.5; }
+.gps-dev { font-family: 'DM Mono', monospace; font-size: 8px; color: #F0997B; }
+
+.divider { height: 0.5px; background: var(--gray-border); margin: 8px 0; }
+
+.progress-bar-outer { height: 4px; background: var(--gray-light); border-radius: 2px; margin: 6px 0; overflow: hidden; }
+.progress-bar-inner { height: 4px; background: var(--rust-mid); border-radius: 2px; }
+
+.btn-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 4px; }
+
+.rock-stat { background: var(--gray-light); border-radius: 6px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.rock-lbl { font-size: 10px; color: var(--gray-mid); }
+.rock-val { font-size: 12px; font-weight: 700; color: var(--rust); }
+
+.wth-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px; }
+.wth-tile { background: var(--gray-light); border: 0.5px solid var(--gray-border); border-radius: 5px; padding: 5px; text-align: center; font-size: 9px; cursor: pointer; }
+.wth-tile.sel { background: var(--amber-light); border: 1.5px solid var(--amber); color: var(--amber); font-weight: 600; }
+
+.resume-banner {
+  background: var(--amber-light);
+  border: 0.5px solid var(--amber);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.resume-title { font-size: 10px; font-weight: 700; color: var(--amber); margin-bottom: 4px; }
+.resume-row { display: flex; justify-content: space-between; font-size: 9px; padding: 1px 0; }
+.resume-lbl { color: #BA7517; }
+.resume-val { font-weight: 600; color: #633806; }
+
+.date-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.date-card { background: var(--gray-light); border-radius: 6px; padding: 6px; text-align: center; }
+.date-lbl { font-size: 9px; color: var(--gray-mid); }
+.date-val { font-size: 11px; font-weight: 600; color: var(--gray-dark); }
+.date-time { font-size: 13px; font-weight: 700; color: var(--rust); }
+
+/* ── DESCRIPTION PANEL ── */
+.desc-panel { flex: 1; }
+.screen-title-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.screen-badge {
+  background: var(--rust);
+  color: white;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+.screen-title { font-family: 'Playfair Display', serif; font-size: 22px; color: var(--rust); }
+.screen-description { font-size: 13px; color: var(--gray-mid); line-height: 1.6; margin-bottom: 20px; border-left: 3px solid var(--rust-light); padding-left: 12px; }
+
+.feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+.feature-card {
+  background: white;
+  border: 0.5px solid var(--gray-border);
+  border-radius: 10px;
+  padding: 14px;
+  border-top: 3px solid var(--rust-mid);
+}
+.feature-card.green-top { border-top-color: var(--green-mid); }
+.feature-card.blue-top { border-top-color: var(--blue-dark); }
+.feature-card.amber-top { border-top-color: var(--amber); }
+.feature-title { font-size: 12px; font-weight: 700; color: var(--gray-dark); margin-bottom: 8px; }
+.feature-list { list-style: none; }
+.feature-list li {
+  font-size: 12px;
+  color: var(--gray-mid);
+  padding: 3px 0;
+  padding-left: 14px;
+  position: relative;
+  line-height: 1.4;
+}
+.feature-list li::before { content: '·'; position: absolute; left: 4px; color: var(--rust-mid); font-weight: 700; }
+.feature-list li strong { color: var(--gray-dark); font-weight: 600; }
+
+.design-note {
+  background: var(--amber-light);
+  border: 0.5px solid var(--amber);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 16px;
+}
+.design-note-label { font-size: 10px; font-weight: 700; color: var(--amber); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.design-note-text { font-size: 12px; color: #633806; line-height: 1.5; }
+
+/* ── LOOP DIAGRAM ── */
+.loop-diagram { background: white; border: 0.5px solid var(--gray-border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+.loop-diagram h3 { font-size: 14px; font-weight: 700; color: var(--rust); margin-bottom: 16px; }
+.loop-flow { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.loop-step {
+  background: var(--rust-light);
+  border: 1.5px solid var(--rust-mid);
+  border-radius: 8px;
+  padding: 10px 20px;
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
+.loop-step-title { font-size: 13px; font-weight: 700; color: var(--rust); }
+.loop-step-sub { font-size: 11px; color: var(--gray-mid); margin-top: 2px; }
+.loop-arrow { font-size: 20px; color: var(--rust-mid); margin: 4px 0; }
+.loop-back { background: var(--amber-light); border: 1.5px solid var(--amber); border-radius: 8px; padding: 8px 20px; width: 100%; max-width: 400px; text-align: center; }
+.loop-back-text { font-size: 12px; font-weight: 700; color: var(--amber); }
+.loop-exits { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; width: 100%; max-width: 400px; margin-top: 12px; }
+.loop-exit { border-radius: 6px; padding: 8px; text-align: center; font-size: 10px; font-weight: 600; }
+.exit-red { background: var(--red-light); color: var(--red-mid); }
+.exit-dark { background: #2C2C2A; color: #FAC775; }
+.exit-green { background: var(--green-light); color: var(--green-mid); }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+  .screen-layout { grid-template-columns: 1fr; }
+  .feature-grid { grid-template-columns: 1fr; }
+  .layout { flex-direction: column; }
+  .sidebar { width: 100%; height: auto; position: relative; top: 0; }
+}
+
+/* ── OVERVIEW PAGE ── */
+.overview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 20px; }
+.overview-card {
+  background: white;
+  border: 0.5px solid var(--gray-border);
+  border-radius: 10px;
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border-top: 3px solid var(--rust-mid);
+}
+.overview-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+.overview-screen-num { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--gray-mid); margin-bottom: 4px; }
+.overview-screen-name { font-size: 13px; font-weight: 700; color: var(--gray-dark); margin-bottom: 4px; }
+.overview-screen-desc { font-size: 11px; color: var(--gray-mid); line-height: 1.4; }
+.overview-hero { background: var(--rust); border-radius: 12px; padding: 28px; color: white; margin-bottom: 24px; }
+.overview-hero h1 { font-family: 'Playfair Display', serif; font-size: 32px; margin-bottom: 8px; }
+.overview-hero p { font-size: 14px; color: #F5C4B3; line-height: 1.6; }
+.overview-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; }
+.stat-card { background: rgba(255,255,255,0.12); border-radius: 8px; padding: 12px; text-align: center; }
+.stat-num { font-size: 24px; font-weight: 700; }
+.stat-lbl { font-size: 10px; color: #F5C4B3; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <div class="site-logo">Groundlense</div>
+    <div class="site-sub">Worker App Specification</div>
+  </div>
+  <div class="page-badge">v1.0 · 2025</div>
+</header>
+
+<div class="layout">
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-section">Overview</div>
+  <a class="nav-item active" onclick="showScreen('overview')">All Screens</a>
+
+  <div class="sidebar-section">Login Flow</div>
+  <a class="nav-item" onclick="showScreen('s1a')"><span class="screen-num">Screen 1A</span>Login + Create Account</a>
+  <a class="nav-item" onclick="showScreen('s1b')"><span class="screen-num">Screen 1B</span>Project Selection</a>
+
+  <div class="sidebar-section">Boring Flow</div>
+  <a class="nav-item" onclick="showScreen('s2')"><span class="screen-num">Screen 2</span>Boring List</a>
+  <a class="nav-item" onclick="showScreen('s2b')"><span class="screen-num">Screen 2B</span>Rig Setup ★ New</a>
+  <a class="nav-item" onclick="showScreen('s3')"><span class="screen-num">Screen 3</span>Navigate + Start</a>
+  <a class="nav-item" onclick="showScreen('s4')"><span class="screen-num">Screen 4</span>SPT Entry (Loop)</a>
+  <a class="nav-item" onclick="showScreen('s5')"><span class="screen-num">Screen 5</span>Soil Description</a>
+  <a class="nav-item" onclick="showScreen('s6')"><span class="screen-num">Screen 6</span>Sample Collection</a>
+
+  <div class="sidebar-section">Special Modes</div>
+  <a class="nav-item" onclick="showScreen('s7')"><span class="screen-num">Screen 7</span>Water Table Popup</a>
+  <a class="nav-item" onclick="showScreen('s8')"><span class="screen-num">Screen 8</span>Rock Coring</a>
+  <a class="nav-item" onclick="showScreen('s9')"><span class="screen-num">Screen 9</span>UDS Sampling</a>
+  <a class="nav-item" onclick="showScreen('s-term')"><span class="screen-num">Popup</span>Terminate Boring</a>
+  <a class="nav-item" onclick="showScreen('s-resume')"><span class="screen-num">Special</span>Resumed Boring</a>
+
+  <div class="sidebar-section">Closure</div>
+  <a class="nav-item" onclick="showScreen('s10')"><span class="screen-num">Screen 10</span>Boring Closure</a>
+  <a class="nav-item" onclick="showScreen('s11')"><span class="screen-num">Screen 11</span>24hr WT Reminder</a>
+  <a class="nav-item" onclick="showScreen('s12')"><span class="screen-num">Screen 12</span>Engineer Query</a>
+
+  <div class="sidebar-section">Reference</div>
+  <a class="nav-item" onclick="showScreen('loop')"><span class="screen-num">Diagram</span>Boring Loop Flow</a>
+  <a class="nav-item" onclick="showScreen('people')"><span class="screen-num">Data</span>People + Team Pool</a>
+</nav>
+
+<!-- MAIN -->
+<main class="main">
+
+<!-- OVERVIEW -->
+<div id="overview" class="screen-section active">
+  <div class="overview-hero">
+    <h1>Groundlense Worker App</h1>
+    <p>Complete screen-by-screen specification for the Android field data capture application.<br>Designed for ITI-pass field supervisors working on NHAI bridge investigation sites.</p>
+    <div class="overview-stats">
+      <div class="stat-card"><div class="stat-num">13</div><div class="stat-lbl">Screens</div></div>
+      <div class="stat-card"><div class="stat-num">2</div><div class="stat-lbl">Popups</div></div>
+      <div class="stat-card"><div class="stat-num">100%</div><div class="stat-lbl">Hindi labels</div></div>
+      <div class="stat-card"><div class="stat-num">Offline</div><div class="stat-lbl">First design</div></div>
+    </div>
+  </div>
+  <div class="overview-grid">
+    <div class="overview-card" onclick="showScreen('s1a')"><div class="overview-screen-num">Screen 1A</div><div class="overview-screen-name">Login + Create Account</div><div class="overview-screen-desc">PIN login, OTP registration, education selector</div></div>
+    <div class="overview-card" onclick="showScreen('s1b')"><div class="overview-screen-num">Screen 1B</div><div class="overview-screen-name">Project Selection</div><div class="overview-screen-desc">Search by GL-PRJ ID, active + previous projects</div></div>
+    <div class="overview-card" onclick="showScreen('s2')"><div class="overview-screen-num">Screen 2</div><div class="overview-screen-name">Boring List</div><div class="overview-screen-desc">All boring states with GL-BH unique IDs</div></div>
+    <div class="overview-card" onclick="showScreen('s2b')" style="border-top-color:var(--green-mid)"><div class="overview-screen-num">Screen 2B ★ New</div><div class="overview-screen-name">Rig Setup</div><div class="overview-screen-desc">Rig type, BH diameter, drilling method — IS 1892 borelog header</div></div>
+    <div class="overview-card" onclick="showScreen('s3')"><div class="overview-screen-num">Screen 3</div><div class="overview-screen-name">Navigate + Start</div><div class="overview-screen-desc">Google Maps, GPS stamp on photo, elevation + accuracy, deviation flag</div></div>
+    <div class="overview-card" onclick="showScreen('s4')"><div class="overview-screen-num">Screen 4</div><div class="overview-screen-name">SPT Entry</div><div class="overview-screen-desc">Current interval only, N-value auto-calc, loop</div></div>
+    <div class="overview-card" onclick="showScreen('s5')"><div class="overview-screen-num">Screen 5</div><div class="overview-screen-name">Soil Description</div><div class="overview-screen-desc">Picture tiles, colour swatches, Hindi voice note</div></div>
+    <div class="overview-card" onclick="showScreen('s6')"><div class="overview-screen-num">Screen 6</div><div class="overview-screen-name">Sample Collection</div><div class="overview-screen-desc">Auto ID generation, 14-day countdown timer</div></div>
+    <div class="overview-card" onclick="showScreen('s7')"><div class="overview-screen-num">Screen 7 — Popup</div><div class="overview-screen-name">Water Table</div><div class="overview-screen-desc">Overlay on Screen 4, 24hr reminder auto-set</div></div>
+    <div class="overview-card" onclick="showScreen('s8')"><div class="overview-screen-num">Screen 8</div><div class="overview-screen-name">Rock Coring</div><div class="overview-screen-desc">Core recovery + RQD auto-calculated</div></div>
+    <div class="overview-card" onclick="showScreen('s9')"><div class="overview-screen-num">Screen 9</div><div class="overview-screen-name">UDS Sampling</div><div class="overview-screen-desc">Wax seal + upright storage mandatory checks</div></div>
+    <div class="overview-card" onclick="showScreen('s10')"><div class="overview-screen-num">Screen 10</div><div class="overview-screen-name">Boring Closure</div><div class="overview-screen-desc">Date + time, full summary, lock forever</div></div>
+    <div class="overview-card" onclick="showScreen('s11')"><div class="overview-screen-num">Screen 11 — Popup</div><div class="overview-screen-name">24hr WT Reminder</div><div class="overview-screen-desc">Push notification, final stable reading</div></div>
+    <div class="overview-card" onclick="showScreen('s12')"><div class="overview-screen-num">Screen 12</div><div class="overview-screen-name">Engineer Query</div><div class="overview-screen-desc">Engineer question + voice reply in Hindi</div></div>
+    <div class="overview-card" onclick="showScreen('s-term')"><div class="overview-screen-num">Popup</div><div class="overview-screen-name">Terminate Boring</div><div class="overview-screen-desc">6 reason tiles, resume vs permanent stop</div></div>
+    <div class="overview-card" onclick="showScreen('s-resume')"><div class="overview-screen-num">Special State</div><div class="overview-screen-name">Resumed Boring</div><div class="overview-screen-desc">Continues from termination depth, session 2</div></div>
+    <div class="overview-card" onclick="showScreen('loop')"><div class="overview-screen-num">Diagram</div><div class="overview-screen-name">Boring Loop Flow</div><div class="overview-screen-desc">How screens 4→5→6 loop and exit conditions</div></div>
+  </div>
+</div>
+
+<!-- SCREEN 1A -->
+<div id="s1a" class="screen-section">
+  <div class="screen-layout">
+    <div>
+      <div class="phone-frame">
+        <div class="phone-inner">
+          <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+          <div class="phone-bar"><span class="phone-bar-title">Groundlense</span><span class="phone-bar-sub">Field App</span></div>
+          <div class="phone-body">
+            <div style="text-align:center;margin:10px 0 12px">
+              <div style="width:40px;height:40px;border-radius:10px;background:var(--rust-light);border:1.5px solid var(--rust-mid);display:flex;align-items:center;justify-content:center;margin:0 auto 6px;font-size:18px">⛏</div>
+              <div style="font-size:13px;font-weight:700;color:var(--rust)">Groundlense</div>
+              <div style="font-size:9px;color:var(--gray-mid)">Field Supervisor App</div>
+            </div>
+            <div class="tab-row">
+              <div class="tab-btn active">Login / लॉगिन</div>
+              <div class="tab-btn inactive">Create Account</div>
+            </div>
+            <div class="field-group"><label class="field-label">Mobile number / मोबाइल नंबर</label><div class="field-input">9876543210</div></div>
+            <div class="field-group"><label class="field-label">PIN (4 digit) / पिन</label><div class="field-input">••••</div></div>
+            <button class="btn-primary">Login / लॉगिन करें</button>
+            <div class="divider"></div>
+            <div class="info-box blue" style="margin-top:6px"><div class="ib-title">Works offline · ऑफलाइन काम करता है</div><div class="ib-sub">Syncs automatically when signal returns</div></div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:10px;color:var(--gray-mid);text-align:center">Create Account tab →</div>
+      <div class="phone-frame" style="margin-top:8px">
+        <div class="phone-inner">
+          <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+          <div class="phone-bar"><span class="phone-bar-title">Groundlense</span><span class="phone-bar-sub">Create Account</span></div>
+          <div class="phone-body">
+            <div class="tab-row">
+              <div class="tab-btn inactive">Login / लॉगिन</div>
+              <div class="tab-btn active">Create Account / नया</div>
+            </div>
+            <div class="step-indicator">
+              <div><div class="step-dot-ind step-cur">1</div><div class="step-lbl">Details</div></div>
+              <div class="step-line-ind"></div>
+              <div><div class="step-dot-ind step-pend">2</div><div class="step-lbl">OTP</div></div>
+              <div class="step-line-ind"></div>
+              <div><div class="step-dot-ind step-pend">3</div><div class="step-lbl">PIN</div></div>
+            </div>
+            <div class="field-group"><label class="field-label">Full name / पूरा नाम</label><div class="field-input">Ramesh Chandra</div></div>
+            <div class="field-group"><label class="field-label">Mobile / मोबाइल</label><div class="field-input">9876543210</div></div>
+            <label class="field-label">Education / शिक्षा</label>
+            <div class="edu-grid">
+              <div class="edu-tile">10th / दसवीं</div>
+              <div class="edu-tile">12th / बारहवीं</div>
+              <div class="edu-tile sel">ITI / आईटीआई</div>
+              <div class="edu-tile">Diploma / डिप्लोमा</div>
+              <div class="edu-tile">B.E. / डिग्री</div>
+              <div class="edu-tile">Other / अन्य</div>
+            </div>
+            <button class="btn-primary">Next — Verify Mobile</button>
+            <div class="divider"></div>
+            <div class="info-box green"><div class="ib-title">✓ Account created: GL-W-0089</div><div class="ib-sub">Share this ID with your engineer. They will assign you to a project.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">1A</span><h2 class="screen-title">Login + Create Account</h2></div>
+      <p class="screen-description">First screen the worker sees when opening the app. Split into two tabs — Login for existing workers, Create Account for new joiners. Designed to be completed in under 2 minutes on a phone in field conditions.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Login Tab</div>
+          <ul class="feature-list">
+            <li>Mobile number or <strong>GL-W-XXXX</strong> worker ID</li>
+            <li>4-digit PIN — faster than password on site</li>
+            <li>Works completely <strong>offline</strong></li>
+            <li>Syncs automatically when signal returns</li>
+            <li>Forgot PIN — contact supervisor note</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">Create Account — 3 Steps</div>
+          <ul class="feature-list">
+            <li><strong>Step 1:</strong> Name + Mobile + Education (picture tiles)</li>
+            <li><strong>Step 2:</strong> OTP verification via SMS</li>
+            <li><strong>Step 3:</strong> Set 4-digit PIN + confirm</li>
+            <li>System generates <strong>GL-W-XXXX</strong> unique ID</li>
+            <li>Worker shares ID with engineer for project assignment</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Education Selector</div>
+          <ul class="feature-list">
+            <li>6 picture tiles — no typing needed</li>
+            <li>10th / 12th / ITI / Diploma / B.E. / Other</li>
+            <li>All labels in <strong>Hindi and English</strong></li>
+            <li>Tap to select — visual, not dropdown</li>
+            <li>Critical for people data compliance</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Key Design Rules</div>
+          <ul class="feature-list">
+            <li>Only 3 fields in Create Account — keeps abandonment low</li>
+            <li>Engineer adds Aadhaar + docs from web portal</li>
+            <li>PIN not password — faster for dirty hands + sunlight</li>
+            <li>Two separate screens — login does not mix with registration</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">Create Account collects only 3 fields on purpose. Complex onboarding gets abandoned on site. The engineer adds verification documents and additional details from the web portal after the worker registers. Worker gets access in 2 minutes.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 1B -->
+<div id="s1b" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar"><span class="phone-bar-title">Select Project</span><span class="phone-bar-sub">प्रोजेक्ट चुनें</span></div>
+        <div class="phone-body">
+          <div class="info-box green" style="margin-bottom:10px"><div class="ib-title">Ramesh Chandra · GL-W-0042 · Team A</div></div>
+          <label class="field-label">Search by Project ID / ID से खोजें</label>
+          <div class="search-row">
+            <input class="search-inp" value="GL-PRJ-2025-0047" placeholder="GL-PRJ-2025-____">
+            <button class="search-btn">GO</button>
+          </div>
+          <div class="search-result">
+            <div class="sr-id">GL-PRJ-2025-0047 · Found ✓</div>
+            <div class="sr-name">NH-48 · Package 14 · ROB Km 142+500</div>
+            <div class="sr-sub">GR Infraprojects · You are assigned ✓</div>
+            <button class="btn-primary" style="margin-top:6px;padding:6px">Open this project →</button>
+          </div>
+          <div class="field-label" style="margin-bottom:6px;font-weight:600;color:var(--gray-dark)">Assigned projects</div>
+          <div class="proj-card active-proj">
+            <div class="proj-id-mono">GL-PRJ-2025-0047</div>
+            <div class="proj-name">NH-48 · Package 14 · ROB Km 142</div>
+            <div class="proj-sub">GR Infraprojects · 10 borings · 4 assigned to you</div>
+            <span class="chip chip-rust">Active</span>
+            <span class="chip chip-blue">Team A</span>
+          </div>
+          <div class="field-label" style="margin-bottom:6px;font-weight:600;color:var(--gray-mid);margin-top:8px">Previous projects</div>
+          <div class="proj-card">
+            <div class="proj-id-mono">GL-PRJ-2025-0031</div>
+            <div class="proj-name">NH-44 · Package 7 · VUP Km 88</div>
+            <span class="chip chip-gray">Completed 10 Apr</span>
+          </div>
+          <div class="proj-card">
+            <div class="proj-id-mono">GL-PRJ-2025-0019</div>
+            <div class="proj-name">Delhi Ring Road · Bridge Km 14</div>
+            <span class="chip chip-gray">Completed 28 Mar</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">1B</span><h2 class="screen-title">Project Selection</h2></div>
+      <p class="screen-description">Opens immediately after successful login. Worker can search for a project by its unique GL-PRJ ID (given by supervisor) or select from their assigned project list. Previous completed projects are shown below for reference.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Search by Project ID</div>
+          <ul class="feature-list">
+            <li>Worker types <strong>GL-PRJ-2025-XXXX</strong> from supervisor</li>
+            <li>Instant result — project name + assignment status</li>
+            <li>Not assigned = red error message in Hindi</li>
+            <li>Not found = amber warning shown</li>
+            <li>Solves team handover problem completely</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">Assigned Project List</div>
+          <ul class="feature-list">
+            <li>Auto-populates from engineer assignment</li>
+            <li>Active projects shown at top</li>
+            <li>Previous completed shown below</li>
+            <li>Multiple active projects supported</li>
+            <li>Team assignment shown as chip</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Edge Cases Handled</div>
+          <ul class="feature-list">
+            <li>Project found but not assigned — red error</li>
+            <li>Project ID not found — amber warning</li>
+            <li>No projects assigned yet — empty state with instruction</li>
+            <li>Multiple active projects today — both shown</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Project ID Format</div>
+          <ul class="feature-list">
+            <li><strong>GL-PRJ-2025-0047</strong> — full format</li>
+            <li>GL = Groundlense prefix</li>
+            <li>PRJ = project type</li>
+            <li>2025 = year</li>
+            <li>0047 = sequential number</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">Search by Project ID solves the team handover problem. When Team A leaves a site and Team B arrives, Team B does not need to scroll through a list or contact anyone — they type the Project ID given by their supervisor and the project opens immediately with all existing boring data.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 2 -->
+<div id="s2" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar"><span class="phone-bar-title">GL-PRJ-2025-0047</span><span class="phone-bar-sub">NH-48 · ROB Km 142+500</span></div>
+        <div class="phone-body">
+          <div style="background:var(--rust-light);border-radius:6px;padding:6px 8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--amber)">GL-PRJ-2025-0047</div>
+              <div style="font-size:11px;font-weight:700;color:var(--rust)">NH-48 · Package 14</div>
+              <div style="font-size:9px;color:var(--rust-mid)">Team A · 4 borings assigned to you</div>
+            </div>
+            <button style="background:white;border:0.5px solid var(--rust-mid);border-radius:4px;padding:3px 7px;font-size:9px;color:var(--rust);cursor:pointer">Change</button>
+          </div>
+          <div style="font-size:10px;font-weight:600;color:var(--gray-mid);margin-bottom:6px">Today's borings / आज के बोरिंग</div>
+          <div class="boring-item done">
+            <div><div class="boring-id-mono">GL-BH-0047-01</div><div class="boring-name">BH-01 · Abutment A</div><div class="boring-status">Complete · 18.0m · 12 Apr</div></div>
+            <div class="status-dot dot-done"></div>
+          </div>
+          <div class="boring-item terminated">
+            <div><div class="boring-id-mono">GL-BH-0047-03</div><div class="boring-name">BH-03 · Pier P2</div><div class="boring-status" style="color:var(--amber)">Terminated · 10.5m · Resume today</div></div>
+            <div class="status-dot dot-term"></div>
+          </div>
+          <div class="boring-item active">
+            <div><div class="boring-id-mono">GL-BH-0047-02</div><div class="boring-name">BH-02 · Pier P1</div><div class="boring-status">In progress · 6.0m of 18m</div></div>
+            <div class="status-dot dot-active"></div>
+          </div>
+          <div class="boring-item pending">
+            <div><div class="boring-id-mono">GL-BH-0047-04</div><div class="boring-name">BH-04 · Pier P3</div><div class="boring-status">Pending / बाकी है</div></div>
+            <div class="status-dot dot-pend"></div>
+          </div>
+          <div class="progress-bar-outer"><div class="progress-bar-inner" style="width:30%"></div></div>
+          <div style="font-size:9px;color:var(--gray-mid);text-align:center;margin-bottom:8px">1 done · 1 terminated · 1 active · 7 pending</div>
+          <button class="btn-primary">Resume BH-03 / जारी रखें</button>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">2</span><h2 class="screen-title">Boring List</h2></div>
+      <p class="screen-description">Shows all boreholes assigned to this worker on the selected project. Each boring has a unique GL-BH-XXXX-XX identifier. Four color-coded states make it immediately clear what needs to be done today.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Four Boring States</div>
+          <ul class="feature-list">
+            <li><strong style="color:var(--green-mid)">Green — Complete:</strong> All entries done, locked, report ready</li>
+            <li><strong style="color:var(--amber)">Amber — Terminated:</strong> Stopped mid-boring, must resume today</li>
+            <li><strong style="color:var(--rust-mid)">Rust — Active:</strong> Currently in progress</li>
+            <li><strong style="color:var(--gray-mid)">Grey — Pending:</strong> Not started yet</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">Unique ID System</div>
+          <ul class="feature-list">
+            <li><strong>GL-BH-0047-03</strong> = GL + BH + project + sequence</li>
+            <li>Links boring to project permanently</li>
+            <li>Solves multi-team handover tracking</li>
+            <li>Used in all reports and certificates</li>
+            <li>If team changes — ID stays the same</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Project Header</div>
+          <ul class="feature-list">
+            <li>Project ID shown in phone bar</li>
+            <li>Project name + team shown in chip</li>
+            <li><strong>Change button</strong> to switch project</li>
+            <li>Worker always knows which project they are in</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Progress Bar</div>
+          <ul class="feature-list">
+            <li>Visual completion % for the day</li>
+            <li>Count of each state shown below</li>
+            <li>CTA button changes contextually</li>
+            <li>Resume for terminated, Start for pending</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">The GL-BH unique ID is more important than it appears. When Team A terminates BH-03 and Team B resumes it the next day, the same ID links both sessions. The IE firm sees a complete unbroken audit trail showing exactly who did what, when, and at what depth — even across different teams.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 2B — RIG SETUP (NEW) -->
+<div id="s2b" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar" style="background:var(--green-dark)"><span class="phone-bar-title">GL-BH-0047-02 · Rig Setup</span><span class="phone-bar-sub">Before starting boring</span></div>
+        <div class="phone-body">
+          <div class="info-box green"><div class="ib-title">IS 1892 — Borelog header required</div><div class="ib-sub">ये जानकारी बोरलॉग के लिए जरूरी है</div></div>
+          <label class="field-label">Rig type / रिग का प्रकार — tap to select</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px">
+            <div style="background:var(--green-light);border:1.5px solid var(--green-mid);border-radius:6px;padding:7px;text-align:center;font-size:10px;font-weight:700;color:var(--green-mid)">Rotary drilling<br><span style="font-weight:400;font-size:9px">रोटरी ड्रिलिंग</span></div>
+            <div style="background:var(--gray-light);border-radius:6px;padding:7px;text-align:center;font-size:10px;color:var(--gray-mid)">Wash boring<br><span style="font-size:9px">वॉश बोरिंग</span></div>
+            <div style="background:var(--gray-light);border-radius:6px;padding:7px;text-align:center;font-size:10px;color:var(--gray-mid)">Auger / ऑगर</div>
+            <div style="background:var(--gray-light);border-radius:6px;padding:7px;text-align:center;font-size:10px;color:var(--gray-mid)">Percussion</div>
+          </div>
+          <div class="field-group" style="margin-bottom:8px">
+            <label class="field-label">Borehole diameter (mm) / BH व्यास</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+              <div style="background:var(--gray-light);border-radius:5px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">100 mm</div>
+              <div style="background:var(--amber-light);border:1.5px solid var(--amber);border-radius:5px;padding:6px;text-align:center;font-size:10px;font-weight:700;color:var(--amber)">150 mm ✓</div>
+              <div style="background:var(--gray-light);border-radius:5px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">200 mm</div>
+            </div>
+          </div>
+          <div class="field-group" style="margin-bottom:8px">
+            <label class="field-label">Drilling fluid / ड्रिलिंग तरल</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+              <div style="background:var(--blue-light);border:1.5px solid var(--blue-dark);border-radius:5px;padding:6px;text-align:center;font-size:10px;font-weight:700;color:var(--blue-dark)">Water / पानी ✓</div>
+              <div style="background:var(--gray-light);border-radius:5px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">Bentonite mud</div>
+            </div>
+          </div>
+          <div class="field-group" style="margin-bottom:8px">
+            <label class="field-label">Hammer type / हैमर प्रकार</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+              <div style="background:var(--rust-light);border:1.5px solid var(--rust-mid);border-radius:5px;padding:6px;text-align:center;font-size:10px;font-weight:700;color:var(--rust)">Auto-trip ✓</div>
+              <div style="background:var(--gray-light);border-radius:5px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">Rope & pulley</div>
+            </div>
+          </div>
+          <div class="field-group" style="margin-bottom:8px">
+            <label class="field-label">Driller ID (GL-D-XXXX) / ड्रिलर ID</label>
+            <div class="field-input" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--amber)">GL-D-0018 · Ramesh Singh</div>
+          </div>
+          <div class="field-group" style="margin-bottom:8px">
+            <label class="field-label">Boring start date / बोरिंग शुरू की तारीख &#x2605; New</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+              <div class="field-input" style="color:var(--amber);font-weight:600">04-12-2025</div>
+              <div class="field-input" style="color:var(--text-ter);font-size:9px">Auto: today's date · editable</div>
+            </div>
+            <div style="font-size:8px;color:var(--text-ter);margin-top:2px">Bihar report requires start + finish date per BH in boring schedule table</div>
+          </div>
+          <div class="info-box amber"><div class="ib-title">Locked after first boring starts</div><div class="ib-sub">पहले SPT के बाद यह डेटा बदला नहीं जा सकता</div></div>
+          <button class="btn-primary" style="background:var(--green-mid)">Confirm rig setup / पुष्टि करें →</button>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge" style="background:var(--green-mid)">2B</span><h2 class="screen-title">Rig Setup <span style="font-size:12px;color:var(--green-mid);font-family:'DM Sans',sans-serif;font-weight:600">★ New screen</span></h2></div>
+      <p class="screen-description">Added from Apensia GT report gap analysis. Every real IS 1892 borelog header requires: rig type, borehole diameter, drilling fluid, and hammer type. Without this, Ground Lense's PDF output would look incomplete to any IE firm engineer in the first 5 seconds of review. This screen is completed once per boring, locked after the first SPT entry.</p>
+      <div class="feature-grid">
+        <div class="feature-card green-top">
+          <div class="feature-title">Why This Screen Exists</div>
+          <ul class="feature-list">
+            <li>IS 1892 borelog header is mandatory in every GT report</li>
+            <li>Real Apensia report shows: Rotary Drilling · 150mm · Water · IS 6926</li>
+            <li>Without it, Ground Lense PDF is immediately rejected by IE firms</li>
+            <li>One-time setup per boring — not repeated every interval</li>
+            <li>Appears automatically on borelog sheet Annexure II</li>
+          </ul>
+        </div>
+        <div class="feature-card">
+          <div class="feature-title">Fields Captured</div>
+          <ul class="feature-list">
+            <li>Rig type: Rotary / Wash boring / Auger / Percussion</li>
+            <li>Borehole diameter: 100mm / 150mm / 200mm</li>
+            <li>Drilling fluid: Water / Bentonite mud</li>
+            <li>Hammer type: Auto-trip / Rope and pulley</li>
+            <li>Driller GL-D-XXXX ID (auto-linked from assignment)</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Lock After First SPT</div>
+          <ul class="feature-list">
+            <li>Same logic as Engineer Portal Setup section</li>
+            <li>Cannot be changed after boring starts</li>
+            <li>Prevents retroactive alteration of rig records</li>
+            <li>If wrong — engineer must unlock with IS clause reason</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Auto-Populated Fields</div>
+          <ul class="feature-list">
+            <li>Driller ID pulled from project assignment</li>
+            <li>Date and time auto-recorded</li>
+            <li>Boring ID (GL-BH) pre-filled</li>
+            <li>All selections stored in borelog header permanently</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Gap fix — from real GT report analysis</div><div class="design-note-text">This screen was identified as a critical gap by cross-referencing the Apensia Consultancy GT report for NH-748, Goa. Every borelog sheet header (Annexure II) shows rig type and drilling method. Ground Lense could not generate a complete IS 1892 borelog without this data. Screen 2B fills this gap permanently.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 3 -->
+<div id="s3" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar"><span class="phone-bar-title">BH-03 · Pier P2</span><span class="phone-bar-sub">Navigate to location</span></div>
+        <div class="phone-body">
+          <div class="map-mock">
+            <div class="map-planned-pin">📍</div>
+            <div class="map-distance-line"></div>
+            <div class="map-me-pin">🔵</div>
+          </div>
+          <div class="map-info">
+            <div class="map-dist">45m away · Walk north</div>
+            <button class="btn-amber">Open Google Maps</button>
+          </div>
+          <div class="info-box amber">
+            <div class="ib-title">You are 45m from planned location</div>
+            <div class="ib-sub">Walk to the pin before starting. GPS will auto-record when you tap start.</div>
+          </div>
+          <label class="field-label">Rig photo — GPS coords stamped on image</label>
+          <button class="btn-secondary" style="background:var(--green-light);color:var(--green-dark);border-color:var(--green-mid);margin-bottom:6px">📷 Take rig photo / रिग की फोटो लें</button>
+          <div class="gps-stamp">
+            <div class="gps-line">GL-BH03 · 15 Apr 2025 · 09:14:32 AM</div>
+            <div class="gps-line">Lat 15°27'51.32"N · Long 73°57'40.72"E</div>
+            <div class="gps-line">RL (Elevation): 19.85 m ± 16.0 m</div>
+            <div class="gps-line">GPS Accuracy: 2.1 m</div>
+            <div class="gps-dev">Deviation from plan: +4.2m ⚠ FLAGGED</div>
+          </div>
+          <label class="field-label">Weather / मौसम</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:10px">
+            <div style="background:var(--blue-light);border:1.5px solid var(--blue-dark);border-radius:6px;padding:5px;text-align:center;font-size:10px;font-weight:600;color:var(--blue-dark)">☀ Clear / साफ</div>
+            <div style="background:var(--gray-light);border-radius:6px;padding:5px;text-align:center;font-size:10px;color:var(--gray-mid)">⛅ Cloudy</div>
+          </div>
+          <button class="btn-primary">▶ Start Boring / बोरिंग शुरू करें</button>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">3</span><h2 class="screen-title">Navigate + Start Boring</h2></div>
+      <p class="screen-description">Worker navigates to the planned boring location using Google Maps integration. GPS coordinates are captured automatically and stamped directly on the rig photo. Any deviation from the planned location greater than 3m is flagged automatically — the worker cannot change this.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Google Maps Navigation</div>
+          <ul class="feature-list">
+            <li>Planned boring location pre-pinned by engineer</li>
+            <li>Live distance indicator — "45m away · Walk north"</li>
+            <li><strong>Open Google Maps</strong> button for turn-by-turn</li>
+            <li>Map preview shows planned vs current location</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">GPS Auto-Capture</div>
+          <ul class="feature-list">
+            <li>Records Easting, Northing, RL automatically</li>
+            <li>Calculates deviation from planned location</li>
+            <li>Deviation &gt;3m = <strong>amber flag raised</strong></li>
+            <li>Worker cannot change GPS — it is evidence</li>
+            <li>Flag appears on contractor portal cross-section</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">GPS Stamped Photo</div>
+          <ul class="feature-list">
+            <li>Coordinates printed ON the photo itself</li>
+            <li>Not just in metadata — visually on image</li>
+            <li>Timestamp + boring ID + E + N + RL + deviation</li>
+            <li>Legal proof that boring was at that location</li>
+            <li>Cannot be faked after the fact</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Weather Selection</div>
+          <ul class="feature-list">
+            <li>4 picture options — tap one</li>
+            <li>Clear / Cloudy / Rainy / Hot</li>
+            <li>No typing needed</li>
+            <li>Appears on boring log report</li>
+            <li>IS 2131 requires weather data</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">GPS deviation flags but does NOT block. The worker can still start the boring even if they are 10m off. This is intentional — preventing the contractor from claiming "the app stopped our work." The deviation is recorded as permanent evidence for the IE firm to act on.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 4 -->
+<div id="s4" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar"><span class="phone-bar-title">BH-03 · SPT Entry</span><span class="phone-bar-sub">Depth 4.5m</span></div>
+        <div class="phone-body">
+          <div class="loop-bar">
+            <span class="loop-text">Interval 3 of 13 planned</span>
+            <div class="loop-dots">
+              <div class="loop-dot ld-done"></div><div class="loop-dot ld-done"></div>
+              <div class="loop-dot ld-cur"></div><div class="loop-dot"></div><div class="loop-dot"></div>
+            </div>
+          </div>
+          <div class="depth-bar"><div class="depth-big">4.5 m</div><div class="depth-sub">Current depth · 30–45cm interval</div></div>
+          <label class="field-label">Blows for 30–45cm — current interval only</label>
+          <div class="blow-current"><div class="blow-lbl">Enter blow count / ब्लो गिनती</div><div class="blow-num">10</div><div style="font-size:9px;color:var(--gray-mid)">Tap to change</div></div>
+          <label class="field-label">This interval progress</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px">
+            <div style="background:var(--green-light);border-radius:5px;padding:5px;text-align:center"><div style="font-size:8px;color:var(--green-mid)">0–15cm</div><div style="font-size:12px;font-weight:700;color:var(--green-mid)">5 ✓</div></div>
+            <div style="background:var(--green-light);border-radius:5px;padding:5px;text-align:center"><div style="font-size:8px;color:var(--green-mid)">15–30cm</div><div style="font-size:12px;font-weight:700;color:var(--green-mid)">8 ✓</div></div>
+            <div style="background:var(--rust-light);border:1.5px solid var(--rust-mid);border-radius:5px;padding:5px;text-align:center"><div style="font-size:8px;color:var(--rust)">30–45cm</div><div style="font-size:12px;font-weight:700;color:var(--rust)">10 ←</div></div>
+          </div>
+          <div class="n-result"><div class="n-left">Raw N=18 · Corrected N=16</div><div class="n-right">Medium dense sand</div></div>
+          <div style="background:var(--blue-light);border:0.5px solid #85B7EB;border-radius:6px;padding:5px 8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:9px;color:var(--blue-dark)">Fine sand below water table?</span>
+            <div style="display:flex;gap:4px">
+              <button style="background:var(--blue-dark);color:white;border:none;border-radius:4px;padding:3px 8px;font-size:9px;font-weight:600;cursor:pointer">Yes → N" correction</button>
+              <button style="background:var(--gray-light);color:var(--gray-mid);border:none;border-radius:4px;padding:3px 8px;font-size:9px;cursor:pointer">No</button>
+            </div>
+          </div>
+          <button class="btn-secondary" style="background:var(--green-light);color:var(--green-dark);border-color:var(--green-mid);margin-bottom:4px">📷 Split spoon photo / फोटो लें</button>
+          <div class="btn-row-2">
+            <button class="btn-secondary" style="font-size:10px">💧 Water table</button>
+            <button class="btn-secondary" style="font-size:10px;color:var(--red-mid);border-color:var(--red-mid)">⏹ Terminate</button>
+          </div>
+          <button class="btn-secondary" style="background:var(--red-light);color:var(--red-mid);border-color:var(--red-mid);margin-top:4px;font-size:10px">⛔ Refusal (N=100) — enter mm penetrated</button>
+          <div style="background:var(--red-light);border:1px solid var(--red-mid);border-radius:6px;padding:7px;margin:4px 0 6px;display:none" id="refusalBox">
+            <div style="font-size:9px;color:var(--red-mid);font-weight:600;margin-bottom:4px">Refusal — partial penetration before N=100</div>
+            <div class="field-input" style="color:var(--red-mid);font-weight:600">80 mm penetrated (of 150mm interval)</div>
+            <div style="font-size:8px;color:var(--red-mid);margin-top:3px">रिफ्यूजल — कितने mm तक घुसा (IS 2131)</div>
+          </div>
+          <button class="btn-primary" style="margin-top:2px">Next → Soil description</button>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">4</span><h2 class="screen-title">SPT Entry — The Core Loop</h2></div>
+      <p class="screen-description">The most important screen in the app. Worker enters blow counts for the current 1.5m depth interval. The app automatically calculates the raw N value and corrected N value using IS 2131 formulas and shows the soil interpretation in plain language. After photo and submission, the app loops back to this screen for the next depth.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Current Interval Only</div>
+          <ul class="feature-list">
+            <li>Shows <strong>one interval at a time</strong> — not all three</li>
+            <li>Previous intervals shown as small green ticks below</li>
+            <li>Current interval highlighted in rust</li>
+            <li>Reduces confusion for ITI-pass workers</li>
+            <li>Worker cannot accidentally edit previous entries</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">Auto-Calculations</div>
+          <ul class="feature-list">
+            <li><strong>Raw N</strong> = sum of 15-30cm + 30-45cm blows</li>
+            <li><strong>Corrected N</strong> = overburden correction (IS 2131)</li>
+            <li>Dilatancy correction applied if applicable</li>
+            <li>IS code table lookup → plain language result</li>
+            <li>"Medium dense sand" shown automatically</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Loop Indicator</div>
+          <ul class="feature-list">
+            <li>"Interval 3 of 13 planned" always visible</li>
+            <li>Dot progress row shows completion</li>
+            <li>Green = done, Rust = current, Grey = pending</li>
+            <li>Amber dot = terminated interval</li>
+            <li>Worker always knows where they are</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Refusal + Dilatancy — New</div>
+          <ul class="feature-list">
+            <li><strong>Refusal button</strong> — triggers N=100 + asks mm penetrated before refusal</li>
+            <li>Real reports show "R" at 6.0m, 7.5m, 9.0m — partial depth matters</li>
+            <li><strong>Dilatancy flag</strong> — "Fine sand below WT?" shown after N value</li>
+            <li>If yes → N'' = 15 + (N' − 15)/2 correction applied</li>
+            <li>IS 2131 requirement — previously missing from design</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision — The Boring Loop</div><div class="design-note-text">After Screen 6 (Sample Collection), the app automatically returns to Screen 4 for the next depth interval. The worker never manually navigates between screens during a boring. The loop continues: Screen 4 → 5 → 6 → 4 → 5 → 6 until boring is complete, terminated, or rock is encountered.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 5 -->
+<div id="s5" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar"><span class="phone-bar-title">BH-03 · Soil Description</span><span class="phone-bar-sub">Depth 4.5m</span></div>
+        <div class="phone-body">
+          <div class="loop-bar"><span class="loop-text">Interval 3 · Step 2 of 3</span></div>
+          <label class="field-label">Soil type / मिट्टी का प्रकार — tap to select</label>
+          <div class="soil-grid" style="grid-template-columns:1fr 1fr 1fr">
+            <div class="soil-tile selected"><div class="soil-icon">🟤</div><div class="soil-name">Sand / बालू</div><div class="soil-hindi">SP / SW</div></div>
+            <div class="soil-tile"><div class="soil-icon">🟫</div><div class="soil-name">Clay / मिट्टी</div><div class="soil-hindi">CI / CH</div></div>
+            <div class="soil-tile"><div class="soil-icon">⚫</div><div class="soil-name">Silt / गाद</div><div class="soil-hindi">ML / MH</div></div>
+            <div class="soil-tile"><div class="soil-icon">🪨</div><div class="soil-name">Rock / चट्टान</div><div class="soil-hindi">Rocky</div></div>
+            <div class="soil-tile"><div class="soil-icon">🔴</div><div class="soil-name">Red Clay</div><div class="soil-hindi">Lateritic · CI</div></div>
+            <div class="soil-tile"><div class="soil-icon">🗿</div><div class="soil-name">Boulder clay</div><div class="soil-hindi">With boulders</div></div>
+            <div class="soil-tile"><div class="soil-icon">🔵</div><div class="soil-name">Silty Sand</div><div class="soil-hindi">SM · ML-CL</div></div>
+            <div class="soil-tile"><div class="soil-icon">🟡</div><div class="soil-name">Sandy Silt</div><div class="soil-hindi">ML-CL · gravel</div></div>
+            <div class="soil-tile" style="border:1.5px dashed var(--amber);background:rgba(234,163,20,.07)"><div class="soil-icon">⚠️</div><div class="soil-name">Filled soil &#x2605;</div><div class="soil-hindi">भरी हुई / disturbed</div></div>
+          </div>
+          <div style="background:var(--amber-light);border:0.5px solid var(--amber);border-radius:5px;padding:5px 8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:9px;color:var(--amber);font-weight:600">IS 1498 code (auto-mapped)</span>
+            <span style="font-family:'DM Mono',monospace;font-size:10px;font-weight:700;color:var(--rust)">SP — Poorly graded sand</span>
+          </div>
+          <div style="background:var(--amber-light);border:0.5px solid var(--amber);border-radius:5px;padding:5px 8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:9px;color:var(--amber);font-weight:600">IS 1904 code (auto-mapped)</span>
+            <span style="font-family:'DM Mono',monospace;font-size:10px;font-weight:700;color:var(--rust)" id="soilCodeDisplay">SP — Poorly graded sand</span>
+          </div>
+          <label class="field-label">Colour / रंग</label>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:10px">
+            <div style="background:#D2691E;border-radius:4px;height:20px;border:2px solid var(--gray-dark)"></div>
+            <div style="background:#8B7355;border-radius:4px;height:20px"></div>
+            <div style="background:#808080;border-radius:4px;height:20px"></div>
+            <div style="background:#FFFDD0;border-radius:4px;height:20px;border:0.5px solid var(--gray-border)"></div>
+            <div style="background:#000080;border-radius:4px;height:20px"></div>
+          </div>
+          <label class="field-label">Consistency / घनत्व</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:10px">
+            <div style="background:var(--gray-light);border-radius:6px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">Loose / ढीला</div>
+            <div style="background:var(--amber-light);border:1.5px solid var(--amber);border-radius:6px;padding:6px;text-align:center;font-size:10px;font-weight:700;color:var(--amber)">Medium / मध्यम</div>
+            <div style="background:var(--gray-light);border-radius:6px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">Dense / घना</div>
+            <div style="background:var(--gray-light);border-radius:6px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">Stiff / कड़ा</div>
+          </div>
+          <button class="btn-secondary" style="background:var(--blue-light);color:var(--blue-dark);border-color:var(--blue-dark)">🎙 Voice note in Hindi / हिंदी में बोलें</button>
+          <button class="btn-primary" style="margin-top:6px">Next → Sample collection</button>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">5</span><h2 class="screen-title">Soil Description</h2></div>
+      <p class="screen-description">Step 2 of the boring loop. Worker describes the soil from the split spoon sample using picture tiles — no free text entry needed. All selections are mapped to IS 1498 soil classification codes automatically by the system.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Soil Type Tiles</div>
+          <ul class="feature-list">
+            <li>4 main types with emoji photos</li>
+            <li>Sand / Clay / Silt / Rock</li>
+            <li>Hindi + English on every tile</li>
+            <li>Tap to select — visual, not text dropdown</li>
+            <li>Maps to IS 1498 classification automatically</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">Colour Swatches</div>
+          <ul class="feature-list">
+            <li>5 colour swatches to tap</li>
+            <li>Brown / Dark brown / Grey / Light / Blue-grey</div></li>
+            <li>No colour name typing needed</li>
+            <li>Worker matches visual to sample</li>
+            <li>IS code colour classification auto-applied</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Voice Note in Hindi</div>
+          <ul class="feature-list">
+            <li>Optional additional observation</li>
+            <li>Google Speech-to-Text API in Hindi</li>
+            <li>Worker speaks — app transcribes</li>
+            <li>Appears as note on boring log</li>
+            <li>Critical for unusual soil conditions</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Consistency Options</div>
+          <ul class="feature-list">
+            <li>Loose / Medium / Dense / Stiff</li>
+            <li>2×2 grid for easy tapping</li>
+            <li>Selected option highlighted in amber</li>
+            <li>Maps to IS 1498 descriptors</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">Zero free text fields on this screen. An ITI-pass worker standing in sunlight with soil on their hands cannot type IS 1498 soil descriptions. They tap a picture. The system maps their selection to the correct IS code terminology automatically. Engineers can add technical notes from the web portal.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 6 -->
+<div id="s6" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar"><span class="phone-bar-title">BH-03 · Sample</span><span class="phone-bar-sub">Depth 4.5m</span></div>
+        <div class="phone-body">
+          <div class="loop-bar"><span class="loop-text">Interval 3 · Step 3 of 3</span></div>
+          <label class="field-label">Sample type / नमूने का प्रकार</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:10px">
+            <div style="background:var(--rust-light);border:1.5px solid var(--rust-mid);border-radius:6px;padding:7px;text-align:center;font-size:10px;font-weight:700;color:var(--rust)">Disturbed SPT<br><span style="font-weight:400;font-size:9px">विक्षुब्ध नमूना</span></div>
+            <div style="background:var(--gray-light);border-radius:6px;padding:7px;text-align:center;font-size:10px;color:var(--gray-mid)">UDS Thin wall<br><span style="font-size:9px">अविक्षुब्ध</span></div>
+          </div>
+          <div class="sample-id-box">
+            <div class="sample-id-lbl">Write on tube / ट्यूब पर लिखें</div>
+            <div class="sample-id-val">GL-BH03-4.5-S1</div>
+            <div class="sample-id-hint">Use marker pen clearly / मार्कर से साफ लिखें</div>
+          </div>
+          <button class="btn-secondary" style="background:var(--green-light);color:var(--green-dark);border-color:var(--green-mid);margin-bottom:4px">📷 Photo of sealed tube / सील की फोटो</button>
+          <div style="background:var(--amber-light);border:0.5px solid var(--amber);border-radius:6px;padding:6px 8px;margin-bottom:6px">
+            <div style="font-size:9px;font-weight:700;color:var(--amber);margin-bottom:3px">📋 Slate board photo required / स्लेट बोर्ड फोटो जरूरी</div>
+            <div style="font-size:8px;color:#633806">Hold slate showing: BH ID · Depth · Date (like: GL-BH03 · 4.5m · 15-Apr-2025)</div>
+            <button class="btn-secondary" style="font-size:9px;margin-top:5px;background:white;color:var(--amber);border-color:var(--amber)">📷 Take slate board photo</button>
+          </div>
+          <div class="info-box green"><div class="ib-title">✓ Photo taken · Sample sealed confirmed</div></div>
+          <div class="timer-box" style="margin-top:6px">
+            <div class="timer-title">⏰ 14-day timer started</div>
+            <div class="timer-sub">Must reach lab by: 29 Apr 2025</div>
+          </div>
+          <button class="btn-primary">Next depth / अगली गहराई → Screen 4</button>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">6</span><h2 class="screen-title">Sample Collection</h2></div>
+      <p class="screen-description">Step 3 of the boring loop. Worker selects sample type, gets an auto-generated unique ID shown in large text, writes it on the tube, takes a photo, and confirms sealing. A 14-day countdown timer starts automatically. After submission, the app loops back to Screen 4 for the next depth.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Auto-Generated Sample ID</div>
+          <ul class="feature-list">
+            <li><strong>GL-BH03-4.5-S1</strong> format</li>
+            <li>GL = Groundlense</li>
+            <li>BH03 = boring number</li>
+            <li>4.5 = depth in metres</li>
+            <li>S1 = first sample at this depth</li>
+            <li>Shown in LARGE text — worker writes on tube with marker</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">14-Day Countdown Timer</div>
+          <ul class="feature-list">
+            <li>Starts automatically on sample creation</li>
+            <li>Shows deadline date clearly</li>
+            <li>IE dashboard alerts when approaching</li>
+            <li>Report flags if lab results not entered by day 14</li>
+            <li>IS 2132 requirement for UDS samples</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Sample Types</div>
+          <ul class="feature-list">
+            <li><strong>S prefix</strong> = Disturbed SPT sample</li>
+            <li><strong>U prefix</strong> = UDS thin wall tube</li>
+            <li>Each type has different ID prefix</li>
+            <li>Lab module links results to ID automatically</li>
+            <li>Chain of custody complete from field to lab</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">After Submit</div>
+          <ul class="feature-list">
+            <li>App loops back to Screen 4 automatically</li>
+            <li>Next depth interval ready for entry</li>
+            <li>Worker never navigates manually</li>
+            <li>Loop continues until boring ends</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">Handwritten sample ID is more reliable than QR scanning in field conditions — hands are dirty, sun is bright, and there is no printer on site. The large display of the ID ensures the worker writes it correctly. The lab technician types the same ID when entering test results, completing the chain of custody.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 7 POPUP -->
+<div id="s7" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar"><span class="phone-bar-title">BH-03 · SPT — Popup</span><span class="phone-bar-sub">Water table found</span></div>
+        <div class="popup-overlay">
+          <div class="popup-card">
+            <div class="popup-title" style="color:var(--blue-dark)">💧 Water Table Found</div>
+            <div class="popup-sub">BH-03 · 15 Apr 2025 · 11:45 AM (auto-recorded)</div>
+            <div class="field-group"><label class="field-label">Water depth (m) / पानी की गहराई</label><div class="field-input large">6.50 m</div></div>
+            <div class="info-box blue"><div class="ib-title">🔔 24hr reminder set automatically</div><div class="ib-sub">Notification tomorrow 11:45 AM / कल नोटिफिकेशन आएगा</div></div>
+            <div class="btn-row-2" style="margin-top:8px">
+              <button class="btn-secondary" style="margin-top:0">Cancel / रद्द</button>
+              <button class="btn-primary btn-blue" style="margin-top:0">Save / सहेजें</button>
+            </div>
+            <div style="font-size:9px;color:#999;text-align:center;margin-top:6px">After saving — boring continues from where you left off</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">7</span><h2 class="screen-title">Water Table Popup</h2></div>
+      <p class="screen-description">Not a separate screen — an overlay that appears on top of Screen 4 when the worker taps the "Water table" button. Screen 4 dims in the background. After saving, the popup closes and the boring loop continues exactly where it left off.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Why a Popup, Not a Screen</div>
+          <ul class="feature-list">
+            <li>Worker does not lose their place in the boring loop</li>
+            <li>After saving — returns to exact same depth</li>
+            <li>No navigation confusion</li>
+            <li>One tap to record, boring continues immediately</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">What Is Captured</div>
+          <ul class="feature-list">
+            <li>Water depth in metres (worker enters)</li>
+            <li>Time auto-recorded and locked</li>
+            <li>Date auto-recorded</li>
+            <li>Linked to boring ID automatically</li>
+            <li>IS 6935 compliant observation</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">24hr Reminder System</div>
+          <ul class="feature-list">
+            <li>Set automatically when WT is recorded</li>
+            <li>Push notification at exact same time next day</li>
+            <li>Works even if app is closed</li>
+            <li>Brings worker back to Screen 11 popup</li>
+            <li>IS 6935 requires 24hr stable reading</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Report Output</div>
+          <ul class="feature-list">
+            <li>Both readings appear on boring log</li>
+            <li>Initial reading + 24hr stable reading</li>
+            <li>Rise/fall calculated automatically</li>
+            <li>Unusual change flagged to IE dashboard</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">Converting Screen 7 and Screen 11 from separate screens to popup overlays was your correction that significantly improved the workflow. A separate screen would have broken the boring loop rhythm that ITI-pass workers learn quickly. The popup is a momentary interruption — the loop continues without the worker needing to navigate back.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 8 -->
+<div id="s8" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar" style="background:var(--gray-dark)"><span class="phone-bar-title">BH-03 · Rock Coring</span><span class="phone-bar-sub">Depth 16.0m</span></div>
+        <div class="phone-body">
+          <div style="background:var(--gray-dark);border-radius:6px;padding:6px 8px;margin-bottom:8px">
+            <div style="font-size:10px;font-weight:700;color:#FAC775">Rock encountered — switching to core mode</div>
+            <div style="font-size:9px;color:#B4B2A9">चट्टान मिली — रॉक कोरिंग शुरू करें</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+            <div class="field-group"><label class="field-label">Run length (m)</label><div class="field-input">1.50</div></div>
+            <div class="field-group"><label class="field-label">Core recovered (m)</label><div class="field-input">1.32</div></div>
+          </div>
+          <div class="rock-stat"><span class="rock-lbl">Core recovery %</span><span class="rock-val">88% · Good ✓</span></div>
+          <label class="field-label">Weathering grade / अपक्षय श्रेणी</label>
+          <div class="wth-grid">
+            <div class="wth-tile">Fresh / ताज़ा</div>
+            <div class="wth-tile sel">Slightly wthr.</div>
+            <div class="wth-tile">Moderately</div>
+            <div class="wth-tile">Highly wthr.</div>
+          </div>
+          <div class="field-group"><label class="field-label">Pieces ≥ 100mm — how many? / 100mm से बड़े टुकड़े</label><div class="field-input">7 pieces</div></div>
+          <div class="rock-stat"><span class="rock-lbl">RQD (auto-calculated)</span><span class="rock-val">78% · Good</span></div>
+          <button class="btn-secondary" style="background:var(--green-light);color:var(--green-dark);border-color:var(--green-mid);margin-bottom:6px">📷 Core box photo / कोर बॉक्स फोटो</button>
+          <button class="btn-primary">Next run / अगला रन</button>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">8</span><h2 class="screen-title">Rock Coring Mode</h2></div>
+      <p class="screen-description">A separate mode triggered when rock is encountered during boring. The SPT loop exits and rock coring begins. Worker enters run length and recovered length — core recovery % and RQD are calculated automatically. No formula knowledge required.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Core Recovery Auto-Calc</div>
+          <ul class="feature-list">
+            <li>Worker enters: run length + recovered length</li>
+            <li>App calculates: <strong>Core Recovery % = (recovered ÷ run) × 100</strong></li>
+            <li>Classification shown: Excellent/Good/Fair/Poor</li>
+            <li>Per IS guidelines for rock quality</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">RQD Auto-Calculation</div>
+          <ul class="feature-list">
+            <li>Worker physically counts pieces ≥ 100mm</li>
+            <li>Types the count — app calculates RQD %</li>
+            <li>RQD = (length of pieces ≥100mm ÷ run) × 100</li>
+            <li>Classification: Excellent/Good/Fair/Poor/Very Poor</li>
+            <li>No formula knowledge needed from worker</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Weathering Grade</div>
+          <ul class="feature-list">
+            <li>4 picture tile options</li>
+            <li>Fresh / Slightly / Moderately / Highly</li>
+            <li>Mapped to IRC 78 rock classification</li>
+            <li>Appears on foundation report automatically</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Core Box Photo</div>
+          <ul class="feature-list">
+            <li>Mandatory per IS 4078 storage code</li>
+            <li>GPS stamped like all other photos</li>
+            <li>Linked to run number and depth</li>
+            <li>Visible on IE dashboard immediately</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">Dark header bar distinguishes rock coring mode visually from SPT mode. The worker immediately knows they are in a different workflow. All calculations happen automatically — worker counts pieces physically and types one number. This is the only input requiring physical counting, which is appropriate because pieces must be physically measured on site.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 9 -->
+<div id="s9" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar phone-bar" style="background:var(--blue-dark)"><span class="phone-bar-title">BH-03 · UDS Sample</span><span class="phone-bar-sub">Depth 9.0m</span></div>
+        <div class="phone-body">
+          <div class="info-box blue"><div class="ib-title">Undisturbed sample — handle with care</div><div class="ib-sub">अविक्षुब्ध नमूना — ध्यान से रखें</div></div>
+          <div style="background:var(--blue-dark);border-radius:8px;padding:12px;text-align:center;margin-bottom:8px">
+            <div style="font-size:9px;color:#85B7EB;margin-bottom:4px">UDS Sample ID / UDS नमूना ID</div>
+            <div style="font-family:'DM Mono',monospace;font-size:15px;font-weight:700;color:white">GL-BH03-9.0-U1</div>
+            <div style="font-size:9px;color:#B5D4F4;margin-top:4px">Write on tube AND core box</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+            <div class="field-group"><label class="field-label">Tube penetration (cm)</label><div class="field-input">45 cm</div></div>
+            <div class="field-group"><label class="field-label">Recovery (cm)</label><div class="field-input">42 cm</div></div>
+          </div>
+          <div class="info-box red"><div class="ib-title">Wax seal — BOTH ends mandatory</div><div class="ib-sub">दोनों तरफ मोम लगाना जरूरी है</div></div>
+          <div class="btn-row-2" style="margin:8px 0">
+            <button class="btn-secondary" style="margin-top:0;font-size:10px">✓ Both ends waxed</button>
+            <button class="btn-secondary" style="margin-top:0;font-size:10px">✓ Stored upright</button>
+          </div>
+          <div class="timer-box"><div class="timer-title">⏰ 14-day timer: Must reach lab 29 Apr 2025</div></div>
+          <button class="btn-secondary" style="background:var(--green-light);color:var(--green-dark);border-color:var(--green-mid);margin-bottom:6px">📷 Sample photo</button>
+          <button class="btn-primary">Continue / जारी रखें</button>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">9</span><h2 class="screen-title">UDS Thin Wall Sampling</h2></div>
+      <p class="screen-description">Used when an undisturbed soil sample is required for consolidation, triaxial, or UCS tests. Different blue color scheme distinguishes it from disturbed SPT samples. The U prefix in the sample ID distinguishes it from S (SPT) samples throughout the system.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">UDS Sample ID Format</div>
+          <ul class="feature-list">
+            <li><strong>GL-BH03-9.0-U1</strong> format</li>
+            <li><strong>U prefix</strong> = undisturbed (vs S for SPT)</li>
+            <li>Write on BOTH the tube AND the core box</li>
+            <li>Lab links test results to this ID</li>
+            <li>Chain of custody complete from field to report</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Mandatory Confirmations</div>
+          <ul class="feature-list">
+            <li>Both ends wax sealed — cannot be skipped</li>
+            <li>Stored upright — IS 2132 requirement</li>
+            <li>Both checkboxes must be ticked before Next</li>
+            <li>Failure to seal = compromised test results</li>
+            <li>These are legally required IS code steps</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">Recovery Calculation</div>
+          <ul class="feature-list">
+            <li>Worker enters tube penetration depth</li>
+            <li>Worker enters length recovered</li>
+            <li>Recovery ratio auto-calculated</li>
+            <li>Low recovery = flag to engineer</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Color Scheme</div>
+          <ul class="feature-list">
+            <li>Blue header bar — not rust</li>
+            <li>Blue ID box — not green</li>
+            <li>Worker learns: Blue = undisturbed, Rust = SPT</li>
+            <li>No label reading needed — color = type</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">Blue color scheme for UDS is deliberate. The worker learns to associate rust/orange with SPT and blue with undisturbed samples. When they see a blue screen they immediately know this sample requires more careful handling. Color communicates faster than text on a construction site.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- TERMINATE POPUP -->
+<div id="s-term" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar"><span class="phone-bar-title">BH-03 · Terminate</span><span class="phone-bar-sub">Give reason before stopping</span></div>
+        <div class="popup-overlay">
+          <div class="popup-card">
+            <div class="popup-title" style="color:var(--red-mid)">⏹ Terminate Boring / बोरिंग रोकें</div>
+            <div class="popup-sub">GL-BH-0047-03 · BH-03 · Current depth 12.0m</div>
+            <label class="field-label">Reason / कारण बताएं</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px">
+              <div style="background:var(--amber-light);border:1.5px solid var(--amber);border-radius:6px;padding:6px;text-align:center;font-size:10px;font-weight:700;color:var(--amber)">End of day<br><span style="font-weight:400">आज का काम खत्म</span></div>
+              <div style="background:var(--gray-light);border-radius:6px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">Equipment<br>मशीन खराब</div>
+              <div style="background:var(--gray-light);border-radius:6px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">Obstruction<br>रुकावट</div>
+              <div style="background:var(--gray-light);border-radius:6px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">Engineer instruction<br>निर्देश</div>
+              <div style="background:var(--gray-light);border-radius:6px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">Weather<br>मौसम खराब</div>
+              <div style="background:var(--gray-light);border-radius:6px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">Other / अन्य</div>
+            </div>
+            <label class="field-label">Will this boring resume?</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px">
+              <div style="background:var(--green-light);border:1.5px solid var(--green-mid);border-radius:6px;padding:6px;text-align:center;font-size:10px;font-weight:700;color:var(--green-mid)">Yes — resume later<br>हाँ — बाद में</div>
+              <div style="background:var(--gray-light);border-radius:6px;padding:6px;text-align:center;font-size:10px;color:var(--gray-mid)">No — permanent stop<br>नहीं</div>
+            </div>
+            <div class="info-box red"><div class="ib-title">Depth 12.0m + your ID + timestamp will be recorded</div></div>
+            <div class="btn-row-2" style="margin-top:8px">
+              <button class="btn-secondary" style="margin-top:0">Cancel / रद्द</button>
+              <button class="btn-primary btn-red" style="margin-top:0">Confirm Terminate</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">Popup</span><h2 class="screen-title">Terminate Boring</h2></div>
+      <p class="screen-description">Triggered by the Terminate button on Screen 4. Termination is NOT the same as closing a boring. Terminate = pause with reason. Close (Screen 10) = permanent completion. The terminated boring shows as amber in the boring list and can be resumed by any assigned worker.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">6 Reason Tiles</div>
+          <ul class="feature-list">
+            <li>End of day — most common on site</li>
+            <li>Equipment breakdown</li>
+            <li>Site obstruction</li>
+            <li>Engineer instruction</li>
+            <li>Weather — will resume</li>
+            <li>Other — with optional voice note</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Resume vs Permanent Stop</div>
+          <ul class="feature-list">
+            <li><strong>Yes, resume later</strong> → boring stays amber in list</li>
+            <li><strong>No, permanent stop</strong> → goes directly to Screen 10 closure</li>
+            <li>Resume = different team can pick it up next day</li>
+            <li>Permanent = boring log closed and locked</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Auto-Recorded Data</div>
+          <ul class="feature-list">
+            <li>Termination depth — exact metres</li>
+            <li>Timestamp — date and time</li>
+            <li>Worker GL-W-XXXX ID</li>
+            <li>Reason selected</li>
+            <li>Device IMEI at termination</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">Handover System</div>
+          <ul class="feature-list">
+            <li>Terminated boring visible to all assigned workers</li>
+            <li>New team arrives — taps Resume BH-XX</li>
+            <li>Screen 4 shows amber resume banner</li>
+            <li>Previous entries visible as read-only</li>
+            <li>New session linked to same GL-BH ID</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">Terminate ≠ Close. This distinction solves a real field problem — on NHAI projects borings are frequently paused at end of day and resumed next morning, often by different workers. The amber state in the boring list is a clear visual signal: this boring needs to be resumed today. Green = done, amber = needs attention.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- RESUMED BORING -->
+<div id="s-resume" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar"><span class="phone-bar-title">GL-BH-0047-03 Resume</span><span class="phone-bar-sub">BH-03 · continuing from 10.5m</span></div>
+        <div class="phone-body">
+          <div class="resume-banner">
+            <div class="resume-title">↩ Resuming from previous session</div>
+            <div class="resume-row"><span class="resume-lbl">Terminated at</span><span class="resume-val">10.5m · 13 Apr · 05:30 PM</span></div>
+            <div class="resume-row"><span class="resume-lbl">Reason</span><span class="resume-val">End of day</span></div>
+            <div class="resume-row"><span class="resume-lbl">Previous worker</span><span class="resume-val">Ramesh Chandra · GL-W-0042</span></div>
+            <div class="resume-row"><span class="resume-lbl">Resuming from</span><span class="resume-val" style="color:var(--rust)">12.0m · Session 2</span></div>
+          </div>
+          <div class="loop-bar">
+            <span class="loop-text">Interval 8 of 13 · Session 2</span>
+            <div class="loop-dots">
+              <div class="loop-dot ld-done"></div><div class="loop-dot ld-done"></div>
+              <div class="loop-dot ld-done"></div><div class="loop-dot ld-done"></div>
+              <div class="loop-dot ld-done"></div><div class="loop-dot ld-done"></div>
+              <div class="loop-dot ld-term"></div>
+              <div class="loop-dot ld-cur"></div><div class="loop-dot"></div>
+            </div>
+          </div>
+          <div class="depth-bar"><div class="depth-big">12.0 m</div><div class="depth-sub">Session 2 · 14 Apr 2025 · 09:15 AM</div></div>
+          <div class="blow-current"><div class="blow-lbl">Blows 30–45cm / ब्लो गिनती</div><div class="blow-num">14</div></div>
+          <div class="n-result"><div class="n-left">Raw N=27 · Corrected N=24</div><div class="n-right">Dense sand</div></div>
+          <div class="btn-row-2">
+            <button class="btn-secondary" style="font-size:10px">💧 Water table</button>
+            <button class="btn-secondary" style="font-size:10px;color:var(--red-mid);border-color:var(--red-mid)">⏹ Terminate</button>
+          </div>
+          <button class="btn-primary" style="margin-top:6px">Next → Soil description</button>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">Special</span><h2 class="screen-title">Resumed Boring</h2></div>
+      <p class="screen-description">When a worker taps Resume on a terminated boring, Screen 4 opens with a special amber banner showing the previous session details. The boring continues from where it stopped. Both sessions are linked under the same GL-BH ID for a complete audit trail.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Resume Banner</div>
+          <ul class="feature-list">
+            <li>Shows termination depth + time</li>
+            <li>Shows reason for termination</li>
+            <li>Shows previous worker name + GL-W ID</li>
+            <li>Shows new starting depth for Session 2</li>
+            <li>Cannot be dismissed — always visible</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Session Tracking</div>
+          <ul class="feature-list">
+            <li>Loop indicator shows amber dot for terminated interval</li>
+            <li>Depth bar shows "Session 2 · new date"</li>
+            <li>Previous entries visible as read-only in summary</li>
+            <li>New entries from resumption depth onward</li>
+            <li>Both sessions linked under same GL-BH ID</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Audit Trail</div>
+          <ul class="feature-list">
+            <li>Session 1 data permanently linked to Worker A</li>
+            <li>Session 2 data permanently linked to Worker B</li>
+            <li>IE firm sees complete handover history</li>
+            <li>Timestamps show gap between sessions</li>
+            <li>Legally defensible complete record</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">Auto-Detection</div>
+          <ul class="feature-list">
+            <li>App detects last entered depth automatically</li>
+            <li>New session starts from next interval</li>
+            <li>No manual configuration needed</li>
+            <li>Works even if different phone or worker</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">The amber resume banner cannot be collapsed. The new worker must see the previous session context — who terminated, when, at what depth, and why. This prevents new workers from accidentally starting a fresh boring at the same location or entering data at the wrong depth. Context is safety.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 10 -->
+<div id="s10" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar"><span class="phone-bar-title">BH-03 · Close Boring</span><span class="phone-bar-sub">Summary + submit</span></div>
+        <div class="phone-body">
+          <div class="date-grid">
+            <div class="date-card"><div class="date-lbl">Start</div><div class="date-val">15 Apr 2025</div><div class="date-time">09:14 AM</div></div>
+            <div class="date-card"><div class="date-lbl">End</div><div class="date-val">15 Apr 2025</div><div class="date-time">04:45 PM</div></div>
+          </div>
+          <div class="sum-row"><span class="sum-lbl">Total depth</span><span class="sum-val">20.0 m</span></div>
+          <div class="sum-row"><span class="sum-lbl">Duration</span><span class="sum-val">7 hrs 31 min</span></div>
+          <div class="sum-row"><span class="sum-lbl">SPT intervals</span><span class="sum-val">13 entries</span></div>
+          <div class="sum-row"><span class="sum-lbl">Samples</span><span class="sum-val">4 SPT · 1 UDS</span></div>
+          <div class="sum-row"><span class="sum-lbl">Photos uploaded</span><span class="sum-val">18 photos</span></div>
+          <div class="sum-row"><span class="sum-lbl">Water table</span><span class="sum-val">6.20m (24hr final)</span></div>
+          <div class="sum-row"><span class="sum-lbl">Rock at depth</span><span class="sum-val">16.0 m</span></div>
+          <div class="sum-row"><span class="sum-lbl">RQD</span><span class="sum-val">78% · Good</span></div>
+          <div class="divider"></div>
+          <div style="background:var(--blue-light);border:0.5px solid #85B7EB;border-radius:6px;padding:7px 9px;margin-bottom:6px">
+            <div style="font-size:9px;font-weight:700;color:var(--blue-dark);margin-bottom:4px">GWT confirmation / भूजल स्तर पुष्टि (IS 1892)</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+              <div style="background:var(--blue-dark);color:white;border-radius:4px;padding:5px;text-align:center;font-size:9px;font-weight:600">✓ Water table found at 6.20m</div>
+              <div style="background:var(--gray-light);color:var(--gray-mid);border-radius:4px;padding:5px;text-align:center;font-size:9px">GWT not encountered</div>
+            </div>
+            <div style="font-size:8px;color:var(--blue-dark);margin-top:3px">IS 1892 mandatory — must confirm one before submit</div>
+          </div>
+          <button class="btn-secondary" style="background:var(--green-light);color:var(--green-dark);border-color:var(--green-mid);margin-bottom:6px">📷 Final borehole photo ✓ GPS stamped</button>
+          <div style="background:var(--gray-light);border:0.5px solid var(--gray-border);border-radius:6px;height:36px;display:flex;align-items:center;justify-content:center;margin-bottom:8px">
+            <span style="font-size:10px;color:var(--gray-mid)">Supervisor signature / यहाँ हस्ताक्षर करें</span>
+          </div>
+          <button class="btn-primary">🔒 Submit + Lock / जमा करें</button>
+          <div style="font-size:9px;color:var(--gray-mid);text-align:center;margin-top:4px">Data cannot be changed after submit</div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">10</span><h2 class="screen-title">Boring Closure</h2></div>
+      <p class="screen-description">The final screen of the boring workflow. Shows a complete summary of everything entered during the boring. Worker takes a final photo, supervisor signs on screen, and taps Submit + Lock. After submission, the data is permanently immutable — no edits possible by anyone.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Date AND Time (Your Correction)</div>
+          <ul class="feature-list">
+            <li>Start: date + time shown in two-card layout</li>
+            <li>End: date + time shown side by side</li>
+            <li>Duration auto-calculated in hours and minutes</li>
+            <li>IS 2131 requires both date and time on record</li>
+            <li>Duration flags impossibly fast borings to IE</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">Complete Summary</div>
+          <ul class="feature-list">
+            <li>Total depth achieved</li>
+            <li>All SPT interval count</li>
+            <li>Sample count by type</li>
+            <li>Photo count</li>
+            <li>Water table final reading</li>
+            <li>Rock depth and RQD if applicable</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Final Photo + Signature</div>
+          <ul class="feature-list">
+            <li>Final borehole photo — GPS stamped mandatory</li>
+            <li>Supervisor digital signature on screen</li>
+            <li>Both required before Submit button activates</li>
+            <li>Signature links supervisor name to closure</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Submit + Lock</div>
+          <ul class="feature-list">
+            <li>Data becomes <strong>State 1 — Field Locked</strong></li>
+            <li>No edits possible by anyone after this</li>
+            <li>Original always preserved in tamper trail</li>
+            <li>Engineer can modify with IS code reason</li>
+            <li>Syncs to cloud immediately</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">The warning "Data cannot be changed after submit" is shown permanently below the button. This is intentional — field supervisors must understand the weight of this action. The data becomes a legal document the moment it is submitted. The duration auto-calculation is a passive fraud detection — a 15m boring completed in 45 minutes is flagged to the IE dashboard automatically.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 11 -->
+<div id="s11" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar phone-bar" style="background:var(--blue-dark)"><span class="phone-bar-title">Reminder / याद दिलाना</span><span class="phone-bar-sub">24hr water table</span></div>
+        <div class="popup-overlay">
+          <div class="popup-card">
+            <div style="text-align:center;margin-bottom:10px">
+              <div style="font-size:32px;margin-bottom:4px">💧</div>
+              <div class="popup-title" style="color:var(--blue-dark)">24-hour reading due now</div>
+              <div class="popup-sub">BH-03 · Initial: 6.50m · 15 Apr 11:45 AM</div>
+            </div>
+            <div class="info-box blue"><div class="ib-title">Initial reading yesterday: 6.50 m depth</div><div class="ib-sub">Recorded 15 Apr · 11:45 AM · Now enter the stable 24hr reading</div></div>
+            <div class="field-group" style="margin-top:8px"><label class="field-label">Final 24hr reading (m) / 24 घंटे बाद</label><div class="field-input large">6.20 m</div></div>
+            <div style="font-size:9px;color:var(--green-mid);margin-bottom:6px">✓ Time auto-recorded — 16 Apr · 11:52 AM</div>
+            <div class="info-box green"><div class="ib-title">Stable WT = 6.20m · Rise: 0.30m — normal</div></div>
+            <button class="btn-primary btn-blue" style="margin-top:8px">Submit final reading / जमा करें</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">11</span><h2 class="screen-title">24hr Water Table Reminder</h2></div>
+      <p class="screen-description">A push notification arrives exactly 24 hours after the initial water table reading was recorded. Tapping the notification opens this popup overlay anywhere in the app. The initial reading is shown for reference and the worker enters the final stable reading.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Why 24 Hours</div>
+          <ul class="feature-list">
+            <li>IS 6935 requires stable groundwater reading</li>
+            <li>In sands: 30 min minimum after casing pull</li>
+            <li>In silts: 24 hours minimum</li>
+            <li>In clays: 24 hours minimum</li>
+            <li>App uses 24hr as standard for all soil types</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Push Notification System</div>
+          <ul class="feature-list">
+            <li>Android push notification at exact same time</li>
+            <li>Works even if app is closed</li>
+            <li>Triggers popup on app open</li>
+            <li>Shows on lock screen as reminder</li>
+            <li>Cannot be dismissed without entering reading</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">Auto-Calculations</div>
+          <ul class="feature-list">
+            <li>Rise/fall from initial reading calculated</li>
+            <li>Normal vs unusual change assessed</li>
+            <li>Unusual change flagged to IE dashboard</li>
+            <li>Both readings appear on boring log report</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Time Locking</div>
+          <ul class="feature-list">
+            <li>Final reading time auto-recorded</li>
+            <li>Worker cannot enter earlier time</li>
+            <li>Gap between readings verified: ~24 hours</li>
+            <li>IS 6935 compliance confirmed automatically</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">Screen 11 was originally a separate navigation screen. Your correction to make it a popup was correct — the worker may be on any screen in the app when the 24hr notification arrives. A popup appears wherever they are, they enter the reading, and they continue whatever they were doing. No navigation required.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 12 -->
+<div id="s12" class="screen-section">
+  <div class="screen-layout">
+    <div class="phone-frame">
+      <div class="phone-inner">
+        <div class="phone-notch"><div class="phone-notch-pill"></div></div>
+        <div class="phone-bar phone-bar" style="background:var(--amber)"><span class="phone-bar-title">Query / सवाल</span><span class="phone-bar-sub">From engineer</span></div>
+        <div class="phone-body">
+          <div style="background:var(--amber-light);border:0.5px solid var(--amber);border-radius:8px;padding:8px;margin-bottom:8px">
+            <div style="font-size:9px;font-weight:700;color:var(--amber);margin-bottom:3px">Er. Rajesh Kumar · 16 Apr · 02:15 PM</div>
+            <div style="font-size:10px;color:#633806">BH-03 at 8.5m — N value 42 seems very high. Was casing disturbed at this depth? Please explain what happened.</div>
+          </div>
+          <div style="font-size:10px;font-weight:600;color:var(--gray-dark);margin-bottom:5px">Original entry for reference</div>
+          <div style="background:var(--gray-light);border-radius:6px;padding:8px;margin-bottom:8px">
+            <div class="sum-row"><span class="sum-lbl">0–15cm blows</span><span class="sum-val">14</span></div>
+            <div class="sum-row"><span class="sum-lbl">15–30cm blows</span><span class="sum-val">16</span></div>
+            <div class="sum-row"><span class="sum-lbl">30–45cm blows</span><span class="sum-val">12</span></div>
+            <div class="sum-row" style="border-bottom:none"><span class="sum-lbl">Raw N</span><span class="sum-val">28</span></div>
+          </div>
+          <label class="field-label">Your reply / आपका जवाब</label>
+          <div style="background:var(--gray-light);border:0.5px solid var(--gray-border);border-radius:6px;padding:8px;font-size:10px;color:var(--gray-dark);min-height:50px;margin-bottom:6px">Casing shifted at 8m due to gravel layer. SPT was repeated. Second attempt gave N=28.</div>
+          <button class="btn-secondary" style="background:var(--blue-light);color:var(--blue-dark);border-color:var(--blue-dark);margin-bottom:4px">🎙 Voice reply in Hindi / हिंदी में बोलें</button>
+          <button class="btn-primary">Send reply / जवाब भेजें</button>
+        </div>
+      </div>
+    </div>
+    <div class="desc-panel">
+      <div class="screen-title-bar"><span class="screen-badge">12</span><h2 class="screen-title">Engineer Query Response</h2></div>
+      <p class="screen-description">When the engineer raises a query about a specific entry, the worker receives a push notification and can view and respond from this screen. The original field entry is shown for reference — the worker cannot edit it, only explain it.</p>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">Query Display</div>
+          <ul class="feature-list">
+            <li>Engineer name + timestamp shown</li>
+            <li>Question in plain language</li>
+            <li>Boring ID + depth reference</li>
+            <li>Original field entry shown below for context</li>
+            <li>Worker cannot edit original — can only reply</li>
+          </ul>
+        </div>
+        <div class="feature-card green-top">
+          <div class="feature-title">Voice Reply in Hindi</div>
+          <ul class="feature-list">
+            <li>Most important feature on this screen</li>
+            <li>Typing long explanations on a phone is difficult</li>
+            <li>Speaking is faster and more accurate</li>
+            <li>Google Speech-to-Text in Hindi</li>
+            <li>Auto-transcribed for engineer to read</li>
+          </ul>
+        </div>
+        <div class="feature-card blue-top">
+          <div class="feature-title">Audit Trail</div>
+          <ul class="feature-list">
+            <li>All queries and replies logged</li>
+            <li>With timestamps for each message</li>
+            <li>Part of the permanent boring record</li>
+            <li>Appears on engineer portal activity log</li>
+            <li>Cannot be deleted by either party</li>
+          </ul>
+        </div>
+        <div class="feature-card amber-top">
+          <div class="feature-title">Notification System</div>
+          <ul class="feature-list">
+            <li>Push notification when query raised</li>
+            <li>Badge count on app icon</li>
+            <li>Worker can reply from anywhere</li>
+            <li>Engineer notified when reply sent</li>
+          </ul>
+        </div>
+      </div>
+      <div class="design-note"><div class="design-note-label">Design Decision</div><div class="design-note-text">Voice reply in Hindi is the most critical feature on Screen 12. An ITI-pass field worker asked to explain a suspicious N-value in text would either not reply or give a very brief unclear answer. Voice in their own language produces a detailed explanation that the engineer can actually use to decide whether to flag, modify, or accept the entry.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- LOOP DIAGRAM -->
+<div id="loop" class="screen-section">
+  <div class="section-header">
+    <h2>Boring Loop — How All Screens Connect</h2>
+    <p>The core data entry flow that repeats for every 1.5m depth interval throughout the boring</p>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+    <div class="loop-diagram">
+      <h3>The Core Loop</h3>
+      <div class="loop-flow">
+        <div class="loop-step"><div class="loop-step-title">Screen 3 — Start boring</div><div class="loop-step-sub">GPS capture · rig photo · weather · boring starts</div></div>
+        <div class="loop-arrow">↓</div>
+        <div class="loop-step"><div class="loop-step-title">Screen 4 — SPT entry</div><div class="loop-step-sub">Blow counts · auto N value · split spoon photo</div></div>
+        <div class="loop-arrow">↓</div>
+        <div class="loop-step"><div class="loop-step-title">Screen 5 — Soil description</div><div class="loop-step-sub">Soil type tiles · colour · consistency · voice note</div></div>
+        <div class="loop-arrow">↓</div>
+        <div class="loop-step"><div class="loop-step-title">Screen 6 — Sample collection</div><div class="loop-step-sub">Auto sample ID · sealed photo · 14-day timer starts</div></div>
+        <div class="loop-arrow">↓</div>
+        <div class="loop-back"><div class="loop-back-text">↑ Loop back to Screen 4 — next depth interval</div></div>
+        <div style="margin-top:12px;font-size:11px;font-weight:600;color:var(--gray-mid);align-self:flex-start">Loop exits when:</div>
+        <div class="loop-exits">
+          <div class="loop-exit exit-red">Terminate tapped → amber in list</div>
+          <div class="loop-exit exit-dark">Rock encountered → Screen 8 core mode</div>
+          <div class="loop-exit exit-green">All depths done → Screen 10 closure</div>
+        </div>
+        <div style="margin-top:12px;font-size:11px;font-weight:600;color:var(--gray-mid);align-self:flex-start">Popup interrupts (loop continues after):</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;max-width:400px;margin-top:6px">
+          <div style="background:var(--amber-light);border:0.5px solid var(--amber);border-radius:6px;padding:8px;text-align:center;font-size:10px;font-weight:600;color:var(--amber)">Water table popup<br><span style="font-weight:400;font-size:9px">Overlay on Screen 4 · resumes after</span></div>
+          <div style="background:var(--blue-light);border:0.5px solid var(--blue-dark);border-radius:6px;padding:8px;text-align:center;font-size:10px;font-weight:600;color:var(--blue-dark)">24hr WT reminder<br><span style="font-weight:400;font-size:9px">Push notification · popup anywhere</span></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="loop-diagram">
+        <h3>What Each Loop Iteration Creates</h3>
+        <ul class="feature-list" style="font-size:13px">
+          <li><strong>1 SPT entry</strong> — 3 blow counts, raw N, corrected N, IS interpretation</li>
+          <li><strong>1 soil description</strong> — type, colour, consistency, IS 1498 mapped</li>
+          <li><strong>1 sample ID</strong> — if sample collected, 14-day timer starts</li>
+          <li><strong>1-2 mandatory photos</strong> — split spoon + sample tube</li>
+          <li><strong>All entries timestamped</strong> — cannot be backdated</li>
+          <li><strong>All entries GPS-linked</strong> — to boring location</li>
+          <li><strong>All entries worker-linked</strong> — to GL-W ID</li>
+        </ul>
+      </div>
+      <div class="loop-diagram" style="margin-top:12px">
+        <h3>Data States After Loop Completes</h3>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="background:var(--rust-light);border-left:4px solid var(--rust-mid);border-radius:0 8px 8px 0;padding:10px 14px">
+            <div style="font-size:12px;font-weight:700;color:var(--rust)">State 1 — Field Locked</div>
+            <div style="font-size:11px;color:var(--gray-mid);margin-top:3px">Worker submitted. GPS + timestamp stamped. Cannot be edited by anyone. Visible in "As recorded on site" view. This is the tamper-evident record.</div>
+          </div>
+          <div style="background:var(--blue-light);border-left:4px solid var(--blue-dark);border-radius:0 8px 8px 0;padding:10px 14px">
+            <div style="font-size:12px;font-weight:700;color:var(--blue-dark)">State 2 — Engineer Reviewed</div>
+            <div style="font-size:11px;color:var(--gray-mid);margin-top:3px">Engineer approved or corrected with IS clause reason. Original always preserved. Visible in "As reviewed by engineer" view. Goes into official report.</div>
+          </div>
+          <div style="background:var(--green-light);border-left:4px solid var(--green-mid);border-radius:0 8px 8px 0;padding:10px 14px">
+            <div style="font-size:12px;font-weight:700;color:var(--green-mid)">State 3 — Report Published</div>
+            <div style="font-size:11px;color:var(--gray-mid);margin-top:3px">SHA-256 hash generated. Tamper certificate issued. NABL lab verified. Cannot be altered. Legal document for NHAI submission.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PEOPLE DATA -->
+<div id="people" class="screen-section">
+  <div class="section-header">
+    <h2>People Data — Team Pool</h2>
+    <p>Who enters people data, when, and what is recorded automatically</p>
+  </div>
+  <div class="feature-grid">
+    <div class="feature-card"><div class="feature-title">GL-ENG-XXXX — Geotech Engineer</div><ul class="feature-list"><li>Creates projects on web portal</li><li>Reviews and approves boring entries</li><li>Modifies with IS clause reason</li><li>Generates reports</li><li>Licence number recorded</li><li>Fed by: Agency admin (one time)</li></ul></div>
+    <div class="feature-card green-top"><div class="feature-title">GL-W-XXXX — Field Supervisor</div><ul class="feature-list"><li>Logs in with PIN on Android app</li><li>Enters all field data</li><li>Responds to engineer queries</li><li>Signs off boring closure</li><li>Education qualification recorded</li><li>Fed by: Self-registration on app OR agency admin</li></ul></div>
+    <div class="feature-card blue-top"><div class="feature-title">GL-D-XXXX — Driller</div><ul class="feature-list"><li>Assigned to boring operation</li><li>Rig type and make recorded</li><li>Experience years recorded</li><li>IMEI of device recorded</li><li>Fed by: Agency admin (one time)</li></ul></div>
+    <div class="feature-card amber-top"><div class="feature-title">GL-L-XXXX — Lab Technician</div><ul class="feature-list"><li>Logs into web portal (not app)</li><li>Enters test results by sample ID</li><li>NABL accreditation number recorded</li><li>Results locked after entry</li><li>Fed by: NABL lab admin (one time)</li></ul></div>
+  </div>
+  <div style="background:white;border:0.5px solid var(--gray-border);border-radius:12px;padding:20px;margin-top:16px">
+    <h3 style="font-size:16px;font-weight:700;color:var(--rust);margin-bottom:12px">What Is Auto-Recorded Per Person — Zero Manual Effort</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+      <div><div style="font-size:11px;font-weight:700;color:var(--gray-dark);margin-bottom:6px">Activity Log</div><ul class="feature-list"><li>Every boring started</li><li>Every boring completed</li><li>Every boring terminated + reason</li><li>Every SPT entry with timestamp</li><li>Every photo uploaded</li><li>Every query received + replied</li></ul></div>
+      <div><div style="font-size:11px;font-weight:700;color:var(--gray-dark);margin-bottom:6px">Device + Location</div><ul class="feature-list"><li>Device IMEI on first login (bound)</li><li>Different device = flag raised</li><li>App version at each entry</li><li>GPS at each action</li><li>Login time + last active time</li></ul></div>
+      <div><div style="font-size:11px;font-weight:700;color:var(--gray-dark);margin-bottom:6px">Handover Log</div><ul class="feature-list"><li>Who terminated a boring + when</li><li>Who resumed + from what depth</li><li>Session 1 vs Session 2 linked</li><li>Both workers linked to same GL-BH</li><li>IE firm sees complete history</li></ul></div>
+    </div>
+  </div>
+  <div class="design-note" style="margin-top:16px"><div class="design-note-label">Device Binding — The Hidden Fraud Prevention Feature</div><div class="design-note-text">When a worker logs in on a phone for the first time, the device IMEI is recorded and linked to their GL-W ID. If the same login is used from a different device without authorization, the system flags it immediately. This prevents the most common fraud scenario on Indian infrastructure sites — an office employee entering fabricated field data remotely while claiming to be on site. Every entry must physically originate from the registered field device.</div></div>
+</div>
+
+</main>
+</div>
+
+<script>
+function showScreen(id) {
+  document.querySelectorAll('.screen-section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const target = document.getElementById(id);
+  if (target) { target.classList.add('active'); target.scrollIntoView({behavior:'smooth',block:'start'}); }
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

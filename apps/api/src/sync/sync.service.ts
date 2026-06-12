@@ -8,6 +8,33 @@ export class SyncService {
   constructor(private readonly db: DatabaseService) {}
 
   async syncQueue(dto: CreateSyncOperationsDto) {
+    // Ensure all unique deviceIds exist in the Device table to prevent foreign key errors
+    const uniqueDeviceIds = Array.from(new Set(dto.operations.map((op) => op.deviceId)));
+    for (const dId of uniqueDeviceIds) {
+      const existingDevice = await this.db.device.findUnique({
+        where: { id: dId },
+      });
+      if (!existingDevice) {
+        // If the deviceId is a user's ID, link it to them. Otherwise link to the first user.
+        const userExists = await this.db.user.findUnique({
+          where: { id: dId },
+        });
+        const userId = userExists ? dId : (await this.db.user.findFirst())?.id;
+        if (userId) {
+          await this.db.device.create({
+            data: {
+              id: dId,
+              userId: userId,
+              deviceUuid: dId,
+              platform: 'ANDROID',
+              deviceName: 'Supervisor Android Device',
+              appVersion: '1.0.0',
+            },
+          });
+        }
+      }
+    }
+
     const operationsData = dto.operations.map((op) => ({
       deviceId: op.deviceId,
       operationId: op.operationId,
