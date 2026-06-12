@@ -17,19 +17,19 @@ export default function LoginLeftPanel() {
         </div>
 
         {/* Heading — matches .lp-h1 */}
-        <h1 className="font-display text-[44px] font-bold leading-[1.1] mb-[18px]" style={{ letterSpacing: "-0.5px" }}>
+        <h1 className="font-display text-[40px] font-bold leading-[1.1] !mt-4 mb-[18px]" style={{ letterSpacing: "-0.5px" }}>
           Every boring.<br />
           <em className="not-italic text-rust-d">Verified.</em><br />
           Instant.
         </h1>
 
         {/* Subtitle — matches .lp-sub */}
-        <p className="text-[14px] text-text-sec leading-[1.7] max-w-[400px] mb-8">
+        <p className="text-[14px] text-text-sec leading-[1.7] !mt-4 max-w-[400px] !mb-4">
           India&apos;s first geotech boring management platform. IS 1892 compliant reports generated automatically. Field data captured at source — GPS stamped, IS code tagged, audit-ready.
         </p>
 
         {/* Stats — matches .stat-row: grid 3 cols, gap 1px, bg-border, border, rounded, overflow hidden */}
-        <div className="grid grid-cols-3 overflow-hidden rounded-lg mb-7" style={{ gap: "1px", background: "var(--color-border)", border: "1px solid var(--color-border)" }}>
+        <div className="grid grid-cols-3 overflow-hidden rounded-lg !mb-4" style={{ gap: "1px", background: "var(--color-border)", border: "1px solid var(--color-border)" }}>
           {[
             { num: "IS 1892", lbl: "Auto-compliant" },
             { num: "SHA-256", lbl: "Tamper-evident" },
@@ -54,7 +54,7 @@ export default function LoginLeftPanel() {
         </div>
 
         {/* Trust strip — matches .trust-strip */}
-        <div className="flex flex-wrap gap-[6px] mt-[18px]">
+        <div className="flex flex-wrap !gap-[6px] !mt-[18px]">
           {["IS 2131 · IS 1892 · IS 2720", "Offline-first Android", "Hindi UI", "NABL integration"].map((t) => (
             <span key={t} className="font-mono text-[9px] text-text-ter border border-border rounded-full tracking-[0.4px]" style={{ padding: "3px 9px" }}>{t}</span>
           ))}
@@ -62,7 +62,7 @@ export default function LoginLeftPanel() {
       </div>
 
       {/* Footer — matches .lp-footer */}
-      <div className="font-mono text-[9px] text-text-ter flex gap-[14px]">
+      <div className="font-mono !text-[9px] !mt-3 text-text-ter flex !gap-[14px]">
         <span>© 2025 Groundlense Technologies Pvt Ltd</span>
         <span>groundlense.com</span>
       </div>
@@ -73,7 +73,7 @@ export default function LoginLeftPanel() {
 /* Flow node — matches .fn: flex:1, text-center */
 function FlowNode({ emoji, label, sub, bgColor, borderColor }: { emoji: string; label: string; sub: string; bgColor: string; borderColor: string }) {
   return (
-    <div className="flex-1 text-center">
+    <div className=" text-center flex flex-1 flex-col justify-center items-center gap-2">
       <div
         className="w-8 h-8 rounded-[7px] mx-auto mb-[6px] flex items-center justify-center text-[14px]"
         style={{ background: bgColor, border: `1px solid ${borderColor}` }}
