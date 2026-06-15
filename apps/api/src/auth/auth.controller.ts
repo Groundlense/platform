@@ -12,6 +12,8 @@ import { CurrentUser } from './decorators/current-user.decorator';
 
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 
+import { RegisterDto } from './dto/register.dto';
+
 import {
   ApiBearerAuth,
   ApiTags,
@@ -27,6 +29,12 @@ export class AuthController {
       dto.identifier,
       dto.password,
     );
+  }
+
+  // Public company self-registration (org + first admin user).
+  @Post('register')
+  register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
   }
 
   @Post('refresh')

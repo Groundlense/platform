@@ -6,79 +6,142 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Linking,
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
+import { api } from '../services/api';
+
+const SPT_INTERVAL_M = 1.5;
+
+function toNum(val: any): number | null {
+  const n = Number(val);
+  return Number.isFinite(n) ? n : null;
+}
+
+function fmtDateTime(iso: any): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+}
 
 export default function StartBoringScreen({ route, navigation }: { route: any; navigation: any }) {
-  const { borehole, projectId, isResuming } = route.params;
+  const { borehole, projectId, isResuming } = route.params || {};
   const [lang, setLang] = useState<'en' | 'hi'>('hi');
 
   const [weather, setWeather] = useState('Clear');
-  const [photoTaken, setPhotoTaken] = useState(false);
-  const [gpsData, setGpsData] = useState<any>(null);
+  const [starting, setStarting] = useState(false);
 
-  // Load initial simulated GPS data or read from device if available
+  // Real resume context — computed from sessions/intervals, never invented
+  const [resumeDepth, setResumeDepth] = useState(0);
+  const [sessionCount, setSessionCount] = useState(0);
+  const [lastSession, setLastSession] = useState<any>(null);
+
+  const resuming = !!isResuming || borehole?.status === 'TERMINATED';
+
+  const plannedLat = toNum(borehole?.latitude);
+  const plannedLng = toNum(borehole?.longitude);
+  const hasPlannedCoords = plannedLat !== null && plannedLng !== null;
+
   useEffect(() => {
-    // Falling back to exact coordinates in spec for demo fidelity
-    setGpsData({
-      lat: "15°27'51.32\"N",
-      lng: "73°57'40.72\"E",
-      elevation: "19.85 m",
-      accuracy: "2.1 m",
-      deviation: "+4.2m",
-      flagged: true,
-    });
-  }, []);
+    if (borehole?.id) {
+      loadResumeContext();
+    }
+  }, [borehole?.id]);
 
-  const handleTakePhoto = () => {
-    setPhotoTaken(true);
-    Alert.alert(
-      'Photo Stamped / फोटो ली गई',
-      'GPS coords, timestamp and ID stamped directly on photo bytes.'
-    );
+  const loadResumeContext = async () => {
+    try {
+      // Prefer the server's session history when reachable
+      let sessions: any[] = [];
+      try {
+        const serverSessions = await api.getBoreholeSessions(borehole.id);
+        if (Array.isArray(serverSessions) && serverSessions.length > 0) {
+          sessions = serverSessions;
+        }
+      } catch (apiErr) {
+        // Offline — fall back to the locally stored sessions
+      }
+      if (sessions.length === 0) {
+        sessions = await storage.getBoringSessions(borehole.id);
+      }
+
+      const sorted = [...sessions].sort(
+        (a, b) => new Date(a.startedAt || 0).getTime() - new Date(b.startedAt || 0).getTime()
+      );
+      const last = sorted.length > 0 ? sorted[sorted.length - 1] : null;
+
+      let depth = toNum(last?.endDepth);
+
+      // No session record — fall back to the deepest locally recorded interval
+      if (depth === null) {
+        const intervals = await storage.getIntervals(borehole.id);
+        const maxTo = intervals.reduce((max: number, iv: any) => {
+          const to = toNum(iv?.toDepth);
+          return to !== null && to > max ? to : max;
+        }, 0);
+        depth = maxTo > 0 ? maxTo : null;
+      }
+
+      setSessionCount(sorted.length);
+      setLastSession(last);
+      setResumeDepth(depth !== null && depth > 0 ? depth : 0);
+    } catch (err) {
+      console.warn('Could not load resume context', err);
+    }
+  };
+
+  const startDepth = resuming ? resumeDepth : 0;
+  const nextIntervalNo = Math.floor(startDepth / SPT_INTERVAL_M) + 1;
+
+  const handleOpenMaps = () => {
+    if (!hasPlannedCoords) return;
+    const url = `https://www.google.com/maps/search/?api=1&query=${plannedLat},${plannedLng}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'Could not open Google Maps on this device.');
+    });
   };
 
   const handleStartBoring = async () => {
-    if (!photoTaken) {
-      Alert.alert('Photo Required', 'Please take a rig photo before starting');
-      return;
-    }
-
+    if (starting) return;
+    setStarting(true);
     try {
+      // Try to open a real server session; fall back to a local-only record offline
+      let sessionId = `sess-${Date.now()}`;
+      try {
+        const serverSession = await api.startBoringSession(borehole.id, startDepth);
+        if (serverSession?.id) {
+          sessionId = serverSession.id;
+        }
+      } catch (apiErr) {
+        // Offline — keep the locally generated session id
+      }
+
       const cachedBoreholes = await storage.getBoreholes(projectId);
       const updated = cachedBoreholes.map((bh: any) => {
         if (bh.id === borehole.id) {
           return {
             ...bh,
-            status: isResuming ? 'IN_PROGRESS' : 'IN_PROGRESS',
-            currentDepth: bh.currentDepth || 0.0,
+            status: 'IN_PROGRESS',
+            currentDepth: startDepth,
             weather,
-            lat: gpsData?.lat,
-            lng: gpsData?.lng,
-            elevation: gpsData?.elevation,
-            deviationFlagged: gpsData?.flagged,
           };
         }
         return bh;
       });
-
       await storage.saveBoreholes(projectId, updated);
 
-      // Create a boring session
-      const sessionId = `sess-${Date.now()}`;
+      // Record the boring session locally (works offline)
       const newSession = {
         id: sessionId,
         boreholeId: borehole.id,
-        startDepth: borehole.depth ? parseFloat(borehole.depth) : 0.0,
+        startDepth,
         weather,
-        gpsLat: gpsData?.lat,
-        gpsLng: gpsData?.lng,
         startedAt: new Date().toISOString(),
+        status: 'IN_PROGRESS',
       };
-
       const sessions = await storage.getBoringSessions(borehole.id);
       sessions.push(newSession);
       await storage.saveBoringSessions(borehole.id, sessions);
@@ -88,22 +151,42 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
         'BORING',
         borehole.id,
         'UPDATE',
-        { status: 'IN_PROGRESS' },
+        { status: 'IN_PROGRESS', weather },
         sessionId
       );
 
       // Navigate to SPT entry loop screen
       navigation.replace('SPTEntry', {
-        borehole: updated.find(bh => bh.id === borehole.id),
+        borehole: updated.find((bh: any) => bh.id === borehole.id) || borehole,
         projectId,
         sessionId,
-        currentDepth: borehole.status === 'TERMINATED' ? 10.5 : 0.0,
-        intervalNo: borehole.status === 'TERMINATED' ? 8 : 1,
+        currentDepth: startDepth,
+        intervalNo: nextIntervalNo,
+        sessionNumber: sessionCount + 1,
       });
     } catch (err) {
       Alert.alert('Error', 'Failed to start boring');
+    } finally {
+      setStarting(false);
     }
   };
+
+  // Honest error state when opened without a borehole
+  if (!borehole?.id || !projectId) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.headerBar}>
+          <Text style={styles.headerTitle}>{t('startBoringBtn', lang)}</Text>
+        </View>
+        <View style={styles.errorBox}>
+          <Text style={styles.errorTitle}>No borehole selected / कोई बोरहोल नहीं चुना गया</Text>
+          <TouchableOpacity style={styles.startBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.startBtnText}>{t('back', lang)}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -111,7 +194,7 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
       <View style={styles.headerBar}>
         <View style={styles.headerTitleRow}>
           <Text style={styles.headerTitle}>
-            {borehole.boreholeCode} · {isResuming ? 'Resume' : 'Start'}
+            {borehole.boreholeCode} · {resuming ? 'Resume' : 'Start'}
           </Text>
           <TouchableOpacity
             style={styles.langBtn}
@@ -120,67 +203,105 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
             <Text style={styles.langText}>{lang === 'hi' ? 'En' : 'हिं'}</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.headerSub}>Navigate to location</Text>
+        <Text style={styles.headerSub}>
+          {resuming
+            ? `Continuing from ${resumeDepth.toFixed(1)}m`
+            : 'Navigate to location'}
+        </Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Mock Map Panel */}
-        <View style={styles.mapContainer}>
-          <View style={styles.mapGridLineH1} />
-          <View style={styles.mapGridLineH2} />
-          <View style={styles.mapGridLineV1} />
-          <View style={styles.mapGridLineV2} />
-          
-          <Text style={styles.mapPlannedPin}>📍</Text>
-          <View style={styles.mapDistanceLine} />
-          <Text style={styles.mapMePin}>🔵</Text>
-        </View>
+        {/* Resume banner — non-dismissable, real previous-session context */}
+        {resuming && (
+          <View style={styles.resumeBanner}>
+            <Text style={styles.resumeTitle}>↩ Resuming from previous session / पिछले सेशन से जारी</Text>
+            <View style={styles.resumeRow}>
+              <Text style={styles.resumeLbl}>Terminated at / यहाँ रुका</Text>
+              <Text style={styles.resumeVal}>
+                {[
+                  `${resumeDepth.toFixed(1)}m`,
+                  fmtDateTime(lastSession?.endedAt),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            </View>
+            <View style={styles.resumeRow}>
+              <Text style={styles.resumeLbl}>Reason / कारण</Text>
+              <Text style={styles.resumeVal}>
+                {lastSession?.terminationReason || 'Not recorded / दर्ज नहीं'}
+              </Text>
+            </View>
+            {!!lastSession?.worker && (
+              <View style={styles.resumeRow}>
+                <Text style={styles.resumeLbl}>Previous worker / पिछला कर्मचारी</Text>
+                <Text style={styles.resumeVal}>
+                  {[
+                    [lastSession.worker.firstName, lastSession.worker.lastName]
+                      .filter(Boolean)
+                      .join(' '),
+                    lastSession.worker.employeeCode,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              </View>
+            )}
+            {sessionCount > 0 && (
+              <View style={styles.resumeRow}>
+                <Text style={styles.resumeLbl}>Previous session / पिछला सेशन</Text>
+                <Text style={styles.resumeVal}>Session {sessionCount}</Text>
+              </View>
+            )}
+            <View style={styles.resumeRow}>
+              <Text style={styles.resumeLbl}>Resuming from / यहाँ से शुरू</Text>
+              <Text style={[styles.resumeVal, styles.resumeValRust]}>
+                {resumeDepth.toFixed(1)}m · Session {sessionCount + 1} · Interval {nextIntervalNo}
+              </Text>
+            </View>
+            <Text style={styles.resumeAuto}>Restart depth auto-detected from recorded data / गहराई अपने आप मिली</Text>
+          </View>
+        )}
 
-        {/* Distance information */}
-        <View style={styles.mapInfo}>
-          <Text style={styles.mapInfoText}>45m away · Walk north</Text>
-          <TouchableOpacity style={styles.mapButton}>
+        {/* Planned location card — real coordinates from the engineer's plan */}
+        <View style={styles.locationCard}>
+          <Text style={styles.locationTitle}>📍 Planned location / नियोजित स्थान</Text>
+          {hasPlannedCoords ? (
+            <Text style={styles.locationCoords}>
+              Lat {plannedLat!.toFixed(6)} · Lng {plannedLng!.toFixed(6)}
+            </Text>
+          ) : (
+            <Text style={styles.locationMissing}>
+              Planned coordinates not set for this borehole / निर्देशांक उपलब्ध नहीं
+            </Text>
+          )}
+          <TouchableOpacity
+            style={[styles.mapButton, !hasPlannedCoords && styles.mapButtonDisabled]}
+            onPress={handleOpenMaps}
+            disabled={!hasPlannedCoords}
+          >
             <Text style={styles.mapBtnText}>{t('openMaps', lang)}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Warning panel */}
+        {/* Honest GPS notice — no GPS module installed in this build */}
         <View style={styles.infoBoxAmber}>
           <Text style={styles.infoBoxAmberTitle}>
-            You are 45m from planned location
+            GPS auto-capture coming soon / GPS जल्द आ रहा है
           </Text>
           <Text style={styles.infoBoxAmberSub}>
-            Walk to the pin before starting. GPS will auto-record when you tap start.
+            GPS auto-capture requires the device app build with location permissions. Use Open
+            Google Maps to navigate to the planned point.
           </Text>
         </View>
 
-        {/* Take Photo Widget */}
-        <Text style={styles.fieldLabel}>Rig photo — GPS coords stamped on image</Text>
-        <TouchableOpacity
-          style={[styles.cameraBtn, photoTaken && styles.cameraBtnDone]}
-          onPress={handleTakePhoto}
-        >
-          <Text style={[styles.cameraBtnText, photoTaken && styles.cameraBtnTextDone]}>
-            📷 {photoTaken ? '✓ Rig Photo Captured' : 'Take rig photo / रिग की फोटो लें'}
+        {/* Rig photo — camera module not installed yet, do not fake a capture */}
+        <Text style={styles.fieldLabel}>Rig photo / रिग की फोटो</Text>
+        <TouchableOpacity style={[styles.cameraBtn, styles.cameraBtnDisabled]} disabled>
+          <Text style={styles.cameraBtnTextDisabled}>
+            📷 Camera integration coming soon / कैमरा जल्द
           </Text>
         </TouchableOpacity>
-
-        {/* GPS Stamped coordinates block */}
-        {photoTaken && gpsData && (
-          <View style={styles.gpsStamp}>
-            <Text style={styles.gpsLine}>
-              {borehole.boreholeCode} · {new Date().toLocaleDateString('en-GB')} · {new Date().toLocaleTimeString()}
-            </Text>
-            <Text style={styles.gpsLine}>Lat {gpsData.lat} · Long {gpsData.lng}</Text>
-            <Text style={styles.gpsLine}>RL (Elevation): {gpsData.elevation} ± 16.0 m</Text>
-            <Text style={styles.gpsLine}>GPS Accuracy: {gpsData.accuracy}</Text>
-            {gpsData.flagged && (
-              <Text style={styles.gpsDevText}>
-                Deviation from plan: {gpsData.deviation} ⚠️ FLAGGED
-              </Text>
-            )}
-          </View>
-        )}
 
         {/* Weather Selector */}
         <Text style={styles.fieldLabel}>{t('weather', lang)}</Text>
@@ -204,8 +325,10 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
           })}
         </View>
 
-        <TouchableOpacity style={styles.startBtn} onPress={handleStartBoring}>
-          <Text style={styles.startBtnText}>▶ {t('startBoringBtn', lang)}</Text>
+        <TouchableOpacity style={styles.startBtn} onPress={handleStartBoring} disabled={starting}>
+          <Text style={styles.startBtnText}>
+            ▶ {resuming ? `${t('resume', lang)} — ${resumeDepth.toFixed(1)}m` : t('startBoringBtn', lang)}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -251,62 +374,95 @@ const styles = StyleSheet.create({
   scrollContainer: {
     padding: 16,
   },
-  mapContainer: {
-    height: 90,
-    backgroundColor: '#C8E6C9', // light green map mock background
-    borderRadius: 8,
-    position: 'relative',
-    overflow: 'hidden',
+  errorBox: {
+    margin: 16,
+    backgroundColor: colors.grayLight,
     borderWidth: 0.5,
     borderColor: colors.grayBorder,
-  },
-  // Map grid design
-  mapGridLineH1: { position: 'absolute', left: 0, right: 0, top: 30, height: 0.5, backgroundColor: 'rgba(255,255,255,0.4)' },
-  mapGridLineH2: { position: 'absolute', left: 0, right: 0, top: 60, height: 0.5, backgroundColor: 'rgba(255,255,255,0.4)' },
-  mapGridLineV1: { position: 'absolute', top: 0, bottom: 0, left: '33%', width: 0.5, backgroundColor: 'rgba(255,255,255,0.4)' },
-  mapGridLineV2: { position: 'absolute', top: 0, bottom: 0, left: '66%', width: 0.5, backgroundColor: 'rgba(255,255,255,0.4)' },
-  mapPlannedPin: {
-    position: 'absolute',
-    top: 15,
-    left: '35%',
-    fontSize: 18,
-  },
-  mapMePin: {
-    position: 'absolute',
-    top: 45,
-    left: '55%',
-    fontSize: 14,
-  },
-  mapDistanceLine: {
-    position: 'absolute',
-    top: 32,
-    left: '42%',
-    width: 32,
-    height: 1,
-    backgroundColor: colors.rustMid,
-    transform: [{ rotate: '25deg' }],
-  },
-  mapInfo: {
-    backgroundColor: colors.blueLight,
     borderRadius: 8,
-    padding: 8,
+    padding: 16,
+    alignItems: 'center',
+  },
+  errorTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.grayDark,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  resumeBanner: {
+    backgroundColor: colors.amberLight,
+    borderWidth: 1.5,
+    borderColor: colors.amber,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+  },
+  resumeTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.amber,
+    marginBottom: 6,
+  },
+  resumeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginVertical: 10,
+    marginBottom: 3,
+  },
+  resumeLbl: {
+    fontSize: 9,
+    color: colors.grayMid,
+  },
+  resumeVal: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.grayDark,
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  resumeValRust: {
+    color: colors.rust,
+  },
+  resumeAuto: {
+    fontSize: 8,
+    color: colors.grayMid,
+    marginTop: 4,
+  },
+  locationCard: {
+    backgroundColor: colors.blueLight,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
     borderWidth: 0.5,
     borderColor: '#85B7EB',
   },
-  mapInfoText: {
+  locationTitle: {
     fontSize: 10,
     fontWeight: '700',
     color: colors.blueDark,
+  },
+  locationCoords: {
+    fontFamily: typography.fontFamilyMono,
+    fontSize: 10,
+    color: colors.blueDark,
+    marginTop: 4,
+  },
+  locationMissing: {
+    fontSize: 9,
+    color: colors.grayMid,
+    marginTop: 4,
   },
   mapButton: {
     backgroundColor: colors.amber,
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  mapButtonDisabled: {
+    backgroundColor: colors.grayBorder,
   },
   mapBtnText: {
     fontSize: 9,
@@ -347,35 +503,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 8,
   },
-  cameraBtnDone: {
-    backgroundColor: colors.greenLight,
+  cameraBtnDisabled: {
+    borderColor: colors.grayBorder,
+    opacity: 0.7,
   },
-  cameraBtnText: {
+  cameraBtnTextDisabled: {
     fontSize: 11,
-    color: colors.greenMid,
+    color: colors.grayMid,
     fontWeight: '700',
-  },
-  cameraBtnTextDone: {
-    color: colors.greenDark,
-  },
-  gpsStamp: {
-    backgroundColor: colors.grayDark,
-    borderRadius: 6,
-    padding: 8,
-    marginBottom: 12,
-  },
-  gpsLine: {
-    fontFamily: typography.fontFamilyMono,
-    fontSize: 8,
-    color: '#FAC775',
-    lineHeight: 12,
-  },
-  gpsDevText: {
-    fontFamily: typography.fontFamilyMono,
-    fontSize: 8,
-    color: '#F0997B',
-    fontWeight: '700',
-    marginTop: 2,
   },
   horizontalRow: {
     flexDirection: 'row',
@@ -410,6 +545,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.rustMid,
     borderRadius: 8,
     paddingVertical: 12,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,

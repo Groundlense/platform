@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEYS = {
   TOKEN: '@auth_token',
+  REFRESH_TOKEN: '@refresh_token',
+  DEVICE_ID: '@device_id',
   USER: '@current_user',
   PROJECTS: '@projects',
   BOREHOLES: (projectId: string) => `@boreholes:${projectId}`,
@@ -20,6 +22,20 @@ export interface SyncOperation {
   operationType: 'CREATE' | 'UPDATE' | 'DELETE';
   payloadJson: any;
   boringSessionId?: string;
+  // Additive, local-only bookkeeping (stripped before sending to server)
+  status?: 'PENDING' | 'FAILED';
+  lastError?: string;
+}
+
+/**
+ * Pure-JS UUID v4 (no native crypto dependency).
+ */
+function uuidv4(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 export const storage = {
@@ -34,6 +50,43 @@ export const storage = {
 
   async clearToken(): Promise<void> {
     await AsyncStorage.removeItem(KEYS.TOKEN);
+  },
+
+  async saveRefreshToken(token: string): Promise<void> {
+    await AsyncStorage.setItem(KEYS.REFRESH_TOKEN, token);
+  },
+
+  async getRefreshToken(): Promise<string | null> {
+    return AsyncStorage.getItem(KEYS.REFRESH_TOKEN);
+  },
+
+  /** Stores the access + refresh token pair returned by login/refresh. */
+  async saveTokens(accessToken: string, refreshToken: string): Promise<void> {
+    await Promise.all([
+      AsyncStorage.setItem(KEYS.TOKEN, accessToken),
+      AsyncStorage.setItem(KEYS.REFRESH_TOKEN, refreshToken),
+    ]);
+  },
+
+  /** Removes both tokens (used when the refresh flow fails / on logout). */
+  async clearTokens(): Promise<void> {
+    await Promise.all([
+      AsyncStorage.removeItem(KEYS.TOKEN),
+      AsyncStorage.removeItem(KEYS.REFRESH_TOKEN),
+    ]);
+  },
+
+  /**
+   * Returns a stable, per-install device identifier.
+   * Generated once (pure-JS UUID v4) and persisted in AsyncStorage.
+   */
+  async getDeviceId(): Promise<string> {
+    let deviceId = await AsyncStorage.getItem(KEYS.DEVICE_ID);
+    if (!deviceId) {
+      deviceId = uuidv4();
+      await AsyncStorage.setItem(KEYS.DEVICE_ID, deviceId);
+    }
+    return deviceId;
   },
 
   async saveUser(user: any): Promise<void> {
@@ -127,5 +180,17 @@ export const storage = {
 
   async clearSyncQueue(): Promise<void> {
     await AsyncStorage.removeItem(KEYS.SYNC_QUEUE);
+  },
+
+  /**
+   * Removes only the operations whose operationId is in the given list
+   * (used after a sync round to clear per-op SYNCED results while
+   * keeping FAILED / still-pending operations queued).
+   */
+  async removeSyncOperations(operationIds: string[]): Promise<void> {
+    if (operationIds.length === 0) return;
+    const ids = new Set(operationIds);
+    const queue = await this.getSyncQueue();
+    await this.saveSyncQueue(queue.filter((op) => !ids.has(op.operationId)));
   },
 };

@@ -16,6 +16,8 @@ import { DashboardService } from './dashboard.service';
 import { Param } from '@nestjs/common';
 import { Request } from '@nestjs/common';
 
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+
 @ApiTags('Dashboard')
 @ApiBearerAuth()
 @Controller('dashboard')
@@ -26,17 +28,24 @@ export class DashboardController {
   ) {}
 
   @Get('summary')
-  getSummary() {
-    return this.dashboardService.getSummary();
+  getSummary(
+    @CurrentUser() user: any,
+  ) {
+    return this.dashboardService.getSummary(
+      user,
+    );
   }
 
   @Get('projects/:projectId')
 getProjectDashboard(
   @Param('projectId')
   projectId: string,
+
+  @CurrentUser() user: any,
 ) {
   return this.dashboardService.getProjectDashboard(
     projectId,
+    user,
   );
 }
 

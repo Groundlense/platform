@@ -13,7 +13,9 @@ interface SummaryRowProps {
 export default function SummaryRow({ summary }: SummaryRowProps) {
   return (
     <div className="grid grid-cols-3 gap-[10px] mb-5">
-      <StatCard label="Active projects" value={summary.projects} sub={`${summary.boreholes} total borings`} borderClass="border-t-rust" />
+      {/* /dashboard/summary returns caller-scoped totals only — no per-status
+          breakdown or "reports generated" count exists, so none is shown. */}
+      <StatCard label="Projects" value={summary.projects} sub={`${summary.boreholes} total borings`} borderClass="border-t-rust" />
       <StatCard label="Total borings" value={summary.boreholes} sub={`${summary.intervals} intervals logged`} borderClass="border-t-amber" />
       <StatCard label="Samples collected" value={summary.samples} sub={`${summary.media} media files`} borderClass="border-t-green" />
     </div>

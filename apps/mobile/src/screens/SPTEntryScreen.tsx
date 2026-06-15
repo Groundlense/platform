@@ -14,40 +14,75 @@ import { storage } from '../services/storage';
 import { calculateRawN, calculateOverburdenCorrection, applyDilatancyCorrection, getDensityInterpretation } from '../utils/calculations';
 
 export default function SPTEntryScreen({ route, navigation }: { route: any; navigation: any }) {
-  const { borehole, projectId, sessionId, currentDepth, intervalNo } = route.params || {
-    borehole: { id: 'bh-03', boreholeCode: 'GL-BH-0047-03' },
-    projectId: 'proj-0047',
-    sessionId: 'sess-12345',
-    currentDepth: 4.5,
-    intervalNo: 3,
-  };
+  const { borehole, projectId, sessionId, currentDepth, intervalNo } = route.params ?? {};
 
   const [lang, setLang] = useState<'en' | 'hi'>('hi');
 
-  // Blow count states
-  const [blow15, setBlow15] = useState(5); // 0-15cm
-  const [blow30, setBlow30] = useState(8); // 15-30cm
-  const [blow45, setBlow45] = useState(10); // 30-45cm
-  const [activeInterval, setActiveInterval] = useState<1 | 2 | 3>(3); // currently editing 30-45cm
+  // Blow count states — always entered fresh per interval, never pre-filled.
+  const [blow15, setBlow15] = useState(0); // 0-15cm
+  const [blow30, setBlow30] = useState(0); // 15-30cm
+  const [blow45, setBlow45] = useState(0); // 30-45cm
+  const [activeInterval, setActiveInterval] = useState<1 | 2 | 3>(1);
 
   // Correction flags
   const [isBelowWaterTable, setIsBelowWaterTable] = useState(false);
   const [isRefusal, setIsRefusal] = useState(false);
-  const [penetrationMm, setPenetrationMm] = useState('80');
+  const [penetrationMm, setPenetrationMm] = useState('');
 
-  // Photo
-  const [photoTaken, setPhotoTaken] = useState(false);
+  // Real recorded water table (undefined until the worker logs one)
+  const [waterTableDepth, setWaterTableDepth] = useState<number | undefined>(undefined);
+  // Real completed-interval count for the loop tracker
+  const [completedIntervals, setCompletedIntervals] = useState(0);
+
+  useEffect(() => {
+    if (!borehole?.id) return;
+    (async () => {
+      const observations = await storage.getWaterTable(borehole.id);
+      if (observations.length > 0) {
+        const latest = observations[observations.length - 1];
+        const depth = Number(latest.depth);
+        if (Number.isFinite(depth)) setWaterTableDepth(depth);
+      }
+      const intervals = await storage.getIntervals(borehole.id);
+      setCompletedIntervals(intervals.filter((iv: any) => iv.isCompleted).length);
+    })();
+  }, [borehole?.id]);
+
+  // Missing navigation params — never fabricate a borehole.
+  if (!borehole?.id || currentDepth == null || intervalNo == null) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.headerBar}>
+          <Text style={styles.headerTitle}>SPT Entry</Text>
+        </View>
+        <View style={{ padding: 24 }}>
+          <Text style={{ fontSize: 12, color: colors.redMid, fontWeight: '700' }}>
+            Boring data missing — reopen from the boring list. / डेटा नहीं मिला — सूची से दोबारा खोलें।
+          </Text>
+          <TouchableOpacity style={[styles.nextBtn, { marginTop: 16 }]} onPress={() => navigation.goBack()}>
+            <Text style={styles.nextBtnText}>← Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Planned interval count from the engineer's real planned depth (1.5 m spacing)
+  const plannedDepthNum = Number(borehole.plannedDepth);
+  const plannedIntervals = Number.isFinite(plannedDepthNum) && plannedDepthNum > 0
+    ? Math.ceil(plannedDepthNum / 1.5)
+    : null;
 
   // Computed values
   const rawN = isRefusal ? 100 : calculateRawN(blow30, blow45);
-  
-  // Apply overburden correction
+
+  // Overburden correction uses the real recorded WT (or none at all)
   const { correctedN: overburdenN } = calculateOverburdenCorrection(
     currentDepth,
     rawN,
-    6.5 // simulated water table level
+    waterTableDepth
   );
-  
+
   // Apply dilatancy if selected and raw/overburden N > 15
   const finalCorrectedN = isBelowWaterTable ? applyDilatancyCorrection(overburdenN) : overburdenN;
   const interpretation = getDensityInterpretation(finalCorrectedN);
@@ -65,14 +100,28 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
   };
 
   const handleTakePhoto = () => {
-    setPhotoTaken(true);
-    Alert.alert('Photo Logged / फोटो ली गई', 'Geotagged split spoon core photo recorded successfully.');
+    // No camera module is integrated yet — never claim a photo was captured.
+    Alert.alert(
+      'Camera Coming Soon / कैमरा जल्द',
+      'Photo capture requires the device app build with camera permissions. The boring record will sync without a photo for now.'
+    );
   };
 
   const handleNext = () => {
-    if (!photoTaken) {
-      Alert.alert('Photo Required', 'Please capture the split spoon photo before proceeding.');
+    if (!isRefusal && blow30 === 0 && blow45 === 0) {
+      Alert.alert(
+        'Blows Required / ब्लो गिनती दर्ज करें',
+        'Enter the blow counts for the 15–30cm and 30–45cm drives (or mark refusal).'
+      );
       return;
+    }
+
+    if (isRefusal) {
+      const mm = parseInt(penetrationMm, 10);
+      if (!Number.isFinite(mm) || mm <= 0 || mm > 150) {
+        Alert.alert('Penetration Required', 'Enter the mm penetrated (1–150) for the refusal record.');
+        return;
+      }
     }
 
     // Pass data forward to SoilDescription screen
@@ -122,15 +171,24 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Loop progress tracker */}
+        {/* Loop progress tracker — counts derive from the real planned depth */}
         <View style={styles.loopBar}>
-          <Text style={styles.loopText}>Interval {intervalNo} of 13 planned</Text>
+          <Text style={styles.loopText}>
+            {plannedIntervals
+              ? `Interval ${intervalNo} of ${plannedIntervals} planned`
+              : `Interval ${intervalNo} — planned depth not set`}
+          </Text>
           <View style={styles.loopDots}>
-            <View style={[styles.loopDot, styles.loopDotDone]} />
-            <View style={[styles.loopDot, styles.loopDotDone]} />
-            <View style={[styles.loopDot, styles.loopDotActive]} />
-            <View style={styles.loopDot} />
-            <View style={styles.loopDot} />
+            {Array.from({ length: Math.min(plannedIntervals ?? intervalNo, 13) }, (_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.loopDot,
+                  i + 1 < intervalNo && styles.loopDotDone,
+                  i + 1 === intervalNo && styles.loopDotActive,
+                ]}
+              />
+            ))}
           </View>
         </View>
 
@@ -213,6 +271,11 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
           </Text>
           <Text style={styles.calcRight}>{interpretation}</Text>
         </View>
+        <Text style={styles.fieldLabel}>
+          {waterTableDepth !== undefined
+            ? `Overburden correction uses recorded WT at ${waterTableDepth.toFixed(2)} m`
+            : 'WT not recorded yet — overburden correction assumes dry profile / भूजल स्तर दर्ज नहीं'}
+        </Text>
 
         {/* Dilatancy prompt */}
         <View style={styles.promptBox}>
@@ -263,13 +326,10 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
           </View>
         )}
 
-        {/* Photo Button */}
-        <TouchableOpacity
-          style={[styles.photoBtn, photoTaken && styles.photoBtnDone]}
-          onPress={handleTakePhoto}
-        >
-          <Text style={[styles.photoBtnText, photoTaken && styles.photoBtnTextDone]}>
-            📷 {photoTaken ? '✓ Split Spoon Photo Logged' : t('splitSpoonPhoto', lang)}
+        {/* Photo Button — camera module not yet integrated, honest state */}
+        <TouchableOpacity style={styles.photoBtn} onPress={handleTakePhoto}>
+          <Text style={styles.photoBtnText}>
+            📷 {t('splitSpoonPhoto', lang)} — coming soon / जल्द
           </Text>
         </TouchableOpacity>
 

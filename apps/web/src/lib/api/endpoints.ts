@@ -20,6 +20,17 @@ export async function getMe(token: string) {
 }
 
 // ═══════════════════════════════════════
+// ORGANIZATIONS
+// ═══════════════════════════════════════
+/** Company directory for pickers — optional ?type= filter (e.g. GEOTECH_CONTRACTOR). */
+export async function getOrganizations(token: string, type?: string) {
+  return apiGet<{ id: string; name: string; type: string; city: string | null; state: string | null }[]>(
+    `/organizations${type ? `?type=${encodeURIComponent(type)}` : ""}`,
+    token
+  );
+}
+
+// ═══════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════
 export async function getDashboardSummary(token: string) {

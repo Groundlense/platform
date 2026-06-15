@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -13,19 +13,72 @@ import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
 
+/** Format a Date as DD-MM-YYYY (the format this screen displays and edits). */
+function formatDateDDMMYYYY(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}-${mm}-${d.getFullYear()}`;
+}
+
+/** Parse DD-MM-YYYY strictly. Returns a Date or null when invalid. */
+function parseDateDDMMYYYY(value: string): Date | null {
+  const match = /^(\d{2})-(\d{2})-(\d{4})$/.exec((value || '').trim());
+  if (!match) return null;
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+  const date = new Date(year, month - 1, day);
+  // Reject overflow dates like 31-02-2025 (which JS would roll over)
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+}
+
 export default function RigSetupScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId } = route.params;
   const [lang, setLang] = useState<'en' | 'hi'>('hi');
 
-  // Input states with defaults matching the specification mockup
+  // Input states — selectors default to the most common field choices,
+  // identity/date fields are derived from real data below.
   const [rigType, setRigType] = useState('Rotary drilling');
   const [diameter, setDiameter] = useState('150 mm');
   const [fluid, setFluid] = useState('Water');
   const [hammerType, setHammerType] = useState('Auto-trip');
-  const [drillerId, setDrillerId] = useState('GL-D-0018 · Ramesh Singh');
-  const [startDate, setStartDate] = useState('04-12-2025');
+  // Driller = the logged-in worker performing the setup (employee code + name)
+  const [drillerId, setDrillerId] = useState('');
+  // Auto: today's date, editable (DD-MM-YYYY)
+  const [startDate, setStartDate] = useState(formatDateDDMMYYYY(new Date()));
+  const [dateError, setDateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const user = await storage.getUser();
+        if (user) {
+          const code = user.employeeCode || user.id || '';
+          const name = [user.firstName, user.lastName].filter(Boolean).join(' ');
+          setDrillerId([code, name].filter(Boolean).join(' · '));
+        }
+      } catch (err) {
+        console.warn('Could not load user for driller ID', err);
+      }
+    })();
+  }, []);
 
   const handleConfirm = async () => {
+    // Validate the start date before queueing anything
+    const parsedDate = parseDateDDMMYYYY(startDate);
+    if (!parsedDate) {
+      setDateError('Enter a valid date as DD-MM-YYYY / सही तारीख DD-MM-YYYY में लिखें');
+      return;
+    }
+    setDateError(null);
+
     try {
       const cachedBoreholes = await storage.getBoreholes(projectId);
       const updated = cachedBoreholes.map((bh: any) => {
@@ -57,8 +110,8 @@ export default function RigSetupScreen({ route, navigation }: { route: any; navi
           diameter: parseInt(diameter, 10),
           drillingFluid: fluid,
           hammerType,
-          drillerId: drillerId.split(' ')[0],
-          startedAt: new Date(startDate.split('-').reverse().join('-')),
+          drillerId: drillerId.split(' · ')[0].trim() || drillerId.trim(),
+          startedAt: parsedDate.toISOString(),
           status: 'IN_PROGRESS',
         }
       );
@@ -183,8 +236,10 @@ export default function RigSetupScreen({ route, navigation }: { route: any; navi
             style={[styles.input, styles.monoText]}
             value={drillerId}
             onChangeText={setDrillerId}
+            placeholder="Loading from your profile… / प्रोफाइल से…"
             placeholderTextColor={colors.grayMid}
           />
+          <Text style={styles.microHint}>Auto-filled from your login · editable / आपके लॉगिन से</Text>
         </View>
 
         {/* Start Date */}
@@ -192,13 +247,18 @@ export default function RigSetupScreen({ route, navigation }: { route: any; navi
           <Text style={styles.fieldLabel}>{t('startBoringDate', lang)}</Text>
           <View style={styles.dateRow}>
             <TextInput
-              style={[styles.input, styles.dateInput]}
+              style={[styles.input, styles.dateInput, dateError ? styles.inputError : null]}
               value={startDate}
-              onChangeText={setStartDate}
+              onChangeText={(v) => {
+                setStartDate(v);
+                if (dateError) setDateError(null);
+              }}
+              placeholder="DD-MM-YYYY"
               placeholderTextColor={colors.grayMid}
             />
             <Text style={styles.dateHint}>Auto: today's date · editable</Text>
           </View>
+          {!!dateError && <Text style={styles.errorText}>{dateError}</Text>}
           <Text style={styles.microHint}>
             Bihar report requires start + finish date per BH in boring schedule table
           </Text>
@@ -392,6 +452,16 @@ const styles = StyleSheet.create({
     fontSize: 8,
     color: colors.grayMid,
     marginTop: 2,
+  },
+  inputError: {
+    borderColor: colors.redMid,
+    borderWidth: 1,
+  },
+  errorText: {
+    fontSize: 9,
+    color: colors.redMid,
+    fontWeight: '700',
+    marginTop: 3,
   },
   infoBoxAmber: {
     backgroundColor: colors.amberLight,

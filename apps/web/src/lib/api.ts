@@ -7,6 +7,20 @@ export class ApiError extends Error {
   }
 }
 
+/** Extract the real error message from a NestJS error body (string or string[]). */
+async function toApiError(res: Response, method: string, path: string): Promise<ApiError> {
+  let message = `API ${method} ${path} failed: ${res.status}`;
+  try {
+    const body = await res.json();
+    const m = body?.message;
+    if (Array.isArray(m) && m.length) message = m.join(', ');
+    else if (typeof m === 'string' && m) message = m;
+  } catch {
+    // Non-JSON error body — keep the generic message
+  }
+  return new ApiError(res.status, message);
+}
+
 export async function apiGet<T>(path: string, token?: string): Promise<T> {
   const headers: HeadersInit = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -18,7 +32,7 @@ export async function apiGet<T>(path: string, token?: string): Promise<T> {
   });
 
   if (!res.ok) {
-    throw new ApiError(res.status, `API GET ${path} failed: ${res.status}`);
+    throw await toApiError(res, 'GET', path);
   }
   return res.json();
 }
@@ -34,7 +48,7 @@ export async function apiPost<T>(path: string, body: unknown, token?: string): P
   });
 
   if (!res.ok) {
-    throw new ApiError(res.status, `API POST ${path} failed: ${res.status}`);
+    throw await toApiError(res, 'POST', path);
   }
   return res.json();
 }
@@ -50,7 +64,7 @@ export async function apiPatch<T>(path: string, body: unknown, token?: string): 
   });
 
   if (!res.ok) {
-    throw new ApiError(res.status, `API PATCH ${path} failed: ${res.status}`);
+    throw await toApiError(res, 'PATCH', path);
   }
   return res.json();
 }

@@ -13,3 +13,5 @@ coverage
 pnpm-lock.yaml
 uploads/*
 !uploads/.gitkeep
+# database dumps
+backup.sql

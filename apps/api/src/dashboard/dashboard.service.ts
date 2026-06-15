@@ -1,30 +1,61 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { DatabaseService } from '../database/database.service';
+
+import { ProjectAccessService } from '../common/access/project-access.service';
 
 @Injectable()
 export class DashboardService {
   constructor(
     private readonly db: DatabaseService,
+    private readonly access: ProjectAccessService,
   ) {}
 
-  async getSummary() {
+  async getSummary(user: any) {
+    // Counts are limited to projects the caller can actually see.
+    const scopedProjects =
+      await this.db.project.findMany({
+        where: this.access.projectScopeWhere(user),
+        select: { id: true },
+      });
+
+    const projectIds = scopedProjects.map(
+      (p) => p.id,
+    );
+
+    const boreholeScope = {
+      projectId: { in: projectIds },
+    };
+
     const [
-      projects,
       boreholes,
       intervals,
       samples,
       media,
     ] = await Promise.all([
-      this.db.project.count(),
-      this.db.borehole.count(),
-      this.db.boreholeInterval.count(),
-      this.db.sample.count(),
-      this.db.media.count(),
+      this.db.borehole.count({
+        where: boreholeScope,
+      }),
+      this.db.boreholeInterval.count({
+        where: { borehole: boreholeScope },
+      }),
+      this.db.sample.count({
+        where: {
+          interval: { borehole: boreholeScope },
+        },
+      }),
+      this.db.media.count({
+        where: {
+          interval: { borehole: boreholeScope },
+        },
+      }),
     ]);
 
     return {
-      projects,
+      projects: projectIds.length,
       boreholes,
       intervals,
       samples,
@@ -34,7 +65,13 @@ export class DashboardService {
 
   async getProjectDashboard(
   projectId: string,
+  user: any,
 ) {
+  await this.access.assertProjectAccess(
+    user,
+    projectId,
+  );
+
   const project =
     await this.db.project.findUnique({
       where: {
@@ -43,7 +80,7 @@ export class DashboardService {
     });
 
   if (!project) {
-    throw new Error(
+    throw new NotFoundException(
       'Project not found',
     );
   }

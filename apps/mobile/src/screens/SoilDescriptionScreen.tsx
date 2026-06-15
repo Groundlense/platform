@@ -4,12 +4,12 @@ import {
   Text,
   View,
   TouchableOpacity,
+  TextInput,
   ScrollView,
   Alert,
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
-import { storage } from '../services/storage';
 
 export default function SoilDescriptionScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, sessionId, currentDepth, intervalNo, sptData } = route.params;
@@ -19,8 +19,7 @@ export default function SoilDescriptionScreen({ route, navigation }: { route: an
   const [selectedSoil, setSelectedSoil] = useState('Sand');
   const [selectedColor, setSelectedColor] = useState('#D2691E'); // Brown
   const [selectedConsistency, setSelectedConsistency] = useState('Medium');
-  const [voiceNoteText, setVoiceNoteText] = useState('');
-  const [recording, setRecording] = useState(false);
+  const [fieldNoteText, setFieldNoteText] = useState('');
 
   // Soil types mapping matching the specification
   const soilTypes = [
@@ -51,23 +50,41 @@ export default function SoilDescriptionScreen({ route, navigation }: { route: an
   ];
 
   const currentSoilMap = soilTypes.find(s => s.code === selectedSoil) || soilTypes[0];
+  const isRock = selectedSoil === 'Rock';
 
   const handleVoiceNote = () => {
-    if (recording) {
-      setRecording(false);
-      // Simulate Hindi voice translation transcription
-      setVoiceNoteText('बालू में थोड़े कंकड़ पत्थर मिले हैं, खुदाई मध्यम गति से चल रही है।');
-      Alert.alert(
-        'Speech Transcribed / ट्रांसक्रिप्ट तैयार',
-        'Hindi audio transcribed to: "बालू में थोड़े कंकड़ पत्थर मिले हैं, खुदाई मध्यम गति से चल रही है।"'
-      );
-    } else {
-      setRecording(true);
-      Alert.alert('Recording / रिकॉर्डिंग शुरू', 'Speak now in Hindi. Tap button again to complete.');
-    }
+    // No speech-to-text library is installed — honest disabled state, never fabricate a transcript.
+    Alert.alert(
+      'Voice transcription coming soon / वॉयस जल्द',
+      'Speech-to-text is not available in this version. Please type your observation in the note box below. / अभी वॉयस सुविधा उपलब्ध नहीं है — नीचे नोट बॉक्स में लिखें।'
+    );
   };
 
   const handleNext = () => {
+    const soilData = {
+      soilType: selectedSoil,
+      isRock,
+      uscsCode: currentSoilMap.mappedCode.split(' ')[0],
+      color: colorsList.find(c => c.value === selectedColor)?.name || 'Brown',
+      consistency: selectedConsistency,
+      description: `${selectedConsistency} ${currentSoilMap.name.split(' ')[0]} of ${colorsList.find(c => c.value === selectedColor)?.name || 'Brown'} color.`,
+      fieldNote: fieldNoteText.trim() || undefined,
+    };
+
+    if (isRock) {
+      // Rock encountered — exit the SPT loop and switch to core mode (Screen 8).
+      navigation.navigate('RockCoring', {
+        borehole,
+        projectId,
+        sessionId,
+        currentDepth,
+        intervalNo,
+        sptData,
+        soilData,
+      });
+      return;
+    }
+
     // Navigate to SampleCollection Screen
     navigation.navigate('SampleCollection', {
       borehole,
@@ -76,14 +93,7 @@ export default function SoilDescriptionScreen({ route, navigation }: { route: an
       currentDepth,
       intervalNo,
       sptData,
-      soilData: {
-        soilType: selectedSoil,
-        uscsCode: currentSoilMap.mappedCode.split(' ')[0],
-        color: colorsList.find(c => c.value === selectedColor)?.name || 'Brown',
-        consistency: selectedConsistency,
-        description: `${selectedConsistency} ${currentSoilMap.name.split(' ')[0]} of ${colorsList.find(c => c.value === selectedColor)?.name || 'Brown'} color.`,
-        voiceNote: voiceNoteText || undefined,
-      },
+      soilData,
     });
   };
 
@@ -184,26 +194,41 @@ export default function SoilDescriptionScreen({ route, navigation }: { route: an
           })}
         </View>
 
-        {/* Hindi voice note recorder */}
-        <TouchableOpacity
-          style={[styles.voiceBtn, recording && styles.voiceBtnActive]}
-          onPress={handleVoiceNote}
-        >
-          <Text style={[styles.voiceBtnText, recording && styles.voiceBtnTextActive]}>
-            🎙 {recording ? 'Recording... Tap to stop / रोकें' : t('voiceNoteBtn', lang)}
+        {/* Voice note — speech-to-text not installed, honest disabled state */}
+        <TouchableOpacity style={styles.voiceBtnDisabled} onPress={handleVoiceNote}>
+          <Text style={styles.voiceBtnDisabledText}>
+            🎙 Voice transcription coming soon / वॉयस जल्द
           </Text>
         </TouchableOpacity>
 
-        {voiceNoteText ? (
-          <View style={styles.voiceNoteDisplay}>
-            <Text style={styles.voiceNoteLabel}>Transcript / अनुवाद:</Text>
-            <Text style={styles.voiceNoteVal}>{voiceNoteText}</Text>
+        {/* Typed field note — replaces voice note until speech is available */}
+        <Text style={styles.fieldLabel}>Field note (optional) / टिप्पणी (वैकल्पिक)</Text>
+        <TextInput
+          style={styles.noteInput}
+          multiline
+          numberOfLines={3}
+          value={fieldNoteText}
+          onChangeText={setFieldNoteText}
+          placeholder="Type any unusual observation here / यहाँ लिखें"
+          placeholderTextColor={colors.grayMid}
+        />
+
+        {/* Rock branch notice */}
+        {isRock ? (
+          <View style={styles.rockNotice}>
+            <Text style={styles.rockNoticeTitle}>Rock encountered — switching to core mode</Text>
+            <Text style={styles.rockNoticeSub}>चट्टान मिली — रॉक कोरिंग शुरू करें</Text>
           </View>
         ) : null}
 
         {/* Next button */}
-        <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>
-          <Text style={styles.nextBtnText}>Next → Sample collection</Text>
+        <TouchableOpacity
+          style={[styles.nextBtn, isRock && styles.nextBtnRock]}
+          onPress={handleNext}
+        >
+          <Text style={styles.nextBtnText}>
+            {isRock ? 'Next → Rock coring / रॉक कोरिंग' : 'Next → Sample collection'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -376,45 +401,54 @@ const styles = StyleSheet.create({
     color: colors.amber,
     fontWeight: '700',
   },
-  voiceBtn: {
-    backgroundColor: colors.blueLight,
+  voiceBtnDisabled: {
+    backgroundColor: colors.grayLight,
     borderWidth: 0.5,
-    borderColor: colors.blueDark,
+    borderColor: colors.grayBorder,
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 4,
+    opacity: 0.7,
   },
-  voiceBtnActive: {
-    backgroundColor: colors.redLight,
-    borderColor: colors.redMid,
-  },
-  voiceBtnText: {
+  voiceBtnDisabledText: {
     fontSize: 10,
-    color: colors.blueDark,
-    fontWeight: '700',
-  },
-  voiceBtnTextActive: {
-    color: colors.redMid,
-  },
-  voiceNoteDisplay: {
-    backgroundColor: colors.grayLight,
-    borderWidth: 0.5,
-    borderColor: colors.grayBorder,
-    borderRadius: 6,
-    padding: 8,
-    marginBottom: 12,
-  },
-  voiceNoteLabel: {
-    fontSize: 8,
     color: colors.grayMid,
     fontWeight: '700',
   },
-  voiceNoteVal: {
+  noteInput: {
+    backgroundColor: colors.white,
+    borderWidth: 0.5,
+    borderColor: colors.grayBorder,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     fontSize: 10,
     color: colors.grayDark,
-    marginTop: 2,
+    minHeight: 56,
+    textAlignVertical: 'top',
+    marginBottom: 12,
+  },
+  rockNotice: {
+    backgroundColor: colors.grayDark,
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginBottom: 10,
+  },
+  rockNoticeTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FAC775',
+  },
+  rockNoticeSub: {
+    fontSize: 9,
+    color: '#B4B2A9',
+    marginTop: 1,
+  },
+  nextBtnRock: {
+    backgroundColor: colors.grayDark,
   },
   nextBtn: {
     backgroundColor: colors.rustMid,

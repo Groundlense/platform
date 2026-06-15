@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,30 +12,138 @@ import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
 
+function formatDate(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatTime(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDuration(startIso?: string | null, endIso?: string | null): string {
+  if (!startIso || !endIso) return '—';
+  const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
+  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  const mins = Math.round(ms / 60000);
+  return `${Math.floor(mins / 60)} hrs ${mins % 60} min`;
+}
+
 export default function BoringClosureScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, readOnly } = route.params;
   const [lang, setLang] = useState<'en' | 'hi'>('hi');
 
   // Input states
-  const [gwtEncountered, setGwtEncountered] = useState(true);
-  const [photoTaken, setPhotoTaken] = useState(readOnly ? true : false);
   const [signed, setSigned] = useState(readOnly ? true : false);
 
+  // Real aggregates from the offline store — this screen is the legal record,
+  // every value must come from what the worker actually entered.
+  const [summary, setSummary] = useState<{
+    startIso: string | null;
+    endIso: string | null;
+    finalDepth: number | null;
+    intervalCount: number;
+    sptSamples: number;
+    udsSamples: number;
+    waterTable: { depth: number; readingType?: string } | null;
+    rockAtDepth: number | null;
+    rqdText: string | null;
+    workerName: string;
+  } | null>(null);
+
+  // GWT confirmation defaults to what was actually recorded
+  const [gwtEncountered, setGwtEncountered] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const [sessions, intervals, samples, waterObs, user] = await Promise.all([
+        storage.getBoringSessions(borehole.id),
+        storage.getIntervals(borehole.id),
+        storage.getSamples(borehole.id),
+        storage.getWaterTable(borehole.id),
+        storage.getUser(),
+      ]);
+
+      const sessionStarts = sessions
+        .map((s: any) => s.startedAt)
+        .filter(Boolean)
+        .sort();
+      const sessionEnds = sessions
+        .map((s: any) => s.endedAt)
+        .filter(Boolean)
+        .sort();
+
+      const completedIntervals = intervals.filter((iv: any) => iv.isCompleted);
+      const deepest = completedIntervals.reduce(
+        (max: number | null, iv: any) =>
+          Number.isFinite(Number(iv.toDepth)) && (max === null || Number(iv.toDepth) > max)
+            ? Number(iv.toDepth)
+            : max,
+        null as number | null,
+      );
+
+      // Prefer the IS 6935 24-hr stable reading, else the latest observation
+      const stable = [...waterObs].reverse().find((o: any) => o.readingType === 'STABILIZED_LEVEL');
+      const latestObs = stable ?? (waterObs.length ? waterObs[waterObs.length - 1] : null);
+
+      const rockIntervals = completedIntervals.filter((iv: any) =>
+        String(iv.soilDescription ?? '').startsWith('Rock coring'),
+      );
+      const firstRock = rockIntervals.length
+        ? rockIntervals.reduce((min: any, iv: any) =>
+            Number(iv.fromDepth) < Number(min.fromDepth) ? iv : min,
+          )
+        : null;
+      const lastRock = rockIntervals.length ? rockIntervals[rockIntervals.length - 1] : null;
+      const rqdMatch = lastRock
+        ? String(lastRock.soilDescription).match(/RQD:\s*(\d+%\s*\([^)]*\))/)
+        : null;
+
+      setSummary({
+        startIso: sessionStarts[0] ?? borehole.startedAt ?? null,
+        endIso: sessionEnds.length ? sessionEnds[sessionEnds.length - 1] : new Date().toISOString(),
+        finalDepth: deepest ?? (Number.isFinite(Number(borehole.currentDepth)) ? Number(borehole.currentDepth) : null),
+        intervalCount: completedIntervals.length,
+        sptSamples: samples.filter((s: any) => s.sampleType === 'DISTURBED').length,
+        udsSamples: samples.filter((s: any) => s.sampleType === 'UNDISTURBED').length,
+        waterTable: latestObs
+          ? { depth: Number(latestObs.depth), readingType: latestObs.readingType }
+          : null,
+        rockAtDepth: firstRock ? Number(firstRock.fromDepth) : null,
+        rqdText: rqdMatch ? rqdMatch[1] : null,
+        workerName: [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.employeeCode || 'Worker',
+      });
+
+      setGwtEncountered(latestObs ? true : false);
+    })();
+  }, [borehole.id]);
+
   const handleSignature = () => {
-    if (readOnly) return;
+    if (readOnly || !summary) return;
     setSigned(true);
-    Alert.alert('Signed / हस्ताक्षरित', 'Digital signature recorded.');
+    Alert.alert(
+      'Signed / हस्ताक्षरित',
+      `Recorded as ${summary.workerName} at ${formatTime(new Date().toISOString())}. (Drawn signature pad coming soon.)`
+    );
   };
 
   const handleFinalPhoto = () => {
     if (readOnly) return;
-    setPhotoTaken(true);
-    Alert.alert('Photo Captured / फोटो ली गई', 'Geotagged final borehole closure photo saved.');
+    // No camera module integrated — never claim a photo was captured.
+    Alert.alert(
+      'Camera Coming Soon / कैमरा जल्द',
+      'The final borehole photo requires the device app build with camera permissions. The closure record will sync without a photo for now.'
+    );
   };
 
   const handleSubmit = async () => {
-    if (!photoTaken) {
-      Alert.alert('Photo Required', 'Please capture the final borehole photo');
+    if (gwtEncountered === null) {
+      Alert.alert('GWT Confirmation Required', 'Confirm the water table status before submitting (IS 1892).');
       return;
     }
     if (!signed) {
@@ -71,7 +179,7 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
 
       Alert.alert(
         'Boring Submitted & Locked / सबमिट और लॉक हो गया',
-        'Data has been marked as Field Locked. Generating tamper-evidence SHA-256 certificate.',
+        'Data locked and queued for sync. / डेटा लॉक हो गया और सिंक के लिए कतार में है।',
         [
           {
             text: 'Return to list / बोरिंग सूची',
@@ -103,54 +211,68 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Date / Time Card Grid */}
+        {/* Date / Time Card Grid — real session timestamps */}
         <View style={styles.dateGrid}>
           <View style={styles.dateCard}>
             <Text style={styles.dateLabel}>Start</Text>
-            <Text style={styles.dateVal}>15 Apr 2025</Text>
-            <Text style={styles.dateTime}>09:14 AM</Text>
+            <Text style={styles.dateVal}>{formatDate(summary?.startIso)}</Text>
+            <Text style={styles.dateTime}>{formatTime(summary?.startIso)}</Text>
           </View>
           <View style={styles.dateCard}>
             <Text style={styles.dateLabel}>End</Text>
-            <Text style={styles.dateVal}>15 Apr 2025</Text>
-            <Text style={styles.dateTime}>04:45 PM</Text>
+            <Text style={styles.dateVal}>{formatDate(summary?.endIso)}</Text>
+            <Text style={styles.dateTime}>{formatTime(summary?.endIso)}</Text>
           </View>
         </View>
 
-        {/* Logging Statistics */}
+        {/* Logging Statistics — aggregated from the worker's actual entries */}
         <View style={styles.statsBlock}>
           <View style={styles.sumRow}>
             <Text style={styles.sumLabel}>Total depth / कुल गहराई</Text>
-            <Text style={styles.sumVal}>{borehole.currentDepth || '20.0'} m</Text>
+            <Text style={styles.sumVal}>
+              {summary?.finalDepth != null ? `${summary.finalDepth.toFixed(1)} m` : '—'}
+            </Text>
           </View>
           <View style={styles.sumRow}>
             <Text style={styles.sumLabel}>Duration / कुल समय</Text>
-            <Text style={styles.sumVal}>7 hrs 31 min</Text>
+            <Text style={styles.sumVal}>{formatDuration(summary?.startIso, summary?.endIso)}</Text>
           </View>
           <View style={styles.sumRow}>
             <Text style={styles.sumLabel}>SPT intervals / एसपीटी अंतराल</Text>
-            <Text style={styles.sumVal}>13 entries</Text>
+            <Text style={styles.sumVal}>
+              {summary ? `${summary.intervalCount} entries` : '—'}
+            </Text>
           </View>
           <View style={styles.sumRow}>
             <Text style={styles.sumLabel}>Samples / नमूने</Text>
-            <Text style={styles.sumVal}>4 SPT · 1 UDS</Text>
+            <Text style={styles.sumVal}>
+              {summary ? `${summary.sptSamples} SPT · ${summary.udsSamples} UDS` : '—'}
+            </Text>
           </View>
           <View style={styles.sumRow}>
             <Text style={styles.sumLabel}>Photos uploaded / फोटो</Text>
-            <Text style={styles.sumVal}>18 photos</Text>
+            <Text style={styles.sumVal}>None (camera coming soon)</Text>
           </View>
           <View style={styles.sumRow}>
             <Text style={styles.sumLabel}>Water table / भूजल स्तर</Text>
-            <Text style={styles.sumVal}>6.20m (24hr final)</Text>
+            <Text style={styles.sumVal}>
+              {summary?.waterTable
+                ? `${summary.waterTable.depth.toFixed(2)}m${summary.waterTable.readingType === 'STABILIZED_LEVEL' ? ' (24hr final)' : ' (during drilling)'}`
+                : 'Not recorded'}
+            </Text>
           </View>
-          <View style={styles.sumRow}>
-            <Text style={styles.sumLabel}>Rock at depth / रॉक गहराई</Text>
-            <Text style={styles.sumVal}>16.0 m</Text>
-          </View>
-          <View style={[styles.sumRow, styles.lastSumRow]}>
-            <Text style={styles.sumLabel}>RQD / रॉक गुणवत्ता</Text>
-            <Text style={styles.sumVal}>78% · Good</Text>
-          </View>
+          {summary?.rockAtDepth != null && (
+            <View style={styles.sumRow}>
+              <Text style={styles.sumLabel}>Rock at depth / रॉक गहराई</Text>
+              <Text style={styles.sumVal}>{summary.rockAtDepth.toFixed(1)} m</Text>
+            </View>
+          )}
+          {summary?.rqdText != null && (
+            <View style={[styles.sumRow, styles.lastSumRow]}>
+              <Text style={styles.sumLabel}>RQD / रॉक गुणवत्ता</Text>
+              <Text style={styles.sumVal}>{summary.rqdText}</Text>
+            </View>
+          )}
         </View>
 
         {/* Water Table Confirmation */}
@@ -160,18 +282,20 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
           </Text>
           <View style={styles.gwtBtnRow}>
             <TouchableOpacity
-              style={[styles.gwtBtn, gwtEncountered && styles.gwtBtnSelected]}
+              style={[styles.gwtBtn, gwtEncountered === true && styles.gwtBtnSelected]}
               onPress={() => !readOnly && setGwtEncountered(true)}
             >
-              <Text style={[styles.gwtBtnText, gwtEncountered && styles.gwtBtnTextSelected]}>
-                ✓ Water table found at 6.20m
+              <Text style={[styles.gwtBtnText, gwtEncountered === true && styles.gwtBtnTextSelected]}>
+                {summary?.waterTable
+                  ? `✓ Water table found at ${summary.waterTable.depth.toFixed(2)}m`
+                  : '✓ Water table encountered'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.gwtBtn, !gwtEncountered && styles.gwtBtnSelected]}
+              style={[styles.gwtBtn, gwtEncountered === false && styles.gwtBtnSelected]}
               onPress={() => !readOnly && setGwtEncountered(false)}
             >
-              <Text style={[styles.gwtBtnText, !gwtEncountered && styles.gwtBtnTextSelected]}>
+              <Text style={[styles.gwtBtnText, gwtEncountered === false && styles.gwtBtnTextSelected]}>
                 GWT not encountered
               </Text>
             </TouchableOpacity>
@@ -181,26 +305,23 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
           </Text>
         </View>
 
-        {/* Final photo check */}
-        <TouchableOpacity
-          style={[styles.cameraBtn, photoTaken && styles.cameraBtnDone]}
-          onPress={handleFinalPhoto}
-        >
-          <Text style={[styles.cameraBtnText, photoTaken && styles.cameraBtnTextDone]}>
-            📷 {photoTaken ? '✓ Final Borehole Photo Logged' : 'Final borehole photo ✓ GPS stamped'}
+        {/* Final photo — camera module not yet integrated, honest state */}
+        <TouchableOpacity style={styles.cameraBtn} onPress={handleFinalPhoto}>
+          <Text style={styles.cameraBtnText}>
+            📷 Final borehole photo — coming soon / जल्द
           </Text>
         </TouchableOpacity>
 
-        {/* Signature Box */}
+        {/* Signature Box — real logged-in worker, typed-name confirmation */}
         <TouchableOpacity
           style={[styles.signatureBox, signed && styles.signatureBoxSigned]}
           onPress={handleSignature}
         >
-          {signed ? (
-            <Text style={styles.signatureText}>✍️ Ramesh Chandra</Text>
+          {signed && summary ? (
+            <Text style={styles.signatureText}>✍️ {summary.workerName}</Text>
           ) : (
             <Text style={styles.signaturePlaceholder}>
-              Supervisor signature / यहाँ हस्ताक्षर करें
+              Tap to sign as {summary?.workerName ?? '…'} / हस्ताक्षर करने के लिए टैप करें
             </Text>
           )}
         </TouchableOpacity>

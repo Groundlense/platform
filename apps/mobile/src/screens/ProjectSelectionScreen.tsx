@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
@@ -16,13 +15,14 @@ import { api } from '../services/api';
 import { syncManager } from '../services/sync';
 
 export default function ProjectSelectionScreen({ navigation }: { navigation: any }) {
-  const [lang, setLang] = useState<'en' | 'hi'>('en');
+  const [lang] = useState<'en' | 'hi'>('en');
   const [user, setUser] = useState<any>(null);
-  const [searchQuery, setSearchQuery] = useState('GL-PRJ-2025-0047');
+  const [searchQuery, setSearchQuery] = useState('');
   const [searchResult, setSearchResult] = useState<any>(null);
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     loadUserData();
@@ -39,7 +39,7 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
     try {
       const cachedProjects = await storage.getProjects();
       setProjects(cachedProjects);
-      
+
       // If we have no cached projects, trigger an initial sync
       if (cachedProjects.length === 0) {
         await handleSync();
@@ -53,67 +53,74 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
 
   const handleSync = async () => {
     setSyncing(true);
+    setSyncError(null);
     try {
       const result = await syncManager.syncWithServer();
-      if (result.success) {
-        const cachedProjects = await storage.getProjects();
-        setProjects(cachedProjects);
-      } else {
-        // Silent fail or warning
-        console.log('Sync warning:', result.error);
+      const cachedProjects = await storage.getProjects();
+      setProjects(cachedProjects);
+      if (!result.success) {
+        setSyncError(result.error || 'Sync failed / सिंक विफल');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Sync failed:', err);
+      setSyncError(err?.message || 'Sync failed / सिंक विफल');
     } finally {
       setSyncing(false);
     }
   };
 
   const handleSearch = async () => {
-    if (!searchQuery) return;
+    const query = searchQuery.trim();
+    if (!query) return;
     setLoading(true);
     try {
-      // Direct integration with Live API
-      // Since it's a mock/real project lookup, we check if it is assigned or exists
-      // Standard search logic:
-      const matched = projects.find(p => p.projectCode === searchQuery);
-      if (matched) {
-        setSearchResult({
-          id: matched.id,
-          projectCode: matched.projectCode,
-          name: matched.name,
-          description: matched.description || 'Assigned project',
-          assigned: true,
-        });
-      } else {
-        // Simulated lookup for GL-PRJ-2025-0047
-        if (searchQuery === 'GL-PRJ-2025-0047') {
+      // Server search first — it distinguishes "exists but not assigned"
+      // (red) from "does not exist" (amber).
+      try {
+        const result = await api.searchProject(query);
+        if (result?.found) {
           setSearchResult({
-            id: 'proj-0047',
-            projectCode: 'GL-PRJ-2025-0047',
-            name: 'NH-48 · Package 14 · ROB Km 142+500',
-            description: 'GR Infraprojects · You are assigned ✓',
-            assigned: true,
+            ...(result.project || {}),
+            found: true,
+            hasAccess: !!result.hasAccess,
+            offline: false,
           });
         } else {
-          setSearchResult({
-            id: 'unknown',
-            projectCode: searchQuery,
-            name: 'Project Found but Not Assigned / नहीं सौंपा गया',
-            description: 'You are not assigned to this project. Please contact your engineer.',
-            assigned: false,
-          });
+          // Amber "not found" — the ID does not exist on the server
+          setSearchResult({ projectCode: query, found: false, offline: false });
         }
+        return;
+      } catch (err) {
+        console.warn('Server project search failed, using local cache:', err);
       }
-    } catch (err) {
-      Alert.alert('Search Error', 'Unable to retrieve project details');
+
+      // Offline fallback: search the locally synced project cache. Anything
+      // cached is by definition assigned to this worker.
+      const cachedProjects = await storage.getProjects();
+      const matched = cachedProjects.find(
+        (p: any) => (p.projectCode || '').toUpperCase() === query.toUpperCase()
+      );
+      if (matched) {
+        setSearchResult({
+          ...matched,
+          found: true,
+          hasAccess: true,
+          offline: true,
+        });
+      } else {
+        // Amber "not found" state — the ID is not in the local cache
+        setSearchResult({
+          projectCode: query,
+          found: false,
+          offline: true,
+        });
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleOpenProject = async (project: any) => {
-    // Save as active project or navigate
     navigation.navigate('BoringList', {
       projectId: project.id,
       projectCode: project.projectCode || project.code,
@@ -121,40 +128,17 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
     });
   };
 
-  const activeProjects = projects.filter(p => p.status === 'ACTIVE' || p.assigned);
+  const activeProjects = projects.filter(p => p.status !== 'COMPLETED');
   const completedProjects = projects.filter(p => p.status === 'COMPLETED');
 
-  // If list is empty, add a default fallback for demonstration
-  const displayActive = activeProjects.length > 0 ? activeProjects : [
-    {
-      id: 'proj-0047',
-      projectCode: 'GL-PRJ-2025-0047',
-      name: 'NH-48 · Package 14 · ROB Km 142',
-      description: 'GR Infraprojects · 10 borings · 4 assigned to you',
-      status: 'ACTIVE',
-      assigned: true,
-    }
-  ];
-
-  const displayCompleted = completedProjects.length > 0 ? completedProjects : [
-    {
-      id: 'proj-0031',
-      projectCode: 'GL-PRJ-2025-0031',
-      name: 'NH-44 · Package 7 · VUP Km 88',
-      description: 'Completed 10 Apr',
-      status: 'COMPLETED',
-    },
-    {
-      id: 'proj-0019',
-      projectCode: 'GL-PRJ-2025-0019',
-      name: 'Delhi Ring Road · Bridge Km 14',
-      description: 'Completed 28 Mar',
-      status: 'COMPLETED',
-    }
-  ];
-
   const handleLogout = async () => {
-    await storage.clearToken();
+    try {
+      // Best effort — invalidates the refresh token server-side when online
+      await api.logout();
+    } catch (err) {
+      console.warn('Server logout failed (continuing local logout):', err);
+    }
+    await storage.clearTokens();
     await storage.clearUser();
     navigation.replace('Login');
   };
@@ -167,7 +151,12 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
           <Text style={styles.headerTitle}>{t('selectProject', lang)}</Text>
           {user && (
             <Text style={styles.userInfo}>
-              {user.firstName} {user.lastName} · {user.id || 'GL-W-0042'}
+              {[
+                `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+                user.employeeCode,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </Text>
           )}
         </View>
@@ -191,6 +180,13 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
         renderItem={null}
         ListHeaderComponent={
           <>
+            {/* Sync error notice */}
+            {syncError ? (
+              <View style={styles.syncErrorBox}>
+                <Text style={styles.syncErrorText}>{syncError}</Text>
+              </View>
+            ) : null}
+
             {/* Search project */}
             <View style={styles.searchSection}>
               <Text style={styles.label}>{t('searchProjId', lang)}</Text>
@@ -198,73 +194,156 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
                 <TextInput
                   style={styles.searchInput}
                   value={searchQuery}
-                  onChangeText={setSearchQuery}
+                  onChangeText={(text) => {
+                    setSearchQuery(text);
+                    if (searchResult) setSearchResult(null);
+                  }}
                   placeholder="GL-PRJ-2025-____"
                   placeholderTextColor={colors.grayMid}
                   autoCapitalize="characters"
+                  autoCorrect={false}
                 />
                 <TouchableOpacity style={styles.searchBtn} onPress={handleSearch}>
-                  <Text style={styles.searchBtnText}>GO</Text>
+                  {loading ? (
+                    <ActivityIndicator size="small" color={colors.white} />
+                  ) : (
+                    <Text style={styles.searchBtnText}>GO</Text>
+                  )}
                 </TouchableOpacity>
               </View>
 
-              {/* Search Result */}
+              {/* Search Result — three states: found+assigned (blue/green),
+                  found+not assigned (red), not found (amber) */}
               {searchResult && (
-                <View style={[styles.searchResultCard, !searchResult.assigned && styles.searchResultCardError]}>
-                  <Text style={[styles.srCode, !searchResult.assigned && styles.srCodeError]}>
-                    {searchResult.projectCode} · {searchResult.assigned ? 'Found ✓' : 'Alert ⚠️'}
-                  </Text>
-                  <Text style={styles.srName}>{searchResult.name}</Text>
-                  <Text style={styles.srSub}>{searchResult.description}</Text>
-                  {searchResult.assigned && (
+                searchResult.found && searchResult.hasAccess ? (
+                  <View style={styles.searchResultCard}>
+                    <Text style={styles.srCode}>
+                      {searchResult.projectCode} · Found ✓
+                    </Text>
+                    <Text style={styles.srName}>{searchResult.name}</Text>
+                    {(searchResult.description ||
+                      searchResult.state ||
+                      searchResult.district) ? (
+                      <Text style={styles.srSub}>
+                        {searchResult.description ||
+                          [searchResult.district, searchResult.state]
+                            .filter(Boolean)
+                            .join(', ')}
+                      </Text>
+                    ) : null}
                     <TouchableOpacity
                       style={styles.srOpenBtn}
                       onPress={() => handleOpenProject(searchResult)}
                     >
                       <Text style={styles.srOpenBtnText}>{t('openProj', lang)} →</Text>
                     </TouchableOpacity>
-                  )}
-                </View>
+                  </View>
+                ) : searchResult.found ? (
+                  <View style={styles.searchResultCardError}>
+                    <Text style={styles.srCodeError}>
+                      {searchResult.projectCode} · Not assigned ✗
+                    </Text>
+                    <Text style={styles.srNameError}>
+                      Project found but not assigned to your team / प्रोजेक्ट आपको
+                      असाइन नहीं है
+                    </Text>
+                    <Text style={styles.srSub}>
+                      {searchResult.name ? `${searchResult.name} — ` : ''}contact your
+                      supervisor to get assigned. / असाइनमेंट के लिए अपने सुपरवाइजर से
+                      संपर्क करें।
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.searchResultCardWarn}>
+                    <Text style={styles.srCodeWarn}>
+                      {searchResult.projectCode} · Not found ⚠️
+                    </Text>
+                    <Text style={styles.srNameWarn}>
+                      Project not found / प्रोजेक्ट नहीं मिला
+                    </Text>
+                    <Text style={styles.srSub}>
+                      {searchResult.offline
+                        ? 'You are offline — only synced projects were searched. Check the ID or sync first. / आप ऑफलाइन हैं — ID जांचें या पहले सिंक करें।'
+                        : 'Check the ID or sync first. If you should be assigned, contact your engineer. / ID जांचें या पहले सिंक करें।'}
+                    </Text>
+                  </View>
+                )
               )}
             </View>
 
+            {/* Engineer query inbox entry point */}
+            <TouchableOpacity
+              style={styles.queryInboxBtn}
+              onPress={() => navigation.navigate('EngineerQuery')}
+            >
+              <Text style={styles.queryInboxBtnText}>
+                📨 Engineer queries / इंजीनियर के सवाल
+              </Text>
+            </TouchableOpacity>
+
             {/* Active Projects */}
             <Text style={styles.sectionTitle}>{t('assignedProj', lang)}</Text>
-            {displayActive.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.projectCard}
-                onPress={() => handleOpenProject(item)}
-              >
-                <Text style={styles.projCode}>{item.projectCode}</Text>
-                <Text style={styles.projName}>{item.name}</Text>
-                <Text style={styles.projSub}>{item.description}</Text>
-                <View style={styles.chipRow}>
-                  <View style={[styles.chip, styles.chipRust]}>
-                    <Text style={styles.chipTextRust}>{t('active', lang)}</Text>
+            {activeProjects.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>
+                  No projects assigned yet / कोई प्रोजेक्ट नहीं
+                </Text>
+                <Text style={styles.emptySub}>
+                  Ask your engineer to assign you, then sync. / अपने इंजीनियर से प्रोजेक्ट
+                  आवंटित करवाएं, फिर सिंक करें।
+                </Text>
+                <TouchableOpacity
+                  style={styles.emptySyncBtn}
+                  onPress={handleSync}
+                  disabled={syncing}
+                >
+                  {syncing ? (
+                    <ActivityIndicator size="small" color={colors.white} />
+                  ) : (
+                    <Text style={styles.emptySyncBtnText}>🔄 Sync now / अभी सिंक करें</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              activeProjects.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.projectCard}
+                  onPress={() => handleOpenProject(item)}
+                >
+                  <Text style={styles.projCode}>{item.projectCode}</Text>
+                  <Text style={styles.projName}>{item.name}</Text>
+                  {item.description ? (
+                    <Text style={styles.projSub}>{item.description}</Text>
+                  ) : null}
+                  <View style={styles.chipRow}>
+                    <View style={[styles.chip, styles.chipRust]}>
+                      <Text style={styles.chipTextRust}>{t('active', lang)}</Text>
+                    </View>
                   </View>
-                  <View style={[styles.chip, styles.chipBlue]}>
-                    <Text style={styles.chipTextBlue}>Team A</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              ))
+            )}
 
             {/* Previous Projects */}
-            <Text style={[styles.sectionTitle, styles.sectionTitleOld]}>
-              {t('previousProj', lang)}
-            </Text>
-            {displayCompleted.map((item) => (
-              <View key={item.id} style={styles.projectCardOld}>
-                <Text style={styles.projCodeOld}>{item.projectCode}</Text>
-                <Text style={styles.projNameOld}>{item.name}</Text>
-                <View style={styles.chipRow}>
-                  <View style={[styles.chip, styles.chipGray]}>
-                    <Text style={styles.chipTextGray}>{item.description}</Text>
+            {completedProjects.length > 0 && (
+              <>
+                <Text style={[styles.sectionTitle, styles.sectionTitleOld]}>
+                  {t('previousProj', lang)}
+                </Text>
+                {completedProjects.map((item) => (
+                  <View key={item.id} style={styles.projectCardOld}>
+                    <Text style={styles.projCodeOld}>{item.projectCode}</Text>
+                    <Text style={styles.projNameOld}>{item.name}</Text>
+                    <View style={styles.chipRow}>
+                      <View style={[styles.chip, styles.chipGray]}>
+                        <Text style={styles.chipTextGray}>{t('completed', lang)}</Text>
+                      </View>
+                    </View>
                   </View>
-                </View>
-              </View>
-            ))}
+                ))}
+              </>
+            )}
           </>
         }
       />
@@ -324,6 +403,19 @@ const styles = StyleSheet.create({
   listContainer: {
     padding: 16,
   },
+  syncErrorBox: {
+    backgroundColor: colors.amberLight,
+    borderWidth: 0.5,
+    borderColor: colors.amber,
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 12,
+  },
+  syncErrorText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: colors.amber,
+  },
   searchSection: {
     backgroundColor: colors.white,
     borderRadius: 10,
@@ -376,7 +468,19 @@ const styles = StyleSheet.create({
   },
   searchResultCardError: {
     backgroundColor: colors.redLight,
+    borderWidth: 1.5,
     borderColor: colors.redMid,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+  },
+  searchResultCardWarn: {
+    backgroundColor: colors.amberLight,
+    borderWidth: 1.5,
+    borderColor: colors.amber,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
   },
   srCode: {
     fontSize: 9,
@@ -384,14 +488,51 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.blueDark,
   },
-  srCodeError: {
-    color: colors.redMid,
+  srCodeWarn: {
+    fontSize: 9,
+    fontFamily: typography.fontFamilyMono,
+    fontWeight: '700',
+    color: colors.amber,
   },
   srName: {
     fontSize: 11,
     fontWeight: '700',
     color: '#0C447C',
     marginTop: 4,
+  },
+  srNameWarn: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.amber,
+    marginTop: 4,
+  },
+  srCodeError: {
+    fontSize: 9,
+    fontFamily: typography.fontFamilyMono,
+    fontWeight: '700',
+    color: colors.redMid,
+  },
+  srNameError: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.redMid,
+    marginTop: 4,
+  },
+  queryInboxBtn: {
+    backgroundColor: colors.blueLight,
+    borderWidth: 0.5,
+    borderColor: colors.blueDark,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -8,
+    marginBottom: 20,
+  },
+  queryInboxBtnText: {
+    fontSize: 10,
+    color: colors.blueDark,
+    fontWeight: '700',
   },
   srSub: {
     fontSize: 9,
@@ -419,6 +560,40 @@ const styles = StyleSheet.create({
   sectionTitleOld: {
     color: colors.grayMid,
     marginTop: 12,
+  },
+  emptyCard: {
+    backgroundColor: colors.white,
+    borderWidth: 0.5,
+    borderColor: colors.grayBorder,
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.grayDark,
+    textAlign: 'center',
+  },
+  emptySub: {
+    fontSize: 9,
+    color: colors.grayMid,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  emptySyncBtn: {
+    backgroundColor: colors.rustMid,
+    borderRadius: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  emptySyncBtnText: {
+    color: colors.white,
+    fontSize: 10,
+    fontWeight: '700',
   },
   projectCard: {
     backgroundColor: colors.white,
@@ -457,9 +632,6 @@ const styles = StyleSheet.create({
   chipRust: {
     backgroundColor: colors.rustLight,
   },
-  chipBlue: {
-    backgroundColor: colors.blueLight,
-  },
   chipGray: {
     backgroundColor: colors.grayLight,
     borderWidth: 0.5,
@@ -468,10 +640,6 @@ const styles = StyleSheet.create({
   chipTextRust: {
     fontSize: 8,
     color: colors.rust,
-  },
-  chipTextBlue: {
-    fontSize: 8,
-    color: colors.blueDark,
   },
   chipTextGray: {
     fontSize: 8,

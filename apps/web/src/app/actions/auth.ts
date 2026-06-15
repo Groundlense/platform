@@ -1,12 +1,21 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { apiPost, apiGet } from "@/lib/api";
+import { apiPost, apiGet, ApiError } from "@/lib/api";
 import { setSession, clearSession, getToken } from "@/lib/session";
 
+/** Only allow same-origin path redirects (e.g. "/projects/abc/portal"). */
+function safeRedirectTarget(raw: unknown): string {
+  if (typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//")) {
+    return raw;
+  }
+  return "/dashboard";
+}
+
 export async function loginAction(formData: FormData) {
-  const identifier = formData.get("identifier") as string;
-  const password = formData.get("password") as string;
+  const identifier = (formData.get("identifier") as string | null)?.trim();
+  const password = formData.get("password") as string | null;
+  const redirectTo = safeRedirectTarget(formData.get("redirect"));
 
   if (!identifier || !password) {
     return { error: "Email and password are required" };
@@ -24,63 +33,76 @@ export async function loginAction(formData: FormData) {
 
     await setSession(result.accessToken, result.refreshToken, user);
   } catch (err: unknown) {
-    if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) throw err;
-    
-    console.warn("API login failed, falling back to demo session:", err);
-    
-    const email = identifier.toLowerCase();
-    let firstName = "Demo";
-    let lastName = "User";
-    let orgName = "XYZ Infra Pvt Ltd";
-    let orgType = "EPC_CONTRACTOR";
-    let employeeCode = "";
-    let roles = ["EPC_ADMIN"];
-    let permissions = ["PROJECT_VIEW", "PROJECT_EDIT", "REPORT_VIEW"];
-
-    if (email.includes("admin@xyzinfra.com") || email.includes("pm@xyzinfra.com") || email.includes("viewer@xyzinfra.com") || email.includes("contractor")) {
-      firstName = email.includes("admin") ? "EPC" : email.includes("pm") ? "Project" : "EPC";
-      lastName = email.includes("admin") ? "Admin" : email.includes("pm") ? "Manager" : "Viewer";
-      orgName = "XYZ Infra Pvt Ltd";
-      orgType = "EPC_CONTRACTOR";
-      roles = email.includes("admin") ? ["EPC_ADMIN"] : email.includes("pm") ? ["EPC_MANAGER"] : ["EPC_VIEWER"];
-    } else if (email.includes("abcgeotech.com") || email.includes("engineer") || email.includes("gt")) {
-      firstName = "Geo";
-      lastName = email.includes("admin") ? "Admin" : email.includes("pm") ? "Manager" : "Engineer";
-      orgName = "ABC Geotech Pvt Ltd";
-      orgType = "GEOTECH_CONTRACTOR";
-      roles = email.includes("admin") ? ["GEOTECH_ADMIN"] : email.includes("pm") ? ["GEOTECH_MANAGER"] : ["GEOTECH_ENGINEER"];
-    } else if (email.includes("superadmin")) {
-      firstName = "Groundlense";
-      lastName = "Superadmin";
-      orgName = "Groundlense Platform";
-      orgType = "GEOTECH_CONTRACTOR";
-      roles = ["SUPER_ADMIN"];
-    } else if (email.startsWith("gl-w-") || email.includes("worker")) {
-      firstName = "Field";
-      lastName = "Worker";
-      orgName = "ABC Geotech Pvt Ltd";
-      orgType = "GEOTECH_CONTRACTOR";
-      employeeCode = identifier.toUpperCase();
-      roles = ["FIELD_WORKER"];
+    if (err instanceof ApiError) {
+      return {
+        error:
+          err.status === 401
+            ? "Invalid email or password."
+            : err.message,
+      };
     }
+    return { error: "Unable to reach the server. Please try again." };
+  }
 
-    const mockUser = {
-      id: "demo-user-id",
-      organizationId: "demo-org-id",
-      firstName,
-      lastName,
-      email: identifier,
-      employeeCode,
-      organization: {
-        id: "demo-org-id",
-        name: orgName,
-        type: orgType,
-      },
-      roles,
-      permissions,
-    };
+  // redirect() is called outside the try/catch so its control-flow error
+  // (NEXT_REDIRECT) is never swallowed.
+  redirect(redirectTo);
+}
 
-    await setSession("demo_access_token", "demo_refresh_token", mockUser);
+/**
+ * Public company self-registration: creates the organization + first admin
+ * user via POST /auth/register, then starts a session exactly like loginAction.
+ */
+export async function registerAction(formData: FormData) {
+  const orgName = (formData.get("orgName") as string | null)?.trim();
+  const orgType = (formData.get("orgType") as string | null)?.trim();
+  const gstin = (formData.get("gstin") as string | null)?.trim();
+  const city = (formData.get("city") as string | null)?.trim();
+  const state = (formData.get("state") as string | null)?.trim();
+  const firstName = (formData.get("firstName") as string | null)?.trim();
+  const lastName = (formData.get("lastName") as string | null)?.trim();
+  const email = (formData.get("email") as string | null)?.trim();
+  const mobile = (formData.get("mobile") as string | null)?.trim();
+  const password = formData.get("password") as string | null;
+
+  if (!orgName) return { error: "Company name is required." };
+  if (!orgType) return { error: "Organization type is required." };
+  if (!firstName) return { error: "First name is required." };
+  if (!email) return { error: "Work email is required." };
+  if (!password || password.length < 8) {
+    return { error: "Password must be at least 8 characters." };
+  }
+
+  try {
+    const result = await apiPost<{ accessToken: string; refreshToken: string }>(
+      "/auth/register",
+      {
+        organization: {
+          name: orgName,
+          type: orgType,
+          ...(gstin ? { gstin } : {}),
+          ...(city ? { city } : {}),
+          ...(state ? { state } : {}),
+        },
+        admin: {
+          firstName,
+          ...(lastName ? { lastName } : {}),
+          email,
+          password,
+          ...(mobile ? { mobile } : {}),
+        },
+      }
+    );
+
+    // Same session bootstrap as loginAction
+    const user = await apiGet<Record<string, unknown>>("/auth/me", result.accessToken);
+    await setSession(result.accessToken, result.refreshToken, user);
+  } catch (err: unknown) {
+    if (err instanceof ApiError) {
+      // 409 carries the duplicate email / GSTIN message from the server
+      return { error: err.message };
+    }
+    return { error: "Unable to reach the server. Please try again." };
   }
 
   redirect("/dashboard");

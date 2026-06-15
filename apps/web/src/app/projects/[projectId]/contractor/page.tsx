@@ -1,6 +1,7 @@
 import { getToken } from "@/lib/session";
 import { getCurrentUser } from "@/app/actions/auth";
 import { getProjects, getProjectBoreholes, getProjectDashboard, getProjectSites } from "@/lib/api/endpoints";
+import { fetchProjectPayments, fetchBoreholeReportData } from "@/app/actions/contractor";
 import ContractorClient from "@/components/contractor/ContractorClient";
 
 export default async function ContractorPortalPage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -12,6 +13,8 @@ export default async function ContractorPortalPage({ params }: { params: Promise
   let boreholes: any[] = [];
   let dashboard: any = null;
   let sites: any[] = [];
+  let payments: any[] = [];
+  const reportData: Record<string, any> = {};
 
   if (token) {
     try {
@@ -28,6 +31,19 @@ export default async function ContractorPortalPage({ params }: { params: Promise
     } catch (err) {
       console.error("Contractor portal fetch error:", err);
     }
+
+    try {
+      const [pays, reports] = await Promise.all([
+        fetchProjectPayments(projectId),
+        Promise.all(boreholes.map((b: any) => fetchBoreholeReportData(b.id))),
+      ]);
+      payments = pays;
+      reports.forEach((report, i) => {
+        if (report) reportData[boreholes[i].id] = report;
+      });
+    } catch (err) {
+      console.error("Contractor portal detail fetch error:", err);
+    }
   }
 
   return (
@@ -37,6 +53,8 @@ export default async function ContractorPortalPage({ params }: { params: Promise
       dashboard={dashboard}
       sites={sites}
       user={user}
+      payments={payments}
+      reportData={reportData}
     />
   );
 }
