@@ -12,6 +12,8 @@ import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
+import { api } from '../services/api';
+import MockCameraModal from '../components/MockCameraModal';
 
 export default function SampleCollectionScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, sessionId, currentDepth, intervalNo, sptData, soilData } = route.params;
@@ -64,12 +66,36 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
       ? Math.round((recoveryCm / penetrationCm) * 100)
       : null;
 
-  // No camera module is installed — honest disabled state, never claim a photo exists.
-  const handlePhotoUnavailable = () => {
-    Alert.alert(
-      'Camera integration coming soon / कैमरा जल्द',
-      'Photo capture is not available in this version. Continue without photo — it is not required to save the sample. / इस संस्करण में फोटो सुविधा नहीं है।'
-    );
+  const [cameraVisible, setCameraVisible] = useState(false);
+  const [activePhotoType, setActivePhotoType] = useState<string>('Slate Board Photo');
+  const [slatePhotoCaptured, setSlatePhotoCaptured] = useState(false);
+  const [sealedPhotoCaptured, setSealedPhotoCaptured] = useState(false);
+
+  const handleCapturePhoto = async (base64Data: string, filename: string) => {
+    if (activePhotoType === 'Slate Board Photo') {
+      setSlatePhotoCaptured(true);
+    } else {
+      setSealedPhotoCaptured(true);
+    }
+
+    const intervalId = `interval-${borehole.id}-${intervalNo}`;
+    try {
+      await api.uploadMedia(intervalId, base64Data, filename);
+    } catch (err) {
+      // Offline fallback: queue sync operation
+      await syncManager.queueOperation(
+        'PHOTO',
+        `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        'CREATE',
+        {
+          intervalId,
+          fileName: filename,
+          mimeType: 'image/jpeg',
+          base64Data,
+        },
+        sessionId
+      );
+    }
   };
 
   const udsChecksOk = !isUds || (waxConfirmed && uprightConfirmed);
@@ -345,17 +371,29 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
           <Text style={styles.slateSub}>
             Hold slate showing: BH ID · Depth · Date (like: {bhPrefix} · {currentDepth.toFixed(1)}m · {new Date().toLocaleDateString('en-GB')})
           </Text>
-          <TouchableOpacity style={styles.disabledCameraBtn} onPress={handlePhotoUnavailable}>
-            <Text style={styles.disabledCameraText}>
-              📷 Camera integration coming soon / कैमरा जल्द
+          <TouchableOpacity
+            style={[styles.cameraBtn, slatePhotoCaptured && styles.cameraBtnDone]}
+            onPress={() => {
+              setActivePhotoType('Slate Board Photo');
+              setCameraVisible(true);
+            }}
+          >
+            <Text style={[styles.cameraText, slatePhotoCaptured && styles.cameraTextDone]}>
+              {slatePhotoCaptured ? '✓ Slate Board Photo Captured / फोटो ले लिया गया' : '📷 Capture Slate Photo / स्लेट फोटो लें'}
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Sealed tube photo — honestly unavailable, does not block */}
-        <TouchableOpacity style={styles.disabledCameraBtnWide} onPress={handlePhotoUnavailable}>
-          <Text style={styles.disabledCameraText}>
-            📷 {t('sealedPhoto', lang)} — camera coming soon / कैमरा जल्द
+        <TouchableOpacity
+          style={[styles.cameraBtnWide, sealedPhotoCaptured && styles.cameraBtnDone]}
+          onPress={() => {
+            setActivePhotoType('Sealed Tube Photo');
+            setCameraVisible(true);
+          }}
+        >
+          <Text style={[styles.cameraTextWide, sealedPhotoCaptured && styles.cameraTextDone]}>
+            {sealedPhotoCaptured ? '✓ Sealed Tube Photo Captured / फोटो ले लिया गया' : `📷 ${t('sealedPhoto', lang)} / सील ट्यूब फोटो`}
           </Text>
         </TouchableOpacity>
 
@@ -419,6 +457,16 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
           </Text>
         ) : null}
       </ScrollView>
+
+      {/* Simulated Viewfinder Overlay */}
+      <MockCameraModal
+        visible={cameraVisible}
+        onClose={() => setCameraVisible(false)}
+        onCapture={handleCapturePhoto}
+        boreholeCode={borehole.boreholeCode}
+        depth={currentDepth}
+        photoType={activePhotoType}
+      />
     </View>
   );
 }
@@ -629,7 +677,7 @@ const styles = StyleSheet.create({
     color: '#633806',
     marginTop: 2,
   },
-  disabledCameraBtn: {
+  cameraBtn: {
     backgroundColor: colors.grayLight,
     borderWidth: 0.5,
     borderColor: colors.grayBorder,
@@ -637,9 +685,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: 'center',
     marginTop: 8,
-    opacity: 0.7,
   },
-  disabledCameraBtnWide: {
+  cameraBtnWide: {
     backgroundColor: colors.grayLight,
     borderWidth: 0.5,
     borderColor: colors.grayBorder,
@@ -648,12 +695,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
-    opacity: 0.7,
   },
-  disabledCameraText: {
+  cameraBtnDone: {
+    backgroundColor: colors.greenLight,
+    borderColor: colors.greenMid,
+  },
+  cameraText: {
     fontSize: 9,
-    color: colors.grayMid,
+    color: colors.grayDark,
     fontWeight: '700',
+  },
+  cameraTextWide: {
+    fontSize: 9,
+    color: colors.grayDark,
+    fontWeight: '700',
+  },
+  cameraTextDone: {
+    color: colors.greenDark,
   },
   confirmBox: {
     backgroundColor: colors.grayLight,

@@ -146,3 +146,56 @@ export async function fetchSampleLabResult(sampleId: string): Promise<any | null
     return null;
   }
 }
+
+export async function createTeamAction(
+  organizationId: string,
+  payload: { code: string; name: string; description?: string }
+): Promise<PortalActionResult<any>> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const team = await apiPost<any>(`/organizations/${organizationId}/teams`, payload, token);
+    return { success: true, data: team };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to create team.") };
+  }
+}
+
+export async function addTeamMemberAction(
+  teamId: string,
+  userId: string
+): Promise<PortalActionResult<any>> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const res = await apiPost<any>(`/teams/${teamId}/members`, { userId }, token);
+    return { success: true, data: res };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to add team member.") };
+  }
+}
+
+export async function fetchOrgTeams(organizationId: string): Promise<any[]> {
+  const token = await getToken();
+  if (!token) return [];
+  try {
+    const teams = await apiGet<any[]>(`/organizations/${organizationId}/teams`, token);
+    return Array.isArray(teams) ? teams : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function addProjectMemberAction(
+  projectId: string,
+  userId: string
+): Promise<PortalActionResult<any>> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const res = await apiPost<any>(`/projects/${projectId}/members`, { userId }, token);
+    return { success: true, data: res };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to add project member.") };
+  }
+}

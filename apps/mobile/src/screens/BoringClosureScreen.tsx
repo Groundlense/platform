@@ -7,10 +7,12 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { colors, typography } from '../utils/theme';
+import { colors } from '../utils/theme';
 import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
+import { api } from '../services/api';
+import MockCameraModal from '../components/MockCameraModal';
 
 function formatDate(iso?: string | null): string {
   if (!iso) return '—';
@@ -59,6 +61,11 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
   // GWT confirmation defaults to what was actually recorded
   const [gwtEncountered, setGwtEncountered] = useState<boolean | null>(null);
 
+  const [maxIntervalNo, setMaxIntervalNo] = useState<number>(1);
+
+  const [cameraVisible, setCameraVisible] = useState(false);
+  const [photoCaptured, setPhotoCaptured] = useState(false);
+
   useEffect(() => {
     (async () => {
       const [sessions, intervals, samples, waterObs, user] = await Promise.all([
@@ -86,6 +93,12 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
             : max,
         null as number | null,
       );
+
+      const maxIvNo = completedIntervals.reduce(
+        (max: number, iv: any) => (iv.intervalNo > max ? iv.intervalNo : max),
+        1
+      );
+      setMaxIntervalNo(maxIvNo);
 
       // Prefer the IS 6935 24-hr stable reading, else the latest observation
       const stable = [...waterObs].reverse().find((o: any) => o.readingType === 'STABILIZED_LEVEL');
@@ -121,7 +134,7 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
 
       setGwtEncountered(latestObs ? true : false);
     })();
-  }, [borehole.id]);
+  }, [borehole.id, borehole.currentDepth, borehole.startedAt]);
 
   const handleSignature = () => {
     if (readOnly || !summary) return;
@@ -134,11 +147,29 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
 
   const handleFinalPhoto = () => {
     if (readOnly) return;
-    // No camera module integrated — never claim a photo was captured.
-    Alert.alert(
-      'Camera Coming Soon / कैमरा जल्द',
-      'The final borehole photo requires the device app build with camera permissions. The closure record will sync without a photo for now.'
-    );
+    setCameraVisible(true);
+  };
+
+  const handleCapturePhoto = async (base64Data: string, filename: string) => {
+    setPhotoCaptured(true);
+
+    const intervalId = `interval-${borehole.id}-${maxIntervalNo}`;
+    try {
+      await api.uploadMedia(intervalId, base64Data, filename);
+    } catch {
+      await syncManager.queueOperation(
+        'PHOTO',
+        `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        'CREATE',
+        {
+          intervalId,
+          fileName: filename,
+          mimeType: 'image/jpeg',
+          base64Data,
+        },
+        route.params.sessionId || null
+      );
+    }
   };
 
   const handleSubmit = async () => {
@@ -187,7 +218,7 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
           },
         ]
       );
-    } catch (err) {
+    } catch {
       Alert.alert('Error', 'Failed to close borehole');
     }
   };
@@ -251,7 +282,7 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
           </View>
           <View style={styles.sumRow}>
             <Text style={styles.sumLabel}>Photos uploaded / फोटो</Text>
-            <Text style={styles.sumVal}>None (camera coming soon)</Text>
+            <Text style={styles.sumVal}>{photoCaptured ? '1 photo captured' : 'None'}</Text>
           </View>
           <View style={styles.sumRow}>
             <Text style={styles.sumLabel}>Water table / भूजल स्तर</Text>
@@ -306,9 +337,13 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
         </View>
 
         {/* Final photo — camera module not yet integrated, honest state */}
-        <TouchableOpacity style={styles.cameraBtn} onPress={handleFinalPhoto}>
-          <Text style={styles.cameraBtnText}>
-            📷 Final borehole photo — coming soon / जल्द
+        <TouchableOpacity
+          style={[styles.cameraBtn, photoCaptured && styles.cameraBtnDone]}
+          onPress={handleFinalPhoto}
+          disabled={readOnly}
+        >
+          <Text style={[styles.cameraBtnText, photoCaptured && styles.cameraBtnTextDone]}>
+            {photoCaptured ? '✓ Final Photo Captured / फोटो ले लिया गया' : '📷 Final Borehole Photo / बोरहोल फोटो'}
           </Text>
         </TouchableOpacity>
 
@@ -345,6 +380,16 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Simulated Viewfinder Overlay */}
+      <MockCameraModal
+        visible={cameraVisible}
+        onClose={() => setCameraVisible(false)}
+        onCapture={handleCapturePhoto}
+        boreholeCode={borehole.boreholeCode}
+        depth={summary?.finalDepth ?? borehole.currentDepth ?? 0}
+        photoType="Final Borehole Photo"
+      />
     </View>
   );
 }

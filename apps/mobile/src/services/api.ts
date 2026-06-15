@@ -203,4 +203,23 @@ export const api = {
     // { success, processedCount, results: [{ operationId, status, error? }] }
     return response.data;
   },
+
+  // --- Media Upload ---
+  async uploadMedia(intervalId: string, base64Data: string, filename: string) {
+    const formData = new FormData();
+    formData.append('file', {
+      uri: `data:image/jpeg;base64,${base64Data}`,
+      name: filename,
+      type: 'image/jpeg',
+    } as any);
+
+    const token = await storage.getToken();
+    const response = await apiClient.post(`/intervals/${intervalId}/media`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  },
 };

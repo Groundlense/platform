@@ -8,10 +8,13 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { colors, typography } from '../utils/theme';
+import { colors } from '../utils/theme';
 import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { calculateRawN, calculateOverburdenCorrection, applyDilatancyCorrection, getDensityInterpretation } from '../utils/calculations';
+import { api } from '../services/api';
+import { syncManager } from '../services/sync';
+import MockCameraModal from '../components/MockCameraModal';
 
 export default function SPTEntryScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, sessionId, currentDepth, intervalNo } = route.params ?? {};
@@ -31,8 +34,9 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
 
   // Real recorded water table (undefined until the worker logs one)
   const [waterTableDepth, setWaterTableDepth] = useState<number | undefined>(undefined);
-  // Real completed-interval count for the loop tracker
-  const [completedIntervals, setCompletedIntervals] = useState(0);
+
+  const [cameraVisible, setCameraVisible] = useState(false);
+  const [photoCaptured, setPhotoCaptured] = useState(false);
 
   useEffect(() => {
     if (!borehole?.id) return;
@@ -43,8 +47,6 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
         const depth = Number(latest.depth);
         if (Number.isFinite(depth)) setWaterTableDepth(depth);
       }
-      const intervals = await storage.getIntervals(borehole.id);
-      setCompletedIntervals(intervals.filter((iv: any) => iv.isCompleted).length);
     })();
   }, [borehole?.id]);
 
@@ -100,11 +102,29 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
   };
 
   const handleTakePhoto = () => {
-    // No camera module is integrated yet — never claim a photo was captured.
-    Alert.alert(
-      'Camera Coming Soon / कैमरा जल्द',
-      'Photo capture requires the device app build with camera permissions. The boring record will sync without a photo for now.'
-    );
+    setCameraVisible(true);
+  };
+
+  const handleCapturePhoto = async (base64Data: string, filename: string) => {
+    setPhotoCaptured(true);
+
+    const intervalId = `interval-${borehole.id}-${intervalNo}`;
+    try {
+      await api.uploadMedia(intervalId, base64Data, filename);
+    } catch {
+      await syncManager.queueOperation(
+        'PHOTO',
+        `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        'CREATE',
+        {
+          intervalId,
+          fileName: filename,
+          mimeType: 'image/jpeg',
+          base64Data,
+        },
+        sessionId
+      );
+    }
   };
 
   const handleNext = () => {
@@ -327,9 +347,12 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
         )}
 
         {/* Photo Button — camera module not yet integrated, honest state */}
-        <TouchableOpacity style={styles.photoBtn} onPress={handleTakePhoto}>
-          <Text style={styles.photoBtnText}>
-            📷 {t('splitSpoonPhoto', lang)} — coming soon / जल्द
+        <TouchableOpacity
+          style={[styles.photoBtn, photoCaptured && styles.photoBtnDone]}
+          onPress={handleTakePhoto}
+        >
+          <Text style={[styles.photoBtnText, photoCaptured && styles.photoBtnTextDone]}>
+            {photoCaptured ? '✓ Split Spoon Photo Captured / फोटो ले लिया गया' : `📷 ${t('splitSpoonPhoto', lang)}`}
           </Text>
         </TouchableOpacity>
 
@@ -348,6 +371,16 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
           <Text style={styles.nextBtnText}>{t('next', lang)} → Soil description</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Simulated Viewfinder Overlay */}
+      <MockCameraModal
+        visible={cameraVisible}
+        onClose={() => setCameraVisible(false)}
+        onCapture={handleCapturePhoto}
+        boreholeCode={borehole.boreholeCode}
+        depth={currentDepth}
+        photoType="Split Spoon Photo"
+      />
     </View>
   );
 }

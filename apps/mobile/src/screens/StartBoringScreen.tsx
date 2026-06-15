@@ -13,6 +13,7 @@ import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
 import { api } from '../services/api';
+import MockCameraModal from '../components/MockCameraModal';
 
 const SPT_INTERVAL_M = 1.5;
 
@@ -34,6 +35,11 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
 
   const [weather, setWeather] = useState('Clear');
   const [starting, setStarting] = useState(false);
+  
+  const [cameraVisible, setCameraVisible] = useState(false);
+  const [rigPhotoCaptured, setRigPhotoCaptured] = useState(false);
+  const [rigPhotoBase64, setRigPhotoBase64] = useState<string | null>(null);
+  const [rigPhotoFilename, setRigPhotoFilename] = useState<string | null>(null);
 
   // Real resume context — computed from sessions/intervals, never invented
   const [resumeDepth, setResumeDepth] = useState(0);
@@ -154,6 +160,27 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
         { status: 'IN_PROGRESS', weather },
         sessionId
       );
+
+      // Upload captured rig photo
+      if (rigPhotoBase64 && rigPhotoFilename) {
+        const intervalId = `interval-${borehole.id}-${nextIntervalNo}`;
+        try {
+          await api.uploadMedia(intervalId, rigPhotoBase64, rigPhotoFilename);
+        } catch (apiErr) {
+          await syncManager.queueOperation(
+            'PHOTO',
+            `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            'CREATE',
+            {
+              intervalId,
+              fileName: rigPhotoFilename,
+              mimeType: 'image/jpeg',
+              base64Data: rigPhotoBase64,
+            },
+            sessionId
+          );
+        }
+      }
 
       // Navigate to SPT entry loop screen
       navigation.replace('SPTEntry', {
@@ -295,11 +322,14 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
           </Text>
         </View>
 
-        {/* Rig photo — camera module not installed yet, do not fake a capture */}
+        {/* Rig photo */}
         <Text style={styles.fieldLabel}>Rig photo / रिग की फोटो</Text>
-        <TouchableOpacity style={[styles.cameraBtn, styles.cameraBtnDisabled]} disabled>
-          <Text style={styles.cameraBtnTextDisabled}>
-            📷 Camera integration coming soon / कैमरा जल्द
+        <TouchableOpacity
+          style={[styles.cameraBtn, rigPhotoCaptured && styles.cameraBtnDone]}
+          onPress={() => setCameraVisible(true)}
+        >
+          <Text style={[styles.cameraBtnText, rigPhotoCaptured && styles.cameraBtnTextDone]}>
+            {rigPhotoCaptured ? '✓ Rig Photo Captured / फोटो ले लिया गया' : '📷 Capture Rig Photo / रिग की फोटो लें'}
           </Text>
         </TouchableOpacity>
 
@@ -331,6 +361,20 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Simulated Viewfinder Overlay */}
+      <MockCameraModal
+        visible={cameraVisible}
+        onClose={() => setCameraVisible(false)}
+        onCapture={(base64, filename) => {
+          setRigPhotoCaptured(true);
+          setRigPhotoBase64(base64);
+          setRigPhotoFilename(filename);
+        }}
+        boreholeCode={borehole.boreholeCode}
+        depth={startDepth}
+        photoType="Rig Photo"
+      />
     </View>
   );
 }
@@ -496,21 +540,24 @@ const styles = StyleSheet.create({
   cameraBtn: {
     backgroundColor: colors.grayLight,
     borderWidth: 0.5,
-    borderColor: colors.greenMid,
+    borderColor: colors.grayBorder,
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
   },
-  cameraBtnDisabled: {
-    borderColor: colors.grayBorder,
-    opacity: 0.7,
+  cameraBtnDone: {
+    backgroundColor: colors.greenLight,
+    borderColor: colors.greenMid,
   },
-  cameraBtnTextDisabled: {
+  cameraBtnText: {
     fontSize: 11,
-    color: colors.grayMid,
+    color: colors.grayDark,
     fontWeight: '700',
+  },
+  cameraBtnTextDone: {
+    color: colors.greenDark,
   },
   horizontalRow: {
     flexDirection: 'row',

@@ -8,10 +8,11 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { colors, typography } from '../utils/theme';
-import { t } from '../utils/translations';
+import { colors } from '../utils/theme';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
+import { api } from '../services/api';
+import MockCameraModal from '../components/MockCameraModal';
 
 const WEATHERING_GRADES = [
   { key: 'FRESH', en: 'Fresh', hi: 'ताज़ा' },
@@ -30,6 +31,31 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
   const [tcr, setTcr] = useState(''); // total core recovery in cm
   const [rqdPieces, setRqdPieces] = useState(''); // sum of pieces >= 10cm in cm
   const [weathering, setWeathering] = useState<string | null>(null);
+
+  const [cameraVisible, setCameraVisible] = useState(false);
+  const [photoCaptured, setPhotoCaptured] = useState(false);
+
+  const handleCapturePhoto = async (base64Data: string, filename: string) => {
+    setPhotoCaptured(true);
+
+    const intervalId = `interval-${borehole.id}-${intervalNo}`;
+    try {
+      await api.uploadMedia(intervalId, base64Data, filename);
+    } catch {
+      await syncManager.queueOperation(
+        'PHOTO',
+        `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        'CREATE',
+        {
+          intervalId,
+          fileName: filename,
+          mimeType: 'image/jpeg',
+          base64Data,
+        },
+        sessionId
+      );
+    }
+  };
 
   // Missing navigation params — never fabricate a borehole.
   if (!borehole?.id || currentDepth == null || intervalNo == null) {
@@ -153,7 +179,7 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
           },
         ]
       );
-    } catch (err) {
+    } catch {
       Alert.alert('Error', 'Failed to save rock coring run');
     }
   };
@@ -237,15 +263,12 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
 
         {/* Core box photo — camera module not yet integrated */}
         <TouchableOpacity
-          style={styles.photoBtn}
-          onPress={() =>
-            Alert.alert(
-              'Camera Coming Soon / कैमरा जल्द',
-              'Core box photo (IS 4078) requires the device app build with camera permissions. The run will sync without a photo for now.'
-            )
-          }
+          style={[styles.photoBtn, photoCaptured && styles.photoBtnDone]}
+          onPress={() => setCameraVisible(true)}
         >
-          <Text style={styles.photoBtnText}>📷 Core box photo — coming soon / जल्द</Text>
+          <Text style={[styles.photoBtnText, photoCaptured && styles.photoBtnTextDone]}>
+            {photoCaptured ? '✓ Core Box Photo Captured / फोटो ले लिया गया' : '📷 Core Box Photo / कोर बॉक्स फोटो'}
+          </Text>
         </TouchableOpacity>
 
         {/* Real-time Math Outputs */}
@@ -268,6 +291,16 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
           <Text style={styles.saveBtnText}>Save Run & Continue / सुरक्षित करें →</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Simulated Viewfinder Overlay */}
+      <MockCameraModal
+        visible={cameraVisible}
+        onClose={() => setCameraVisible(false)}
+        onCapture={handleCapturePhoto}
+        boreholeCode={borehole.boreholeCode}
+        depth={currentDepth}
+        photoType="Core Box Photo"
+      />
     </View>
   );
 }
@@ -367,16 +400,22 @@ const styles = StyleSheet.create({
   photoBtn: {
     backgroundColor: colors.grayLight,
     borderWidth: 0.5,
-    borderColor: colors.grayBorder,
+    borderColor: colors.greenMid,
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
     marginTop: 2,
   },
+  photoBtnDone: {
+    backgroundColor: colors.greenLight,
+  },
   photoBtnText: {
     fontSize: 10,
-    color: colors.grayMid,
+    color: colors.greenMid,
     fontWeight: '700',
+  },
+  photoBtnTextDone: {
+    color: colors.greenDark,
   },
   input: {
     backgroundColor: colors.grayLight,

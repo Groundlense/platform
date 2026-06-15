@@ -10,6 +10,8 @@ import {
   getRecentLogs,
   getProjectDashboard,
   getLabResult,
+  getOrgTeams,
+  getUsers,
 } from "@/lib/api/endpoints";
 import PortalClient from "@/components/portal/PortalClient";
 
@@ -27,6 +29,8 @@ export default async function PortalPage({ params }: { params: Promise<{ project
   let nablLabs: any[] = [];
   let activityLogs: any[] = [];
   let projectDashboard: any = null;
+  let teams: any[] = [];
+  let orgUsers: any[] = [];
 
   if (token) {
     try {
@@ -39,16 +43,28 @@ export default async function PortalPage({ params }: { params: Promise<{ project
       currentProject = projects.find((p: any) => p.id === projectId) || null;
 
       // Phase 2: Extended data (parallel, wrapped in try-catch for graceful degradation)
-      const [membersRes, labsRes, logsRes, dashboardRes] = await Promise.allSettled([
+      const [membersRes, labsRes, logsRes, dashboardRes, usersRes] = await Promise.allSettled([
         getProjectMembers(projectId, token),
         getNablLabs(token),
         getRecentLogs(token),
         getProjectDashboard(projectId, token),
+        getUsers(token),
       ]);
       members = membersRes.status === "fulfilled" ? membersRes.value : [];
       nablLabs = labsRes.status === "fulfilled" ? labsRes.value : [];
       activityLogs = logsRes.status === "fulfilled" ? logsRes.value : [];
       projectDashboard = dashboardRes.status === "fulfilled" ? dashboardRes.value : null;
+      orgUsers = usersRes.status === "fulfilled" ? usersRes.value : [];
+
+      // Fetch teams if organizationId is present
+      const orgId = user?.organizationId as string | undefined;
+      if (orgId) {
+        try {
+          teams = await getOrgTeams(orgId, token);
+        } catch (err) {
+          console.warn("Failed to fetch teams:", err);
+        }
+      }
 
       // Phase 3: Fetch full report data for each borehole (includes intervals, samples, labResults, media, waterTable)
       if (boreholes.length > 0) {
@@ -100,6 +116,8 @@ export default async function PortalPage({ params }: { params: Promise<{ project
       nablLabs={nablLabs}
       activityLogs={activityLogs}
       projectDashboard={projectDashboard}
+      teams={teams}
+      orgUsers={orgUsers}
     />
   );
 }

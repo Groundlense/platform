@@ -84,6 +84,15 @@ export class TeamsService {
       where: {
         organizationId,
       },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: TEAM_MEMBER_USER_SELECT,
+            },
+          },
+        },
+      },
       orderBy: {
         code: 'asc',
       },

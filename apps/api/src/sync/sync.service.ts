@@ -4,6 +4,9 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as crypto from 'crypto';
 import { DatabaseService } from '../database/database.service';
 import { IntegrityService } from '../common/integrity/integrity.service';
 import {
@@ -162,6 +165,8 @@ export class SyncService {
         return this.applySampleCreate(op, userId);
       case 'WATER_LEVEL':
         return this.applyWaterLevelCreate(op, userId);
+      case 'PHOTO':
+        return this.applyPhotoCreate(op, userId);
       default:
         throw new Error(
           `Unsupported entity type ${op.entityType}`,
@@ -491,6 +496,62 @@ export class SyncService {
       },
       orderBy: {
         localVersion: 'desc',
+      },
+    });
+  }
+
+  private async applyPhotoCreate(
+    op: SyncOperationItemDto,
+    userId: string,
+  ) {
+    if (op.operationType !== 'CREATE') {
+      throw new Error(
+        `Unsupported operation ${op.operationType} for PHOTO`,
+      );
+    }
+
+    const payload = op.payloadJson ?? {};
+    const intervalId = payload.intervalId;
+    if (!intervalId) {
+      throw new Error('PHOTO payload missing intervalId');
+    }
+
+    const interval = await this.resolveInterval(intervalId);
+
+    let filePath = payload.filePath || '';
+    if (payload.base64Data) {
+      const buffer = Buffer.from(payload.base64Data, 'base64');
+      const filename = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.jpg`;
+      const uploadsDir = path.join(process.cwd(), 'uploads');
+      const absolutePath = path.join(uploadsDir, filename);
+
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      fs.writeFileSync(absolutePath, buffer);
+      filePath = filename;
+    }
+
+    const existing = await this.db.media.findFirst({
+      where: {
+        intervalId: interval.id,
+        fileName: payload.fileName,
+      },
+    });
+
+    if (existing) {
+      return;
+    }
+
+    await this.db.media.create({
+      data: {
+        intervalId: interval.id,
+        fileName: payload.fileName || 'photo.jpg',
+        filePath,
+        mimeType: payload.mimeType || 'image/jpeg',
+        mediaType: 'PHOTO',
+        uploadedByUserId: userId,
       },
     });
   }
