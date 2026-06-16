@@ -13,10 +13,14 @@ interface GeotechOrg {
   state: string | null;
 }
 
+import { useEffect } from "react";
+
 interface NewProjectModalProps {
   open: boolean;
   onClose: () => void;
   geotechOrgs: GeotechOrg[];
+  user: Record<string, unknown> | null;
+  orgType: string | null;
 }
 
 const INDIAN_STATES = [
@@ -29,7 +33,7 @@ const INDIAN_STATES = [
 const STEP_LABELS = ["Project details", "Boring setup", "Link parties", "Payment"];
 
 /* Matches .modal-overlay + .modal: 500px wide, rounded-xl, max-h 85vh */
-export default function NewProjectModal({ open, onClose, geotechOrgs }: NewProjectModalProps) {
+export default function NewProjectModal({ open, onClose, geotechOrgs, user, orgType }: NewProjectModalProps) {
   const router = useRouter();
   const [step, setStep] = useState(1);
 
@@ -48,6 +52,12 @@ export default function NewProjectModal({ open, onClose, geotechOrgs }: NewProje
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (open && orgType === "GEOTECH_CONTRACTOR" && user?.organizationId) {
+      setGeotechOrgId(user.organizationId as string);
+    }
+  }, [open, user, orgType]);
 
   if (!open) return null;
 
@@ -69,12 +79,23 @@ export default function NewProjectModal({ open, onClose, geotechOrgs }: NewProje
   const handleCreate = () => {
     if (isPending) return;
     if (!name.trim()) { setError("Project name is required."); setStep(1); return; }
-    if (!geotechOrgId.trim()) { setError("Select a geotech partner organization."); setStep(1); return; }
+    
+    let targetGeotechOrgId = geotechOrgId.trim();
+    if (orgType === "GEOTECH_CONTRACTOR" && user?.organizationId) {
+      targetGeotechOrgId = user.organizationId as string;
+    }
+    
+    if (!targetGeotechOrgId) {
+      setError("Select a geotech partner organization.");
+      setStep(1);
+      return;
+    }
+    
     setError(null);
     const fd = new FormData();
     fd.set("name", name.trim());
     if (stateVal) fd.set("state", stateVal);
-    fd.set("geotechOrganizationId", geotechOrgId.trim());
+    fd.set("geotechOrganizationId", targetGeotechOrgId);
     if (endDate) fd.set("endDate", endDate);
     startTransition(async () => {
       const res = await createProjectAction(fd);
@@ -148,6 +169,7 @@ export default function NewProjectModal({ open, onClose, geotechOrgs }: NewProje
               geotechOrgId={geotechOrgId} setGeotechOrgId={setGeotechOrgId}
               endDate={endDate} setEndDate={setEndDate}
               geotechOrgs={geotechOrgs}
+              orgType={orgType}
             />
           )}
           {step === 2 && <Step2 bhCount={bhCount} setBhCount={setBhCount} />}
@@ -251,12 +273,13 @@ function ModalSelect({ label, options, value, onChange, placeholder }: {
 }
 
 /* Step 1 — Project details (only fields the API actually persists) */
-function Step1({ name, setName, stateVal, setStateVal, geotechOrgId, setGeotechOrgId, endDate, setEndDate, geotechOrgs }: {
+function Step1({ name, setName, stateVal, setStateVal, geotechOrgId, setGeotechOrgId, endDate, setEndDate, geotechOrgs, orgType }: {
   name: string; setName: (v: string) => void;
   stateVal: string; setStateVal: (v: string) => void;
   geotechOrgId: string; setGeotechOrgId: (v: string) => void;
   endDate: string; setEndDate: (v: string) => void;
   geotechOrgs: GeotechOrg[];
+  orgType: string | null;
 }) {
   return (
     <div className="animate-fade-in">
@@ -265,29 +288,31 @@ function Step1({ name, setName, stateVal, setStateVal, geotechOrgId, setGeotechO
       <ModalSelect label="State" options={INDIAN_STATES} value={stateVal} onChange={setStateVal} placeholder="Select state" />
 
       {/* Geotech partner — real org directory (GET /organizations?type=GEOTECH_CONTRACTOR) */}
-      <div className="flex flex-col gap-1 mb-3">
-        <label className="text-[9px] font-semibold text-text-ter uppercase tracking-[0.4px]">Geotech partner organization</label>
-        {geotechOrgs.length === 0 ? (
-          <div className="text-[10px] text-text-ter bg-bg-raised border border-border-mid rounded-[5px] leading-relaxed" style={{ padding: "7px 9px" }}>
-            No geotech contractor organizations are registered yet — ask your geotech partner to register on GroundLense first.
-          </div>
-        ) : (
-          <select
-            className="bg-bg-raised border border-border-mid rounded-[5px] text-[11px] text-text-pri outline-none focus:border-rust-mid cursor-pointer"
-            style={{ padding: "7px 9px" }}
-            value={geotechOrgId}
-            onChange={(e) => setGeotechOrgId(e.target.value)}
-          >
-            <option value="">— Select geotech contractor —</option>
-            {geotechOrgs.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}{o.city || o.state ? ` — ${[o.city, o.state].filter(Boolean).join(", ")}` : ""}
-              </option>
-            ))}
-          </select>
-        )}
-        <div className="text-[9px] text-text-ter leading-relaxed">The selected organization is linked to this project and its field teams sync boring data.</div>
-      </div>
+      {orgType !== "GEOTECH_CONTRACTOR" && (
+        <div className="flex flex-col gap-1 mb-3">
+          <label className="text-[9px] font-semibold text-text-ter uppercase tracking-[0.4px]">Geotech partner organization</label>
+          {geotechOrgs.length === 0 ? (
+            <div className="text-[10px] text-text-ter bg-bg-raised border border-border-mid rounded-[5px] leading-relaxed" style={{ padding: "7px 9px" }}>
+              No geotech contractor organizations are registered yet — ask your geotech partner to register on GroundLense first.
+            </div>
+          ) : (
+            <select
+              className="bg-bg-raised border border-border-mid rounded-[5px] text-[11px] text-text-pri outline-none focus:border-rust-mid cursor-pointer"
+              style={{ padding: "7px 9px" }}
+              value={geotechOrgId}
+              onChange={(e) => setGeotechOrgId(e.target.value)}
+            >
+              <option value="">— Select geotech contractor —</option>
+              {geotechOrgs.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}{o.city || o.state ? ` — ${[o.city, o.state].filter(Boolean).join(", ")}` : ""}
+                </option>
+              ))}
+            </select>
+          )}
+          <div className="text-[9px] text-text-ter leading-relaxed">The selected organization is linked to this project and its field teams sync boring data.</div>
+        </div>
+      )}
 
       <ModalField label="Target completion date" placeholder="2026-12-31" type="date" value={endDate} onChange={setEndDate} />
     </div>

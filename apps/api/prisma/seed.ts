@@ -299,6 +299,7 @@ async function main() {
 
   // 1. GEOTECH_ADMIN permissions
   const geotechAdminPermissions = [
+    'PROJECT_CREATE',
     'PROJECT_VIEW',
     'PROJECT_EDIT',
     'WORKER_ASSIGN',
@@ -404,6 +405,47 @@ async function main() {
   for (const perm of epcViewerPermissions) {
     await assignPermission('EPC_VIEWER', perm);
   }
+  // Update any existing users without an employeeCode
+  const usersToUpdate = await prisma.user.findMany({
+    where: { OR: [{ employeeCode: null }, { employeeCode: '' }] },
+    include: { organization: true },
+  });
+
+  for (const user of usersToUpdate) {
+    let prefix = 'GL-USER';
+    if (user.organization.type === 'EPC_CONTRACTOR') {
+      prefix = 'GL-CON';
+    } else if (user.organization.type === 'GEOTECH_CONTRACTOR') {
+      prefix = 'GL-GEO';
+    } else if (user.organization.type === 'CLIENT') {
+      prefix = 'GL-CL';
+    } else if (user.organization.type === 'NABL_LAB') {
+      prefix = 'GL-LAB';
+    } else if (user.organization.type === 'IE_FIRM') {
+      prefix = 'GL-ENG';
+    } else if (user.organization.type === 'STRUCTURAL_CONSULTANT') {
+      prefix = 'GL-STR';
+    }
+
+    let isUnique = false;
+    let employeeCode = '';
+    while (!isUnique) {
+      const randNum = Math.floor(1000 + Math.random() * 9000);
+      employeeCode = `${prefix}-${randNum}`;
+      const existing = await prisma.user.findUnique({
+        where: { employeeCode },
+      });
+      if (!existing) {
+        isUnique = true;
+      }
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { employeeCode },
+    });
+  }
+
   console.log('✅ Roles seeded');
   console.log('✅ Permissions seeded');
 }

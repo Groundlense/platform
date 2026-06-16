@@ -18,6 +18,8 @@ const TEAM_MEMBER_USER_SELECT = {
   mobile: true,
   status: true,
   designation: true,
+  userType: true,
+  preferredLanguage: true,
 } as const;
 
 @Injectable()
