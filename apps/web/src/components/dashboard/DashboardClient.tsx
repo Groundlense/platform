@@ -69,7 +69,7 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
         )}
       </div>
 
-      <NewProjectModal open={modalOpen} onClose={() => setModalOpen(false)} geotechOrgs={geotechOrgs} />
+      <NewProjectModal open={modalOpen} onClose={() => setModalOpen(false)} geotechOrgs={geotechOrgs} user={user} orgType={orgType} />
     </div>
   );
 }

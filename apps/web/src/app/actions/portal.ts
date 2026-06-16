@@ -199,3 +199,25 @@ export async function addProjectMemberAction(
     return { success: false, error: toErrorMessage(err, "Failed to add project member.") };
   }
 }
+
+export async function createUserAction(payload: {
+  organizationId: string;
+  firstName: string;
+  lastName?: string;
+  email?: string;
+  employeeCode?: string;
+  roleCode: string;
+  designation?: string;
+  userType?: string;
+  preferredLanguage?: string;
+}): Promise<PortalActionResult<any>> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const res = await apiPost<any>("/users", payload, token);
+    return { success: true, data: res };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to create user.") };
+  }
+}
+

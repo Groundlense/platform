@@ -50,4 +50,29 @@ export class CreateUserDto {
   })
   @IsString()
   roleCode: string;
+
+  @ApiPropertyOptional({
+    description: 'Designation / role name of the user',
+    example: 'Driller',
+  })
+  @IsOptional()
+  @IsString()
+  designation?: string;
+
+  @ApiPropertyOptional({
+    description: 'User type / qualification of the user',
+    example: 'ITI',
+  })
+  @IsOptional()
+  @IsString()
+  userType?: string;
+
+  @ApiPropertyOptional({
+    description: 'Preferred language / status of the user',
+    example: 'On site',
+  })
+  @IsOptional()
+  @IsString()
+  preferredLanguage?: string;
 }
+

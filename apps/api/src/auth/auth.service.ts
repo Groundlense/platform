@@ -190,9 +190,40 @@ export class AuthService {
             },
           });
 
+        let prefix = 'GL-USER';
+        if (dto.organization.type === 'EPC_CONTRACTOR') {
+          prefix = 'GL-CON';
+        } else if (dto.organization.type === 'GEOTECH_CONTRACTOR') {
+          prefix = 'GL-GEO';
+        } else if (dto.organization.type === 'CLIENT') {
+          prefix = 'GL-CL';
+        } else if (dto.organization.type === 'NABL_LAB') {
+          prefix = 'GL-LAB';
+        } else if (dto.organization.type === 'IE_FIRM') {
+          prefix = 'GL-ENG';
+        } else if (dto.organization.type === 'STRUCTURAL_CONSULTANT') {
+          prefix = 'GL-STR';
+        }
+
+        let employeeCode = '';
+        let isUnique = false;
+        let attempts = 0;
+        while (!isUnique && attempts < 10) {
+          const randNum = Math.floor(1000 + Math.random() * 9000);
+          employeeCode = `${prefix}-${randNum}`;
+          const existing = await tx.user.findUnique({
+            where: { employeeCode },
+          });
+          if (!existing) {
+            isUnique = true;
+          }
+          attempts++;
+        }
+
         const admin = await tx.user.create({
           data: {
             organizationId: organization.id,
+            employeeCode: isUnique ? employeeCode : null,
             firstName: dto.admin.firstName,
             lastName: dto.admin.lastName,
             email: dto.admin.email,

@@ -25,6 +25,7 @@ import {
   addTeamMemberAction,
   fetchOrgTeams,
   addProjectMemberAction,
+  createUserAction,
   type BoreholeIntegrity,
 } from "@/app/actions/portal";
 
@@ -976,49 +977,79 @@ export default function PortalClient({
         setCrewMemberAddError("Name is required.");
         return;
       }
-      
-      // Generate GL ID based on role
-      let prefix = "GL-W";
-      if (newWorkerRole.toLowerCase().includes("driller")) prefix = "GL-D";
-      else if (newWorkerRole.toLowerCase().includes("engineer")) prefix = "GL-ENG";
-      else if (newWorkerRole.toLowerCase().includes("lab")) prefix = "GL-L";
-      
-      const generatedId = `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
-      
-      const newMember = {
-        id: `custom-tm-${Date.now()}`,
-        userId: `custom-user-${Date.now()}`,
-        user: {
-          id: `custom-user-${Date.now()}`,
-          firstName: newWorkerName.trim(),
-          lastName: "",
-          employeeCode: generatedId,
-          email: "fieldworker@groundlense.com",
-          qualification: newWorkerQual.trim() || "ITI",
-          role: newWorkerRole,
-          status: newWorkerStatus
-        },
-        role: newWorkerRole,
-        qualification: newWorkerQual.trim() || "ITI",
-        status: newWorkerStatus
-      };
 
-      setLocalTeams(prev => prev.map(t => {
-        if (t.id === teamId) {
-          return {
-            ...t,
-            members: [...(t.members || []), newMember]
-          };
-        }
-        return t;
-      }));
+      setMemberAddLoading(teamId);
+      setCrewMemberAddError("");
+      
+      const orgId = proj?.geotechOrganizationId || proj?.organizationId || (u as any)?.organizationId;
+      if (!orgId) {
+        setCrewMemberAddError("Organization ID could not be determined.");
+        setMemberAddLoading(null);
+        return;
+      }
 
+      // Determine backend roleCode
+      let roleCode = "FIELD_WORKER";
+      const normalizedRole = newWorkerRole.toLowerCase();
+      if (normalizedRole.includes("driller")) {
+        roleCode = "DRILLER";
+      } else if (normalizedRole.includes("engineer")) {
+        roleCode = "GEOTECH_ENGINEER";
+      } else if (normalizedRole.includes("lab")) {
+        roleCode = "LAB_TECHNICIAN";
+      }
+
+      const createRes = await createUserAction({
+        organizationId: orgId,
+        firstName: newWorkerName.trim(),
+        lastName: "",
+        roleCode,
+        designation: newWorkerRole,
+        userType: newWorkerQual.trim() || "ITI",
+        preferredLanguage: newWorkerStatus,
+      });
+
+      if (!createRes.success) {
+        setCrewMemberAddError(createRes.error || "Failed to create user.");
+        setMemberAddLoading(null);
+        return;
+      }
+
+      const newUser = createRes.data?.user || createRes.data;
+      if (!newUser || !newUser.id) {
+        setCrewMemberAddError("Failed to retrieve new user ID.");
+        setMemberAddLoading(null);
+        return;
+      }
+
+      // Add as project member first (so they are part of the project)
+      const projectMemberRes = await addProjectMemberAction(proj.id, newUser.id);
+      if (!projectMemberRes.success) {
+        setCrewMemberAddError(projectMemberRes.error || "Failed to add user to project.");
+        setMemberAddLoading(null);
+        return;
+      }
+
+      // Add to team members
+      const teamMemberRes = await addTeamMemberAction(teamId, newUser.id);
+      setMemberAddLoading(null);
+      if (!teamMemberRes.success) {
+        setCrewMemberAddError(teamMemberRes.error || "Failed to add user to team.");
+        return;
+      }
+
+      // Success: refresh data
+      router.refresh();
       setShowAddCrewMemberModal(null);
     }
   };
 
   // ── Setup tab: Drilling Teams state & handlers ──
   const [localTeams, setLocalTeams] = useState<any[]>(teams);
+
+  useEffect(() => {
+    setLocalTeams(teams);
+  }, [teams]);
   const [showAddTeamModal, setShowAddTeamModal] = useState(false);
   const [newTeamCode, setNewTeamCode] = useState("");
   const [newTeamName, setNewTeamName] = useState("");
@@ -1794,9 +1825,9 @@ export default function PortalClient({
                                         const tmu = tm.user || {};
                                         const tmName = `${tmu.firstName ?? ""} ${tmu.lastName ?? ""}`.trim() || "—";
                                         const glId = tmu.employeeCode || `GL-W-${tmu.id?.substring(0, 4) ?? "0000"}`;
-                                        const role = tm.role || tmu.role || "Worker";
-                                        const qual = tm.qualification || tmu.qualification || "ITI";
-                                        const status = tm.status || tmu.status || "On site";
+                                        const role = tm.role || tmu.designation || tmu.role || "Worker";
+                                        const qual = tm.qualification || tmu.userType || tmu.qualification || "ITI";
+                                        const status = tm.status || tmu.preferredLanguage || tmu.status || "On site";
 
                                         // pill coloring
                                         let pillClass = "p-r"; // default red (On site)
@@ -1886,7 +1917,7 @@ export default function PortalClient({
                           <tr key={m.id || i}>
                             <td className="font-mono text-[9px] text-amber-d">{mu.employeeCode ?? "—"}</td>
                             <td className="td-p">{name}</td>
-                            <td>{m.role ?? "Member"}</td>
+                            <td>{m.role ?? mu.designation ?? "Member"}</td>
                             <td className="text-[10px]">{mu.email ?? "—"}</td>
                             <td className="text-[10px]">{m.createdAt ? new Date(m.createdAt).toLocaleDateString("en-IN") : "—"}</td>
                             <td>

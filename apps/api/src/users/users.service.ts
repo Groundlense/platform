@@ -113,14 +113,63 @@ export class UsersService {
       10,
     );
 
+    let employeeCode = dto.employeeCode?.trim() || null;
+    if (!employeeCode) {
+      const org = await this.db.organization.findUnique({
+        where: { id: organizationId },
+        select: { type: true },
+      });
+
+      let prefix = 'GL-W';
+      if (dto.roleCode === 'FIELD_WORKER' || dto.roleCode === 'WORKER') {
+        prefix = 'GL-W';
+      } else if (dto.roleCode === 'DRILLER') {
+        prefix = 'GL-D';
+      } else if (dto.roleCode === 'LAB_TECHNICIAN') {
+        prefix = 'GL-L';
+      } else if (dto.roleCode === 'PROJECT_MANAGER' || dto.roleCode === 'PM') {
+        prefix = 'GL-GEO';
+      } else if (org?.type === 'EPC_CONTRACTOR') {
+        prefix = 'GL-CON';
+      } else if (org?.type === 'GEOTECH_CONTRACTOR') {
+        prefix = 'GL-GEO';
+      } else if (org?.type === 'CLIENT') {
+        prefix = 'GL-CL';
+      } else if (org?.type === 'NABL_LAB') {
+        prefix = 'GL-LAB';
+      } else if (org?.type === 'IE_FIRM') {
+        prefix = 'GL-ENG';
+      } else if (org?.type === 'STRUCTURAL_CONSULTANT') {
+        prefix = 'GL-STR';
+      }
+
+      let isUnique = false;
+      let attempts = 0;
+      while (!isUnique && attempts < 10) {
+        const randNum = Math.floor(1000 + Math.random() * 9000);
+        const candidate = `${prefix}-${randNum}`;
+        const existing = await this.db.user.findUnique({
+          where: { employeeCode: candidate },
+        });
+        if (!existing) {
+          employeeCode = candidate;
+          isUnique = true;
+        }
+        attempts++;
+      }
+    }
+
     const user = await this.db.user.create({
       data: {
         organizationId,
         firstName: dto.firstName,
         lastName: dto.lastName,
         email: dto.email,
-        employeeCode: dto.employeeCode,
+        employeeCode,
         passwordHash,
+        designation: dto.designation,
+        userType: dto.userType,
+        preferredLanguage: dto.preferredLanguage,
       },
       select: SAFE_USER_SELECT,
     });
