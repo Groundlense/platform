@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Groundlense ERD + RBAC</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --rust: #C0542A;
+    --rust-light: #D4693E;
+    --rust-dark: #8B3A1C;
+    --cream: #F5F0E8;
+    --cream-dark: #EDE6D8;
+    --dark: #1A1410;
+    --dark2: #2A1F18;
+    --dark3: #3A2E25;
+    --green: #2D5A1B;
+    --green-light: #4A8A2E;
+    --blue: #1B3A5A;
+    --blue-light: #2E6A9A;
+    --amber: #B87A20;
+    --amber-light: #D4952E;
+    --purple: #4A2A6A;
+    --purple-light: #7A4AAA;
+    --teal: #1A5A4A;
+    --teal-light: #2A8A6E;
+    --text-main: #F5F0E8;
+    --text-dim: #9A8A7A;
+    --border: rgba(192,84,42,0.3);
+    --border-dim: rgba(255,255,255,0.08);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--dark);
+    color: var(--text-main);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    overflow-x: auto;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    background: linear-gradient(135deg, var(--dark2) 0%, var(--rust-dark) 100%);
+    padding: 24px 32px;
+    border-bottom: 2px solid var(--rust);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    color: var(--cream);
+  }
+  .header-subtitle {
+    font-size: 10px;
+    color: var(--rust-light);
+    margin-top: 2px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .header-badge {
+    background: var(--rust);
+    color: var(--cream);
+    padding: 4px 12px;
+    border-radius: 2px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex;
+    background: var(--dark2);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    gap: 4px;
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 10px 20px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .tab:hover { color: var(--cream); }
+  .tab.active {
+    color: var(--rust-light);
+    border-bottom-color: var(--rust);
+  }
+
+  /* ── PANELS ── */
+  .panel { display: none; padding: 28px 32px; }
+  .panel.active { display: block; }
+
+  /* ── SECTION LABELS ── */
+  .section-label {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--rust-light);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── ERD CANVAS ── */
+  .erd-canvas {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .erd-canvas.two-col { grid-template-columns: repeat(2, 1fr); }
+  .erd-canvas.three-col { grid-template-columns: repeat(3, 1fr); }
+
+  /* ── TABLE CARD ── */
+  .table-card {
+    background: var(--dark2);
+    border: 1px solid var(--border-dim);
+    border-radius: 4px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .table-card:hover { border-color: var(--rust); }
+
+  .table-header {
+    padding: 8px 12px;
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .table-header .table-icon { font-size: 13px; }
+  .table-header .table-name { flex: 1; }
+  .table-header .table-tag {
+    font-size: 8px;
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+  }
+
+  .table-body { padding: 0; }
+  .field-row {
+    display: grid;
+    grid-template-columns: 18px 1fr auto;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+    font-size: 10px;
+  }
+  .field-row:hover { background: rgba(255,255,255,0.03); }
+  .field-key { font-size: 9px; color: var(--amber); font-weight: 700; }
+  .field-name { color: var(--cream); }
+  .field-type { color: var(--text-dim); font-size: 9px; }
+  .field-fk { color: var(--rust-light); font-size: 9px; }
+
+  /* Color themes per table group */
+  .th-core .table-header { background: linear-gradient(90deg, var(--rust-dark), var(--dark3)); color: var(--cream); }
+  .th-rbac .table-header { background: linear-gradient(90deg, var(--purple), var(--dark3)); color: var(--cream); }
+  .th-project .table-header { background: linear-gradient(90deg, var(--blue), var(--dark3)); color: var(--cream); }
+  .th-field .table-header { background: linear-gradient(90deg, var(--green), var(--dark3)); color: var(--cream); }
+  .th-lab .table-header { background: linear-gradient(90deg, var(--teal), var(--dark3)); color: var(--cream); }
+  .th-finance .table-header { background: linear-gradient(90deg, var(--amber), var(--dark3)); color: var(--dark); }
+  .th-audit .table-header { background: linear-gradient(90deg, var(--dark3), var(--dark3)); color: var(--text-dim); border-bottom: 1px solid var(--border); }
+
+  .tag-pk { background: var(--amber); color: var(--dark); }
+  .tag-fk { background: var(--rust); color: var(--cream); }
+  .tag-uk { background: var(--blue-light); color: var(--cream); }
+  .tag-idx { background: var(--dark3); color: var(--text-dim); }
+
+  /* ── RELATIONSHIP LINES LEGEND ── */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+    padding: 12px 16px;
+    background: var(--dark2);
+    border: 1px solid var(--border-dim);
+    border-radius: 4px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--text-dim); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* ── RBAC MATRIX ── */
+  .rbac-grid {
+    overflow-x: auto;
+    margin-bottom: 28px;
+  }
+  table.matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+  }
+  table.matrix th {
+    background: var(--dark3);
+    color: var(--text-dim);
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid var(--border-dim);
+    white-space: nowrap;
+  }
+  table.matrix th.role-col {
+    background: var(--rust-dark);
+    color: var(--cream);
+  }
+  table.matrix td {
+    padding: 6px 10px;
+    border: 1px solid var(--border-dim);
+    vertical-align: middle;
+  }
+  table.matrix tr:hover td { background: rgba(255,255,255,0.02); }
+  table.matrix td:first-child {
+    font-weight: 600;
+    color: var(--cream);
+    white-space: nowrap;
+  }
+
+  .perm { display: inline-block; padding: 2px 6px; border-radius: 2px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; margin: 1px; }
+  .perm-full { background: var(--green); color: #fff; }
+  .perm-read { background: var(--blue); color: #fff; }
+  .perm-write { background: var(--amber); color: var(--dark); }
+  .perm-none { background: var(--dark3); color: var(--text-dim); }
+  .perm-own { background: var(--rust); color: #fff; }
+  .perm-approve { background: var(--purple); color: #fff; }
+
+  /* ── ROLE CARDS ── */
+  .roles-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .role-card {
+    background: var(--dark2);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border-dim);
+  }
+  .role-card-header {
+    padding: 10px 14px;
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .role-card-body { padding: 10px 14px; }
+  .role-perm-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px 0;
+    border-top: 1px solid rgba(255,255,255,0.04);
+    font-size: 10px;
+  }
+  .role-perm-icon { font-size: 11px; flex-shrink: 0; margin-top: 1px; }
+  .role-perm-text { color: var(--text-dim); }
+  .role-perm-text strong { color: var(--cream); }
+  .role-code {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 2px;
+    background: rgba(0,0,0,0.3);
+    color: var(--text-dim);
+    margin-left: auto;
+  }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow-container {
+    background: var(--dark2);
+    border: 1px solid var(--border-dim);
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+  }
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .flow-node {
+    padding: 6px 14px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .flow-arrow { color: var(--rust); font-size: 14px; }
+  .flow-label { font-size: 9px; color: var(--text-dim); white-space: nowrap; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--dark); }
+  ::-webkit-scrollbar-thumb { background: var(--dark3); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--rust-dark); }
+
+  /* Divider */
+  .divider { height: 1px; background: var(--border-dim); margin: 24px 0; }
+
+  .note-box {
+    background: var(--dark3);
+    border-left: 3px solid var(--rust);
+    padding: 10px 14px;
+    border-radius: 0 4px 4px 0;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    line-height: 1.6;
+  }
+  .note-box strong { color: var(--rust-light); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">🗄 Groundlense — ERD + RBAC</div>
+    <div class="header-subtitle">Entity Relationship Diagram · Role-Based Access Control · v1.0</div>
+  </div>
+  <div class="header-badge">PostgreSQL Schema</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('erd')">ERD — All Tables</div>
+  <div class="tab" onclick="switchTab('rbac')">RBAC — Roles & Permissions</div>
+  <div class="tab" onclick="switchTab('roles')">Role Definitions</div>
+  <div class="tab" onclick="switchTab('flow')">Auth Flow</div>
+</div>
+
+<!-- ══════════════════════════════════════ -->
+<!-- TAB 1: ERD                            -->
+<!-- ══════════════════════════════════════ -->
+<div class="panel active" id="panel-erd">
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--rust)"></div>Core Identity Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div>RBAC Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>Project Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Field Data Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div>Lab Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>Finance Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--dark3)"></div>Audit Layer</div>
+  </div>
+
+  <!-- CORE IDENTITY -->
+  <div class="section-label">🔴 Core Identity Layer</div>
+  <div class="erd-canvas three-col">
+
+    <!-- COMPANIES -->
+    <div class="table-card th-core">
+      <div class="table-header">
+        <span class="table-icon">🏢</span>
+        <span class="table-name">companies</span>
+        <span class="table-tag tag-pk">CORE</span>
+      </div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">UK</span><span class="field-name">gl_company_id</span><span class="field-type">varchar(20)</span></div>
+        <div class="field-row"><span></span><span class="field-name">name</span><span class="field-type">varchar(200)</span></div>
+        <div class="field-row"><span></span><span class="field-name">type</span><span class="field-type">enum¹</span></div>
+        <div class="field-row"><span class="field-key">UK</span><span class="field-name">gstin</span><span class="field-type">varchar(15)</span></div>
+        <div class="field-row"><span></span><span class="field-name">pan</span><span class="field-type">varchar(10)</span></div>
+        <div class="field-row"><span></span><span class="field-name">registered_address</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">state</span><span class="field-type">varchar(50)</span></div>
+        <div class="field-row"><span></span><span class="field-name">pincode</span><span class="field-type">varchar(6)</span></div>
+        <div class="field-row"><span></span><span class="field-name">logo_url</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">website</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">is_verified</span><span class="field-type">boolean</span></div>
+        <div class="field-row"><span></span><span class="field-name">verified_at</span><span class="field-type">timestamptz</span></div>
+        <div class="field-row"><span></span><span class="field-name">subscription_plan</span><span class="field-type">enum²</span></div>
+        <div class="field-row"><span></span><span class="field-name">subscription_expiry</span><span class="field-type">date</span></div>
+        <div class="field-row"><span></span><span class="field-name">is_active</span><span class="field-type">boolean</span></div>
+        <div class="field-row"><span></span><span class="field-name">created_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+    <!-- USERS -->
+    <div class="table-card th-core">
+      <div class="table-header">
+        <span class="table-icon">👤</span>
+        <span class="table-name">users</span>
+        <span class="table-tag tag-pk">CORE</span>
+      </div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">UK</span><span class="field-name">gl_user_id</span><span class="field-type">varchar(20)</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">company_id</span><span class="field-fk">→ companies</span></div>
+        <div class="field-row"><span></span><span class="field-name">full_name</span><span class="field-type">varchar(150)</span></div>
+        <div class="field-row"><span class="field-key">UK</span><span class="field-name">phone</span><span class="field-type">varchar(15)</span></div>
+        <div class="field-row"><span></span><span class="field-name">email</span><span class="field-type">varchar(200)</span></div>
+        <div class="field-row"><span></span><span class="field-name">pin_hash</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">system_role</span><span class="field-type">enum³</span></div>
+        <div class="field-row"><span></span><span class="field-name">designation</span><span class="field-type">varchar(100)</span></div>
+        <div class="field-row"><span></span><span class="field-name">profile_photo_url</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">preferred_language</span><span class="field-type">varchar(5)</span></div>
+        <div class="field-row"><span></span><span class="field-name">is_active</span><span class="field-type">boolean</span></div>
+        <div class="field-row"><span></span><span class="field-name">last_login_at</span><span class="field-type">timestamptz</span></div>
+        <div class="field-row"><span></span><span class="field-name">created_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+    <!-- NABL LABS -->
+    <div class="table-card th-core">
+      <div class="table-header">
+        <span class="table-icon">🔬</span>
+        <span class="table-name">nabl_labs</span>
+        <span class="table-tag tag-pk">CORE</span>
+      </div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">company_id</span><span class="field-fk">→ companies</span></div>
+        <div class="field-row"><span class="field-key">UK</span><span class="field-name">nabl_cert_number</span><span class="field-type">varchar(30)</span></div>
+        <div class="field-row"><span></span><span class="field-name">lab_name</span><span class="field-type">varchar(200)</span></div>
+        <div class="field-row"><span></span><span class="field-name">accredited_tests</span><span class="field-type">jsonb</span></div>
+        <div class="field-row"><span></span><span class="field-name">cert_valid_from</span><span class="field-type">date</span></div>
+        <div class="field-row"><span></span><span class="field-name">cert_valid_until</span><span class="field-type">date</span></div>
+        <div class="field-row"><span></span><span class="field-name">is_verified</span><span class="field-type">boolean</span></div>
+        <div class="field-row"><span></span><span class="field-name">verification_doc_url</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">created_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+  </div><!-- /core -->
+
+  <!-- RBAC -->
+  <div class="section-label">🟣 RBAC Layer</div>
+  <div class="erd-canvas three-col">
+
+    <!-- ROLES -->
+    <div class="table-card th-rbac">
+      <div class="table-header">
+        <span class="table-icon">🛡</span>
+        <span class="table-name">roles</span>
+        <span class="table-tag tag-pk">RBAC</span>
+      </div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">UK</span><span class="field-name">role_code</span><span class="field-type">varchar(30)</span></div>
+        <div class="field-row"><span></span><span class="field-name">role_name</span><span class="field-type">varchar(100)</span></div>
+        <div class="field-row"><span></span><span class="field-name">scope</span><span class="field-type">enum⁴</span></div>
+        <div class="field-row"><span></span><span class="field-name">description</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">is_system_role</span><span class="field-type">boolean</span></div>
+        <div class="field-row"><span></span><span class="field-name">created_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+    <!-- PERMISSIONS -->
+    <div class="table-card th-rbac">
+      <div class="table-header">
+        <span class="table-icon">🔑</span>
+        <span class="table-name">permissions</span>
+        <span class="table-tag tag-pk">RBAC</span>
+      </div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">UK</span><span class="field-name">permission_code</span><span class="field-type">varchar(60)</span></div>
+        <div class="field-row"><span></span><span class="field-name">resource</span><span class="field-type">varchar(50)</span></div>
+        <div class="field-row"><span></span><span class="field-name">action</span><span class="field-type">enum⁵</span></div>
+        <div class="field-row"><span></span><span class="field-name">description</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">created_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+    <!-- ROLE_PERMISSIONS (junction) -->
+    <div class="table-card th-rbac">
+      <div class="table-header">
+        <span class="table-icon">🔗</span>
+        <span class="table-name">role_permissions</span>
+        <span class="table-tag tag-fk">JUNCTION</span>
+      </div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">role_id</span><span class="field-fk">→ roles</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">permission_id</span><span class="field-fk">→ permissions</span></div>
+        <div class="field-row"><span></span><span class="field-name">granted_at</span><span class="field-type">timestamptz</span></div>
+        <div class="field-row"><span></span><span class="field-name">granted_by</span><span class="field-type">uuid → users</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="erd-canvas two-col">
+
+    <!-- USER_COMPANY_ROLES -->
+    <div class="table-card th-rbac">
+      <div class="table-header">
+        <span class="table-icon">🏗</span>
+        <span class="table-name">user_company_roles</span>
+        <span class="table-tag tag-fk">COMPANY SCOPE</span>
+      </div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">user_id</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">company_id</span><span class="field-fk">→ companies</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">role_id</span><span class="field-fk">→ roles</span></div>
+        <div class="field-row"><span></span><span class="field-name">is_primary</span><span class="field-type">boolean</span></div>
+        <div class="field-row"><span></span><span class="field-name">granted_by</span><span class="field-type">uuid → users</span></div>
+        <div class="field-row"><span></span><span class="field-name">granted_at</span><span class="field-type">timestamptz</span></div>
+        <div class="field-row"><span></span><span class="field-name">revoked_at</span><span class="field-type">timestamptz</span></div>
+        <div class="field-row"><span class="field-key">UK</span><span class="field-name">(user_id, company_id, role_id)</span><span class="field-type">composite</span></div>
+      </div>
+    </div>
+
+    <!-- USER_PROJECT_ROLES -->
+    <div class="table-card th-rbac">
+      <div class="table-header">
+        <span class="table-icon">📋</span>
+        <span class="table-name">user_project_roles</span>
+        <span class="table-tag tag-fk">PROJECT SCOPE</span>
+      </div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">user_id</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">project_id</span><span class="field-fk">→ projects</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">company_id</span><span class="field-fk">→ companies</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">role_id</span><span class="field-fk">→ roles</span></div>
+        <div class="field-row"><span></span><span class="field-name">assigned_by</span><span class="field-type">uuid → users</span></div>
+        <div class="field-row"><span></span><span class="field-name">assigned_at</span><span class="field-type">timestamptz</span></div>
+        <div class="field-row"><span></span><span class="field-name">revoked_at</span><span class="field-type">timestamptz</span></div>
+        <div class="field-row"><span class="field-key">UK</span><span class="field-name">(user_id, project_id, role_id)</span><span class="field-type">composite</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PROJECT LAYER -->
+  <div class="section-label">🔵 Project Layer</div>
+  <div class="erd-canvas three-col">
+
+    <!-- PROJECTS -->
+    <div class="table-card th-project">
+      <div class="table-header">
+        <span class="table-icon">🛣</span>
+        <span class="table-name">projects</span>
+        <span class="table-tag tag-pk">PROJECT</span>
+      </div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">UK</span><span class="field-name">gl_prj_id</span><span class="field-type">varchar(20)</span></div>
+        <div class="field-row"><span></span><span class="field-name">name</span><span class="field-type">varchar(300)</span></div>
+        <div class="field-row"><span></span><span class="field-name">project_type</span><span class="field-type">enum⁶</span></div>
+        <div class="field-row"><span></span><span class="field-name">state</span><span class="field-type">varchar(50)</span></div>
+        <div class="field-row"><span></span><span class="field-name">district</span><span class="field-type">varchar(50)</span></div>
+        <div class="field-row"><span></span><span class="field-name">chainage_from</span><span class="field-type">decimal(10,3)</span></div>
+        <div class="field-row"><span></span><span class="field-name">chainage_to</span><span class="field-type">decimal(10,3)</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">initiated_by_company</span><span class="field-fk">→ companies</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">initiated_by_user</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">billing_company_id</span><span class="field-fk">→ companies</span></div>
+        <div class="field-row"><span></span><span class="field-name">total_borings_planned</span><span class="field-type">integer</span></div>
+        <div class="field-row"><span></span><span class="field-name">status</span><span class="field-type">enum⁷</span></div>
+        <div class="field-row"><span></span><span class="field-name">start_date</span><span class="field-type">date</span></div>
+        <div class="field-row"><span></span><span class="field-name">created_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+    <!-- PROJECT_COMPANIES (junction) -->
+    <div class="table-card th-project">
+      <div class="table-header">
+        <span class="table-icon">🤝</span>
+        <span class="table-name">project_companies</span>
+        <span class="table-tag tag-fk">JUNCTION</span>
+      </div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">project_id</span><span class="field-fk">→ projects</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">company_id</span><span class="field-fk">→ companies</span></div>
+        <div class="field-row"><span></span><span class="field-name">project_role</span><span class="field-type">enum⁸</span></div>
+        <div class="field-row"><span></span><span class="field-name">invited_by</span><span class="field-type">uuid → users</span></div>
+        <div class="field-row"><span></span><span class="field-name">invite_accepted_at</span><span class="field-type">timestamptz</span></div>
+        <div class="field-row"><span></span><span class="field-name">is_active</span><span class="field-type">boolean</span></div>
+        <div class="field-row"><span class="field-key">UK</span><span class="field-name">(project_id, company_id, project_role)</span><span class="field-type">composite</span></div>
+      </div>
+    </div>
+
+    <!-- BORING_TEAMS -->
+    <div class="table-card th-project">
+      <div class="table-header">
+        <span class="table-icon">👷</span>
+        <span class="table-name">boring_teams</span>
+        <span class="table-tag tag-pk">PROJECT</span>
+      </div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">project_id</span><span class="field-fk">→ projects</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">company_id</span><span class="field-fk">→ companies</span></div>
+        <div class="field-row"><span></span><span class="field-name">team_name</span><span class="field-type">varchar(50)</span></div>
+        <div class="field-row"><span></span><span class="field-name">team_prefix</span><span class="field-type">varchar(5)</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">supervisor_user_id</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span></span><span class="field-name">notification_sent</span><span class="field-type">boolean</span></div>
+        <div class="field-row"><span></span><span class="field-name">is_active</span><span class="field-type">boolean</span></div>
+        <div class="field-row"><span></span><span class="field-name">created_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="erd-canvas" style="grid-template-columns: 1fr;">
+    <!-- BORINGS -->
+    <div class="table-card th-project">
+      <div class="table-header">
+        <span class="table-icon">🕳</span>
+        <span class="table-name">borings</span>
+        <span class="table-tag tag-pk">PROJECT</span>
+      </div>
+      <div class="table-body" style="display:grid; grid-template-columns: repeat(3,1fr);">
+        <div style="padding:4px 0;">
+          <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+          <div class="field-row"><span class="field-key">UK</span><span class="field-name">gl_bh_id</span><span class="field-type">varchar(20)</span></div>
+          <div class="field-row"><span class="field-key">FK</span><span class="field-name">project_id</span><span class="field-fk">→ projects</span></div>
+          <div class="field-row"><span class="field-key">FK</span><span class="field-name">team_id</span><span class="field-fk">→ boring_teams</span></div>
+          <div class="field-row"><span class="field-key">FK</span><span class="field-name">assigned_worker_id</span><span class="field-fk">→ users</span></div>
+        </div>
+        <div style="padding:4px 0;">
+          <div class="field-row"><span></span><span class="field-name">gps_lat</span><span class="field-type">decimal(10,8)</span></div>
+          <div class="field-row"><span></span><span class="field-name">gps_lng</span><span class="field-type">decimal(11,8)</span></div>
+          <div class="field-row"><span></span><span class="field-name">rl_value</span><span class="field-type">decimal(8,3)</span></div>
+          <div class="field-row"><span></span><span class="field-name">method</span><span class="field-type">enum⁹</span></div>
+          <div class="field-row"><span></span><span class="field-name">target_depth</span><span class="field-type">decimal(5,2)</span></div>
+        </div>
+        <div style="padding:4px 0;">
+          <div class="field-row"><span></span><span class="field-name">actual_depth</span><span class="field-type">decimal(5,2)</span></div>
+          <div class="field-row"><span></span><span class="field-name">status</span><span class="field-type">enum¹⁰</span></div>
+          <div class="field-row"><span></span><span class="field-name">start_date</span><span class="field-type">date</span></div>
+          <div class="field-row"><span></span><span class="field-name">end_date</span><span class="field-type">date</span></div>
+          <div class="field-row"><span></span><span class="field-name">is_data_locked</span><span class="field-type">boolean</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FIELD DATA LAYER -->
+  <div class="section-label">🟢 Field Data Layer</div>
+  <div class="erd-canvas">
+
+    <div class="table-card th-field">
+      <div class="table-header"><span class="table-icon">📊</span><span class="table-name">spt_records</span><span class="table-tag tag-pk">FIELD</span></div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">boring_id</span><span class="field-fk">→ borings</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">recorded_by</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span></span><span class="field-name">depth_from</span><span class="field-type">decimal(5,2)</span></div>
+        <div class="field-row"><span></span><span class="field-name">depth_to</span><span class="field-type">decimal(5,2)</span></div>
+        <div class="field-row"><span></span><span class="field-name">interval_4</span><span class="field-type">integer</span></div>
+        <div class="field-row"><span></span><span class="field-name">interval_5</span><span class="field-type">integer</span></div>
+        <div class="field-row"><span></span><span class="field-name">interval_6</span><span class="field-type">integer</span></div>
+        <div class="field-row"><span></span><span class="field-name">n_raw</span><span class="field-type">integer</span></div>
+        <div class="field-row"><span></span><span class="field-name">n_corrected</span><span class="field-type">decimal(6,2)</span></div>
+        <div class="field-row"><span></span><span class="field-name">is_refusal</span><span class="field-type">boolean</span></div>
+        <div class="field-row"><span></span><span class="field-name">gps_lat</span><span class="field-type">decimal(10,8)</span></div>
+        <div class="field-row"><span></span><span class="field-name">gps_lng</span><span class="field-type">decimal(11,8)</span></div>
+        <div class="field-row"><span></span><span class="field-name">sha256_hash</span><span class="field-type">varchar(64)</span></div>
+        <div class="field-row"><span></span><span class="field-name">prev_hash</span><span class="field-type">varchar(64)</span></div>
+        <div class="field-row"><span></span><span class="field-name">recorded_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+    <div class="table-card th-field">
+      <div class="table-header"><span class="table-icon">🪨</span><span class="table-name">soil_descriptions</span><span class="table-tag tag-pk">FIELD</span></div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">boring_id</span><span class="field-fk">→ borings</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">recorded_by</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span></span><span class="field-name">depth_from</span><span class="field-type">decimal(5,2)</span></div>
+        <div class="field-row"><span></span><span class="field-name">depth_to</span><span class="field-type">decimal(5,2)</span></div>
+        <div class="field-row"><span></span><span class="field-name">soil_type</span><span class="field-type">varchar(50)</span></div>
+        <div class="field-row"><span></span><span class="field-name">colour</span><span class="field-type">varchar(50)</span></div>
+        <div class="field-row"><span></span><span class="field-name">consistency</span><span class="field-type">varchar(30)</span></div>
+        <div class="field-row"><span></span><span class="field-name">picture_tile_code</span><span class="field-type">varchar(20)</span></div>
+        <div class="field-row"><span></span><span class="field-name">is_code_ref</span><span class="field-type">varchar(20)</span></div>
+        <div class="field-row"><span></span><span class="field-name">sha256_hash</span><span class="field-type">varchar(64)</span></div>
+        <div class="field-row"><span></span><span class="field-name">recorded_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+    <div class="table-card th-field">
+      <div class="table-header"><span class="table-icon">📸</span><span class="table-name">field_photos</span><span class="table-tag tag-pk">FIELD</span></div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">boring_id</span><span class="field-fk">→ borings</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">uploaded_by</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span></span><span class="field-name">photo_type</span><span class="field-type">enum¹¹</span></div>
+        <div class="field-row"><span></span><span class="field-name">s3_url</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">gps_lat</span><span class="field-type">decimal(10,8)</span></div>
+        <div class="field-row"><span></span><span class="field-name">gps_lng</span><span class="field-type">decimal(11,8)</span></div>
+        <div class="field-row"><span></span><span class="field-name">gps_accuracy_m</span><span class="field-type">decimal(5,2)</span></div>
+        <div class="field-row"><span></span><span class="field-name">sha256_hash</span><span class="field-type">varchar(64)</span></div>
+        <div class="field-row"><span></span><span class="field-name">captured_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+    <div class="table-card th-field">
+      <div class="table-header"><span class="table-icon">🌊</span><span class="table-name">water_table_obs</span><span class="table-tag tag-pk">FIELD</span></div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">boring_id</span><span class="field-fk">→ borings</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">recorded_by</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span></span><span class="field-name">depth_during_boring</span><span class="field-type">decimal(5,2)</span></div>
+        <div class="field-row"><span></span><span class="field-name">depth_24hr_after</span><span class="field-type">decimal(5,2)</span></div>
+        <div class="field-row"><span></span><span class="field-name">observed_at</span><span class="field-type">timestamptz</span></div>
+        <div class="field-row"><span></span><span class="field-name">sha256_hash</span><span class="field-type">varchar(64)</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- LAB LAYER -->
+  <div class="section-label">🟦 Lab Layer</div>
+  <div class="erd-canvas three-col">
+
+    <div class="table-card th-lab">
+      <div class="table-header"><span class="table-icon">🧪</span><span class="table-name">samples</span><span class="table-tag tag-pk">LAB</span></div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">UK</span><span class="field-name">gl_sample_id</span><span class="field-type">varchar(20)</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">boring_id</span><span class="field-fk">→ borings</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">collected_by</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span></span><span class="field-name">sample_type</span><span class="field-type">enum¹²</span></div>
+        <div class="field-row"><span></span><span class="field-name">depth_from</span><span class="field-type">decimal(5,2)</span></div>
+        <div class="field-row"><span></span><span class="field-name">depth_to</span><span class="field-type">decimal(5,2)</span></div>
+        <div class="field-row"><span></span><span class="field-name">collection_date</span><span class="field-type">date</span></div>
+        <div class="field-row"><span></span><span class="field-name">dispatch_deadline</span><span class="field-type">date</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">assigned_lab_id</span><span class="field-fk">→ nabl_labs</span></div>
+        <div class="field-row"><span></span><span class="field-name">dispatch_date</span><span class="field-type">date</span></div>
+        <div class="field-row"><span></span><span class="field-name">status</span><span class="field-type">enum¹³</span></div>
+      </div>
+    </div>
+
+    <div class="table-card th-lab">
+      <div class="table-header"><span class="table-icon">📋</span><span class="table-name">lab_results</span><span class="table-tag tag-pk">LAB</span></div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">sample_id</span><span class="field-fk">→ samples</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">nabl_lab_id</span><span class="field-fk">→ nabl_labs</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">entered_by</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span></span><span class="field-name">test_type</span><span class="field-type">varchar(100)</span></div>
+        <div class="field-row"><span></span><span class="field-name">result_values</span><span class="field-type">jsonb</span></div>
+        <div class="field-row"><span></span><span class="field-name">report_number</span><span class="field-type">varchar(50)</span></div>
+        <div class="field-row"><span></span><span class="field-name">report_pdf_url</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">tested_on</span><span class="field-type">date</span></div>
+        <div class="field-row"><span></span><span class="field-name">sha256_hash</span><span class="field-type">varchar(64)</span></div>
+        <div class="field-row"><span></span><span class="field-name">created_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+    <div class="table-card th-lab">
+      <div class="table-header"><span class="table-icon">✅</span><span class="table-name">engineer_reviews</span><span class="table-tag tag-pk">LAB</span></div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">boring_id</span><span class="field-fk">→ borings</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">reviewed_by</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span></span><span class="field-name">review_type</span><span class="field-type">enum¹⁴</span></div>
+        <div class="field-row"><span></span><span class="field-name">status</span><span class="field-type">enum¹⁵</span></div>
+        <div class="field-row"><span></span><span class="field-name">comments</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">is_code_reason</span><span class="field-type">varchar(100)</span></div>
+        <div class="field-row"><span></span><span class="field-name">reviewed_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- FINANCE + AUDIT -->
+  <div class="section-label">🟡 Finance Layer</div>
+  <div class="erd-canvas two-col">
+
+    <div class="table-card th-finance">
+      <div class="table-header"><span class="table-icon">💳</span><span class="table-name">payments</span><span class="table-tag tag-pk">FINANCE</span></div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">project_id</span><span class="field-fk">→ projects</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">company_id</span><span class="field-fk">→ companies</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">initiated_by</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span></span><span class="field-name">plan_type</span><span class="field-type">enum¹⁶</span></div>
+        <div class="field-row"><span></span><span class="field-name">borings_purchased</span><span class="field-type">integer</span></div>
+        <div class="field-row"><span></span><span class="field-name">amount_paise</span><span class="field-type">bigint</span></div>
+        <div class="field-row"><span></span><span class="field-name">razorpay_order_id</span><span class="field-type">varchar(50)</span></div>
+        <div class="field-row"><span></span><span class="field-name">razorpay_payment_id</span><span class="field-type">varchar(50)</span></div>
+        <div class="field-row"><span></span><span class="field-name">status</span><span class="field-type">enum¹⁷</span></div>
+        <div class="field-row"><span></span><span class="field-name">invoice_url</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">paid_at</span><span class="field-type">timestamptz</span></div>
+        <div class="field-row"><span></span><span class="field-name">created_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+    <div class="table-card th-audit">
+      <div class="table-header"><span class="table-icon">📜</span><span class="table-name">audit_log</span><span class="table-tag tag-idx">AUDIT</span></div>
+      <div class="table-body">
+        <div class="field-row"><span class="field-key">PK</span><span class="field-name">id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">actor_user_id</span><span class="field-fk">→ users</span></div>
+        <div class="field-row"><span class="field-key">FK</span><span class="field-name">actor_company_id</span><span class="field-fk">→ companies</span></div>
+        <div class="field-row"><span></span><span class="field-name">action</span><span class="field-type">varchar(100)</span></div>
+        <div class="field-row"><span></span><span class="field-name">resource_type</span><span class="field-type">varchar(50)</span></div>
+        <div class="field-row"><span></span><span class="field-name">resource_id</span><span class="field-type">uuid</span></div>
+        <div class="field-row"><span></span><span class="field-name">old_value</span><span class="field-type">jsonb</span></div>
+        <div class="field-row"><span></span><span class="field-name">new_value</span><span class="field-type">jsonb</span></div>
+        <div class="field-row"><span></span><span class="field-name">is_code_reason</span><span class="field-type">varchar(100)</span></div>
+        <div class="field-row"><span></span><span class="field-name">ip_address</span><span class="field-type">inet</span></div>
+        <div class="field-row"><span></span><span class="field-name">user_agent</span><span class="field-type">text</span></div>
+        <div class="field-row"><span></span><span class="field-name">created_at</span><span class="field-type">timestamptz</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ENUM REFERENCE -->
+  <div class="section-label">📌 Enum Reference</div>
+  <div style="display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin-bottom:20px;">
+    <div class="note-box"><strong>¹ companies.type</strong><br>GEOTECH_AGENCY | EPC_CONTRACTOR | IE_FIRM | CLIENT | NABL_LAB | STRUCTURAL_CONSULTANT</div>
+    <div class="note-box"><strong>² subscription_plan</strong><br>FREE_PILOT | PAY_PER_BORING | STANDARD | GROWTH | ENTERPRISE</div>
+    <div class="note-box"><strong>³ users.system_role</strong><br>GL_SUPERADMIN | GL_ADMIN | GL_OPS | COMPANY_USER</div>
+    <div class="note-box"><strong>⁴ roles.scope</strong><br>SYSTEM | COMPANY | PROJECT</div>
+    <div class="note-box"><strong>⁵ permissions.action</strong><br>CREATE | READ | UPDATE | DELETE | APPROVE | EXPORT | ADMIN</div>
+    <div class="note-box"><strong>⁶ project_type</strong><br>NHAI_EPC | NHAI_HAM | STATE_PWD | METRO | RAILWAY | BUILDING | OTHER</div>
+    <div class="note-box"><strong>⁷ projects.status</strong><br>DRAFT | ACTIVE | SUSPENDED | COMPLETED | CANCELLED</div>
+    <div class="note-box"><strong>⁸ project_role</strong><br>CLIENT | IE_FIRM | EPC_CONTRACTOR | GEOTECH_AGENCY | NABL_LAB | STRUCTURAL_CONSULTANT</div>
+    <div class="note-box"><strong>⁹ boring method</strong><br>ROTARY | PERCUSSION | WASH_BORING | HAND_AUGER</div>
+    <div class="note-box"><strong>¹⁰ boring status</strong><br>PENDING | ACTIVE | COMPLETE | SUSPENDED | ABANDONED</div>
+    <div class="note-box"><strong>¹¹ photo_type</strong><br>ARRIVAL | SETUP | DURING | CLOSURE | SAMPLE | ANOMALY</div>
+    <div class="note-box"><strong>¹² sample_type</strong><br>SPT | UDS | ROCK_CORE | BULK | WATER</div>
+  </div>
+
+</div>
+
+
+<!-- ══════════════════════════════════════ -->
+<!-- TAB 2: RBAC MATRIX                    -->
+<!-- ══════════════════════════════════════ -->
+<div class="panel" id="panel-rbac">
+
+  <div class="note-box" style="margin-bottom:20px;">
+    <strong>Two-Level RBAC:</strong> (1) Company-level roles — what a user can do within their own company account. (2) Project-level roles — what a company (and its users) can do on a specific project. Both levels combine to determine final access.
+  </div>
+
+  <div class="section-label">Company-Level Roles</div>
+  <div class="rbac-grid">
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th class="role-col">Action / Resource</th>
+          <th>Company Owner</th>
+          <th>Company Admin</th>
+          <th>Manager</th>
+          <th>Field Supervisor</th>
+          <th>Engineer</th>
+          <th>Lab Tech</th>
+          <th>Viewer</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Manage company profile</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-write">EDIT</span></td><td><span class="perm perm-read">READ</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Add / remove team members</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Assign company roles</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Manage billing / subscription</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-read">READ</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Create new project</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Invite other companies to project</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Manage boring teams</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-own">OWN TEAM</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>View all company projects</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-own">ASSIGNED</span></td><td><span class="perm perm-own">ASSIGNED</span></td><td><span class="perm perm-own">ASSIGNED</span></td><td><span class="perm perm-own">ASSIGNED</span></td></tr>
+        <tr><td>View payment invoices</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-read">READ</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Export company reports</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-label">Project-Level Roles (Per Project)</div>
+  <div class="rbac-grid">
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th class="role-col">Action / Resource</th>
+          <th>Geotech Agency</th>
+          <th>IE Firm</th>
+          <th>EPC Contractor</th>
+          <th>Client (NHAI)</th>
+          <th>NABL Lab</th>
+          <th>Structural Consultant</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Enter boring / SPT data</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Edit own boring data</td><td><span class="perm perm-own">OWN + REASON</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>View boring data (live)</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-read">READ</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-read">READ</span></td></tr>
+        <tr><td>Review + approve boring data</td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-approve">APPROVE</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Raise query to field worker</td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Enter lab test results</td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>View lab results</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-read">SUMMARY</span></td><td><span class="perm perm-own">OWN</span></td><td><span class="perm perm-full">FULL</span></td></tr>
+        <tr><td>Generate IS 1892 PDF report</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-read">READ ONLY</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-full">FULL</span></td></tr>
+        <tr><td>Initiate payment</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Unlock paid boring data</td><td><span class="perm perm-full">AUTO</span></td><td><span class="perm perm-full">AUTO</span></td><td><span class="perm perm-full">AFTER PAY</span></td><td><span class="perm perm-full">AFTER PAY</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Close / suspend boring</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-approve">SUSPEND ONLY</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Export raw data (JSON/CSV)</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-full">FULL</span></td></tr>
+        <tr><td>View geological cross-section</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-read">READ</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-full">FULL</span></td></tr>
+        <tr><td>Cancel project</td><td><span class="perm perm-own">IF INITIATOR</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-own">IF INITIATOR</span></td><td><span class="perm perm-own">IF INITIATOR</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-label">Groundlense Internal (GL_ADMIN / GL_SUPERADMIN)</div>
+  <div class="rbac-grid">
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th class="role-col">Admin Action</th>
+          <th>GL_SUPERADMIN</th>
+          <th>GL_ADMIN</th>
+          <th>GL_OPS</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Verify company KYC</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td></tr>
+        <tr><td>Approve NABL labs</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Suspend companies / users</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>View any project (with audit log)</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-read">READ</span></td></tr>
+        <tr><td>Platform revenue reports</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-read">READ</span></td></tr>
+        <tr><td>Manual data corrections</td><td><span class="perm perm-full">FULL + AUDIT</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Manage system roles</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-none">—</span></td><td><span class="perm perm-none">—</span></td></tr>
+        <tr><td>Resolve disputes</td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-full">FULL</span></td><td><span class="perm perm-read">READ</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+
+<!-- ══════════════════════════════════════ -->
+<!-- TAB 3: ROLE DEFINITIONS               -->
+<!-- ══════════════════════════════════════ -->
+<div class="panel" id="panel-roles">
+  <div class="roles-grid">
+
+    <div class="role-card">
+      <div class="role-card-header" style="background: linear-gradient(90deg,var(--rust-dark),var(--dark3));">
+        <span>👷</span> Field Supervisor
+        <span class="role-code">GL-WRK-XXXX</span>
+      </div>
+      <div class="role-card-body">
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Enter</strong> SPT data, soil description, photos</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Log</strong> sample collection, water table</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Close</strong> boring with timestamp</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Respond</strong> to engineer queries (voice/text)</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">❌</span><span class="role-perm-text">Cannot see other borings data</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">❌</span><span class="role-perm-text">Cannot generate reports</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">❌</span><span class="role-perm-text">Cannot access web portal</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">📱</span><span class="role-perm-text"><strong>Interface:</strong> Mobile app only</span></div>
+      </div>
+    </div>
+
+    <div class="role-card">
+      <div class="role-card-header" style="background: linear-gradient(90deg,var(--green),var(--dark3));">
+        <span>🔧</span> Geotech Engineer
+        <span class="role-code">GL-GTE-XXXX</span>
+      </div>
+      <div class="role-card-body">
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Setup</strong> project borings, assign teams</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Review</strong> all boring data in real-time</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Edit</strong> data with IS code reason</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Raise</strong> queries to field workers</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Generate</strong> IS 1892 PDF reports</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Assign</strong> samples to NABL lab</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">❌</span><span class="role-perm-text">Cannot manage billing</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">💻</span><span class="role-perm-text"><strong>Interface:</strong> Web portal (engineer view)</span></div>
+      </div>
+    </div>
+
+    <div class="role-card">
+      <div class="role-card-header" style="background: linear-gradient(90deg,var(--teal),var(--dark3));">
+        <span>🔬</span> Lab Technician
+        <span class="role-code">GL-LAB-XXXX</span>
+      </div>
+      <div class="role-card-body">
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>View</strong> samples assigned to their lab</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Enter</strong> test results with NABL cert</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Upload</strong> lab report PDF</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Update</strong> sample status</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">❌</span><span class="role-perm-text">Cannot see boring data beyond their scope</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">❌</span><span class="role-perm-text">Cannot generate project reports</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">💻</span><span class="role-perm-text"><strong>Interface:</strong> Web portal (lab view)</span></div>
+      </div>
+    </div>
+
+    <div class="role-card">
+      <div class="role-card-header" style="background: linear-gradient(90deg,var(--purple),var(--dark3));">
+        <span>🏛</span> IE Firm Engineer
+        <span class="role-code">GL-IEF-XXXX</span>
+      </div>
+      <div class="role-card-body">
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>View</strong> all project boring data (live)</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Approve</strong> or reject boring submissions</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Raise</strong> queries + flag anomalies</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>View</strong> geological cross-section</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Download</strong> IS 1892 certified reports</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Suspend</strong> boring if non-compliant</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">❌</span><span class="role-perm-text">Cannot enter field data</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">💻</span><span class="role-perm-text"><strong>Interface:</strong> Web portal (IE view)</span></div>
+      </div>
+    </div>
+
+    <div class="role-card">
+      <div class="role-card-header" style="background: linear-gradient(90deg,var(--blue),var(--dark3));">
+        <span>🏗</span> EPC Contractor
+        <span class="role-code">GL-EPC-XXXX</span>
+      </div>
+      <div class="role-card-body">
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Create</strong> projects, invite companies</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Monitor</strong> boring progress in real-time</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>View</strong> all data after payment</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Initiate</strong> Razorpay payment</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Download</strong> reports and certificates</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Raise</strong> queries to field</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">❌</span><span class="role-perm-text">Cannot enter or modify field data</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">💻</span><span class="role-perm-text"><strong>Interface:</strong> Web portal (contractor view)</span></div>
+      </div>
+    </div>
+
+    <div class="role-card">
+      <div class="role-card-header" style="background: linear-gradient(90deg,var(--amber),var(--dark3)); color:var(--dark);">
+        <span>🏢</span> Client (NHAI/PWD)
+        <span class="role-code" style="color:var(--dark3)">GL-CLT-XXXX</span>
+      </div>
+      <div class="role-card-body">
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>View</strong> project progress summary</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>View</strong> certified final reports</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>Download</strong> IS 1892 PDFs</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">✅</span><span class="role-perm-text"><strong>View</strong> tamper certificates</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">❌</span><span class="role-perm-text">Cannot see raw live boring data</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">❌</span><span class="role-perm-text">Cannot raise queries or approve</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">🔒</span><span class="role-perm-text"><strong>V2 feature</strong> — not in initial launch</span></div>
+        <div class="role-perm-item"><span class="role-perm-icon">💻</span><span class="role-perm-text"><strong>Interface:</strong> Read-only web view</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════ -->
+<!-- TAB 4: AUTH FLOW                      -->
+<!-- ══════════════════════════════════════ -->
+<div class="panel" id="panel-flow">
+
+  <div class="section-label">Authentication Decision Flow</div>
+  <div class="flow-container">
+
+    <div class="flow-row">
+      <div class="flow-node" style="background:var(--rust);color:#fff;">User Login</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--dark3);border:1px solid var(--border);">Phone + OTP / PIN</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--dark3);border:1px solid var(--border);">JWT issued<br><span style="font-size:9px;color:var(--text-dim)">system_role attached</span></div>
+    </div>
+
+    <div style="height:1px;background:var(--border-dim);margin:12px 0;"></div>
+
+    <div class="flow-row">
+      <div class="flow-node" style="background:var(--dark3);border:1px solid var(--rust);">JWT decoded</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--purple);color:#fff;">Check system_role</div>
+    </div>
+
+    <div class="flow-row" style="margin-left:20px;margin-top:8px;">
+      <span class="flow-label">GL_SUPERADMIN / GL_ADMIN</span>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--rust-dark);color:#fff;">Groundlense Admin Portal</div>
+      <span class="flow-label">Full platform access</span>
+    </div>
+
+    <div class="flow-row" style="margin-left:20px;margin-top:4px;">
+      <span class="flow-label">COMPANY_USER</span>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--blue);color:#fff;">Load user_company_roles</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--dark3);border:1px solid var(--border);">Determine company role</div>
+    </div>
+
+    <div style="height:1px;background:var(--border-dim);margin:12px 0;"></div>
+
+    <div class="flow-row">
+      <div class="flow-node" style="background:var(--dark3);border:1px solid var(--blue);">Company role loaded</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--blue);color:#fff;">Check company role</div>
+    </div>
+
+    <div class="flow-row" style="margin-left:20px;margin-top:8px;">
+      <span class="flow-label">Owner / Admin / Manager</span>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--green);color:#fff;">Web Portal — Full Company View</div>
+    </div>
+    <div class="flow-row" style="margin-left:20px;margin-top:4px;">
+      <span class="flow-label">Field Supervisor</span>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--rust-dark);color:#fff;">Mobile App — Assigned borings only</div>
+    </div>
+    <div class="flow-row" style="margin-left:20px;margin-top:4px;">
+      <span class="flow-label">Engineer / Lab Tech / Viewer</span>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--blue);color:#fff;">Web Portal — Role-restricted view</div>
+    </div>
+
+    <div style="height:1px;background:var(--border-dim);margin:12px 0;"></div>
+
+    <div class="flow-row">
+      <div class="flow-node" style="background:var(--dark3);border:1px solid var(--purple);">User opens a project</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--purple);color:#fff;">Load user_project_roles</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--dark3);border:1px solid var(--border);">Filter actions by project_role</div>
+    </div>
+
+    <div class="flow-row" style="margin-left:20px;margin-top:8px;">
+      <span class="flow-label">GEOTECH_AGENCY</span>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--green);color:#fff;">Engineer Portal view — full data entry</div>
+    </div>
+    <div class="flow-row" style="margin-left:20px;margin-top:4px;">
+      <span class="flow-label">IE_FIRM</span>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--purple);color:#fff;">Review + approve mode — no data entry</div>
+    </div>
+    <div class="flow-row" style="margin-left:20px;margin-top:4px;">
+      <span class="flow-label">EPC_CONTRACTOR</span>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--blue);color:#fff;">Monitor mode — data locked until payment</div>
+    </div>
+    <div class="flow-row" style="margin-left:20px;margin-top:4px;">
+      <span class="flow-label">NABL_LAB</span>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--teal);color:#fff;">Lab portal — assigned samples only</div>
+    </div>
+
+    <div style="height:1px;background:var(--border-dim);margin:12px 0;"></div>
+
+    <div class="flow-row">
+      <div class="flow-node" style="background:var(--amber);color:var(--dark);">Every action</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--dark3);border:1px solid var(--border);">Check permission_code<br><span style="font-size:9px;color:var(--text-dim)">from role_permissions table</span></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-node" style="background:var(--dark3);border:1px solid var(--border);">Write to audit_log</div>
+    </div>
+
+  </div>
+
+  <div class="note-box">
+    <strong>Key Principle — Billing ≠ Permissions:</strong> Who pays (billing_company_id on project) has NO effect on data access rights. A company's project_role determines what they can see and do. Payment only determines whether boring data is "unlocked" for download — not whether they can view live data.
+  </div>
+
+  <div class="note-box">
+    <strong>Data Ownership Rule:</strong> The geotech agency that captured the boring data OWNS it. IE firm can review and annotate but cannot delete original records. Any edit creates a new revision in audit_log with IS code justification. Original record is never overwritten.
+  </div>
+
+</div>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,17 @@
+node_modules
+.pnpm-store
+.turbo
+dist
+build
+.next
+.expo
+.env
+.env.*
+coverage
+.DS_Store
+*.log
+pnpm-lock.yaml
+uploads/*
+!uploads/.gitkeep
+# database dumps
+backup.sql

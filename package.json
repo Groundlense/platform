@@ -1,0 +1,23 @@
+{
+  "name": "groundlense",
+  "version": "1.0.0",
+  "packageManager": "pnpm@11.4.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "prisma:validate": "pnpm --filter api exec prisma validate",
+    "prisma:generate": "pnpm --filter api exec prisma generate",
+    "prisma:migrate:dev": "pnpm --filter api exec prisma migrate dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "turbo": "^2.9.15"
+  }
+}
