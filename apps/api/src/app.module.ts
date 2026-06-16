@@ -25,11 +25,11 @@ import { ReviewsModule } from './reviews/reviews.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({
+  imports: [
+    ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env.development',
+      envFilePath: process.env.NODE_ENV === 'production' ? undefined : '.env.development',
     }),
-
     DatabaseModule,
     AccessModule,
     IntegrityModule,
