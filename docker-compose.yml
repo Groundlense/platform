@@ -46,7 +46,7 @@ services:
       API_URL: http://api:8000/api/v1
       NEXT_PUBLIC_APP_NAME: GroundLense
     ports:
-      - "3000:3001"
+      - "3000:3000"
     volumes:
       - .:/app
       - pnpm_store:/root/.local/share/pnpm/store
