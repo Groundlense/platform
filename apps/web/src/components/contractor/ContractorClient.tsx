@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   RiNotification3Line,
@@ -10,7 +10,6 @@ import {
   RiDownloadLine,
   RiShieldCheckLine,
   RiImageLine,
-  RiCheckLine,
 } from "react-icons/ri";
 import { getInitials } from "@/lib/utils";
 
@@ -20,28 +19,198 @@ interface ContractorClientProps {
   dashboard: any;
   sites: any[];
   user: Record<string, unknown> | null;
+  payments: any[];
+  reportData: Record<string, any>;
 }
 
-const BH_STATUS: Record<string, { bg: string; label: string }> = {
-  COMPLETED: { bg: "#EAF3DE", label: "Complete" },
-  IN_PROGRESS: { bg: "#FAEEDA", label: "In progress" },
-  PLANNED: { bg: "#F1EFE8", label: "Planned" },
-  ABANDONED: { bg: "#FCEBEB", label: "Abandoned" },
+const STATUS_LABEL: Record<string, string> = {
+  PLANNED: "Planned",
+  IN_PROGRESS: "In progress",
+  COMPLETED: "Completed",
+  TERMINATED: "Terminated",
+  SUSPENDED: "Suspended",
+  ABANDONED: "Abandoned",
 };
+
+const STATUS_STROKE: Record<string, { stroke: string; dash?: string }> = {
+  PLANNED: { stroke: "#D3D1C7", dash: "4,2" },
+  IN_PROGRESS: { stroke: "#BA7517", dash: "4,2" },
+  COMPLETED: { stroke: "#993C1D" },
+  TERMINATED: { stroke: "#5F5E5A" },
+  SUSPENDED: { stroke: "#EF9F27", dash: "4,2" },
+  ABANDONED: { stroke: "#A32D2D", dash: "4,2" },
+};
+
+function num(v: any): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isNaN(n) ? null : n;
+}
+
+function fmtDate(d: any, withYear = true): string | null {
+  if (!d) return null;
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    ...(withYear ? { year: "numeric" } : {}),
+  });
+}
+
+function truncate(s: string | null | undefined, max: number): string {
+  if (!s) return "";
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/** Map a free-text soil description onto the legend's pattern set. */
+function classifySoil(desc: string | null | undefined): {
+  bg: string;
+  pattern: string | null;
+  opacity: number;
+  textColor: string;
+} {
+  const d = (desc || "").toLowerCase();
+  if (d.includes("fill")) return { bg: "#EAF3DE", pattern: "url(#p-fill)", opacity: 0.6, textColor: "#639922" };
+  if (d.includes("silt")) return { bg: "#FAEEDA", pattern: "url(#p-silt)", opacity: 0.6, textColor: "#BA7517" };
+  if (d.includes("clay")) return { bg: "#FAECE7", pattern: "url(#p-clay)", opacity: 0.5, textColor: "#D85A30" };
+  if (d.includes("sand") || d.includes("gravel"))
+    return { bg: "#FAEEDA", pattern: "url(#p-sand)", opacity: 0.7, textColor: "#854F0B" };
+  if (d.includes("rock") && d.includes("hard")) return { bg: "#2C2C2A", pattern: null, opacity: 1, textColor: "#444441" };
+  if (d.includes("rock") || d.includes("boulder"))
+    return { bg: "#F1EFE8", pattern: "url(#p-rock)", opacity: 0.7, textColor: "#5F5E5A" };
+  return { bg: "#F1EFE8", pattern: null, opacity: 1, textColor: "#854F0B" };
+}
+
+interface AnomalyFlag {
+  intervalKey: string;
+  reason: string;
+  type: "refusal" | "spike";
+}
+
+/**
+ * Real anomaly detection: refusal intervals, or an N-value >= 30 that is also
+ * >= 2.5x the median of the previous (up to 3) intervals' N-values.
+ */
+function computeAnomalies(intervals: any[]): AnomalyFlag[] {
+  const flags: AnomalyFlag[] = [];
+  intervals.forEach((iv: any, idx: number) => {
+    const key = String(iv.id ?? idx);
+    const from = num(iv.fromDepth);
+    const to = num(iv.toDepth);
+    const depthTxt = from != null ? ` at ${from}${to != null ? `–${to}` : ""}m` : "";
+    if (iv.isRefusal) {
+      flags.push({ intervalKey: key, type: "refusal", reason: `SPT refusal${depthTxt}` });
+      return;
+    }
+    const n = num(iv.nValue);
+    if (n != null && n >= 30) {
+      const prevNs = intervals
+        .slice(Math.max(0, idx - 3), idx)
+        .map((p: any) => num(p.nValue))
+        .filter((v: number | null): v is number => v != null);
+      if (prevNs.length > 0) {
+        const med = median(prevNs);
+        if (med > 0 && n >= 2.5 * med) {
+          flags.push({ intervalKey: key, type: "spike", reason: `N=${n} spike${depthTxt} (prior median N=${med})` });
+        }
+      }
+    }
+  });
+  return flags;
+}
+
+function tickStep(max: number): number {
+  const steps = [1, 2, 2.5, 5, 10, 20, 25, 50];
+  for (const s of steps) if (max / s <= 7) return s;
+  return Math.ceil(max / 7);
+}
+
+interface BhDerived {
+  bh: any;
+  intervals: any[];
+  anomalies: AnomalyFlag[];
+  anomalyKeys: Set<string>;
+  drawDepth: number | null;
+  wtDepth: number | null;
+  reviewedIntervals: any[];
+}
 
 export default function ContractorClient({
   project,
   boreholes,
-  dashboard,
+  dashboard: _dashboard,
   sites,
   user,
+  payments,
+  reportData,
 }: ContractorClientProps) {
   const router = useRouter();
-  const [selectedSiteId, setSelectedSiteId] = useState<string>(
-    sites.length > 0 ? sites[0].id : "mock-1"
-  );
+  const [selectedSiteId, setSelectedSiteId] = useState<string>(sites.length > 0 ? sites[0].id : "");
   const [viewMode, setViewMode] = useState<"site" | "eng">("site");
   const [hoveredBhId, setHoveredBhId] = useState<string | null>(null);
+
+  // Boreholes for the selected structure. No fabricated fallback — empty stays empty.
+  const displayBoreholes = useMemo(
+    () => (sites.length > 0 ? boreholes.filter((b: any) => b.siteId === selectedSiteId) : boreholes),
+    [boreholes, sites.length, selectedSiteId]
+  );
+
+  // Per-borehole derived data from the real report payloads.
+  const bhData = useMemo(() => {
+    const map: Record<string, BhDerived> = {};
+    for (const bh of boreholes) {
+      const report = reportData?.[bh.id];
+      const intervals = [...(report?.intervals ?? [])].sort(
+        (a: any, b: any) => (num(a.fromDepth) ?? 0) - (num(b.fromDepth) ?? 0)
+      );
+      const anomalies = computeAnomalies(intervals);
+      const depthCandidates = [
+        num(bh.plannedDepth),
+        num(bh.finalDepth),
+        ...intervals.map((iv: any) => num(iv.toDepth)),
+      ].filter((v): v is number => v != null && v > 0);
+      const wtObs = [...(report?.waterTableObservations ?? [])].sort(
+        (a: any, b: any) => new Date(b.observedAt ?? 0).getTime() - new Date(a.observedAt ?? 0).getTime()
+      );
+      map[bh.id] = {
+        bh,
+        intervals,
+        anomalies,
+        anomalyKeys: new Set(anomalies.map((a) => a.intervalKey)),
+        drawDepth: depthCandidates.length ? Math.max(...depthCandidates) : null,
+        wtDepth: wtObs.length ? num(wtObs[0].depth) : null,
+        reviewedIntervals: intervals.filter((iv: any) => typeof iv.remarks === "string" && iv.remarks.includes("IS ")),
+      };
+    }
+    return map;
+  }, [boreholes, reportData]);
+
+  // Real photos flattened from the selected structure's interval media.
+  const photos = useMemo(
+    () =>
+      displayBoreholes.flatMap((bh: any) => {
+        const intervals = bhData[bh.id]?.intervals ?? [];
+        return intervals.flatMap((iv: any) =>
+          (iv.media ?? []).map((m: any) => ({
+            id: m.id,
+            fileName: m.fileName,
+            mimeType: m.mimeType,
+            createdAt: m.createdAt,
+            bhCode: bh.boreholeCode,
+            from: num(iv.fromDepth),
+            to: num(iv.toDepth),
+          }))
+        );
+      }),
+    [displayBoreholes, bhData]
+  );
 
   if (!project) {
     return (
@@ -65,103 +234,383 @@ export default function ContractorClient({
   const initials = getInitials(firstName, lastName);
   const displayName = [firstName, lastName].filter(Boolean).join(" ") || "User";
 
-  // Filter boreholes based on selected site. Fallback to all if it is a mock site.
-  const activeBoreholes =
-    selectedSiteId === "mock-1"
-      ? boreholes
-      : boreholes.filter((b) => b.siteId === selectedSiteId);
+  // ---- Summary stats (real data only) ----
+  const completedAll = boreholes.filter((b: any) => b.status === "COMPLETED").length;
+  const successPayments = payments.filter((p: any) => p.status === "SUCCESS");
+  const investigationCost = successPayments.reduce((sum: number, p: any) => sum + (num(p.amountPaid) ?? 0), 0);
+  const costLabel =
+    successPayments.length > 0
+      ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(
+          investigationCost
+        )
+      : "—";
+  const totalAnomalies = boreholes.reduce((sum: number, b: any) => sum + (bhData[b.id]?.anomalies.length ?? 0), 0);
 
-  // If there are no boreholes, we show all boreholes as a demo fallback so that the screen doesn't look empty.
-  const displayBoreholes = activeBoreholes.length > 0 ? activeBoreholes : boreholes;
+  // Anomaly flags for the displayed structure (used by the warning strip).
+  const displayedAnomalies = displayBoreholes.flatMap((bh: any) =>
+    (bhData[bh.id]?.anomalies ?? []).map((a) => ({ bh, ...a }))
+  );
 
-  const completed = displayBoreholes.filter((b: any) => b.status === "COMPLETED").length;
-  const inProgress = displayBoreholes.filter((b: any) => b.status === "IN_PROGRESS").length;
-  const planned = displayBoreholes.filter((b: any) => b.status === "PLANNED").length;
+  // Engineer-review notes derived from real interval remarks (IS-code references).
+  const reviewedNotes = displayBoreholes.flatMap((bh: any) =>
+    (bhData[bh.id]?.reviewedIntervals ?? []).map((iv: any) => ({ bh, iv }))
+  );
 
-  // Soil layers definition based on depth
-  const getBoreholeLayers = (depth: number) => {
-    const layers = [];
-    let remaining = depth;
+  const currentSite = sites.find((s: any) => s.id === selectedSiteId) || null;
 
-    // 1. Fill (up to 3m)
-    if (remaining > 0) {
-      const h = Math.min(3, remaining);
-      layers.push({
-        type: "fill",
-        height: h,
-        bg: "#EAF3DE",
-        pattern: "url(#p-fill)",
-        opacity: 0.6,
-        label: "N=4",
-      });
-      remaining -= h;
+  const handleBackToDashboard = () => router.push("/dashboard");
+  const handleSwitchToPortal = () => router.push(`/projects/${project.id}/portal`);
+
+  // ---- Cross-section geometry ----
+  const TOP_Y = 30;
+  const CHART_H = 320;
+  const sectionMax = (() => {
+    const depths = displayBoreholes
+      .map((bh: any) => bhData[bh.id]?.drawDepth)
+      .filter((v: number | null | undefined): v is number => v != null && v > 0);
+    return depths.length ? Math.max(...depths) : 10;
+  })();
+  const pxPerM = CHART_H / sectionMax;
+  const depthToY = (d: number) => TOP_Y + d * pxPerM;
+  const step = tickStep(sectionMax);
+  const ticks: number[] = [];
+  for (let d = 0; d <= sectionMax + 1e-9; d += step) ticks.push(Math.round(d * 100) / 100);
+
+  const bhXFor = (index: number, svgWidth: number) =>
+    displayBoreholes.length === 1 ? svgWidth / 2 : 70 + index * ((svgWidth - 140) / (displayBoreholes.length - 1));
+
+  /** Shared cross-section renderer for both "site" and "eng" modes — same real data, different labelling. */
+  const renderCrossSection = (mode: "site" | "eng") => {
+    if (displayBoreholes.length === 0) {
+      return (
+        <div className="py-20 text-center text-text-ter text-[12px]">
+          No boreholes available for cross section.
+        </div>
+      );
     }
-    // 2. Sandy Silt (up to 5m further)
-    if (remaining > 0) {
-      const h = Math.min(5, remaining);
-      layers.push({
-        type: "silt",
-        height: h,
-        bg: "#FAEEDA",
-        pattern: "url(#p-silt)",
-        opacity: 0.6,
-        label: "N=12",
-      });
-      remaining -= h;
-    }
-    // 3. Clay (up to 4m further)
-    if (remaining > 0) {
-      const h = Math.min(4, remaining);
-      layers.push({
-        type: "clay",
-        height: h,
-        bg: "#FAECE7",
-        pattern: "url(#p-clay)",
-        opacity: 0.5,
-        label: "N=14",
-      });
-      remaining -= h;
-    }
-    // 4. Dense Sand (up to 5m further)
-    if (remaining > 0) {
-      const h = Math.min(5, remaining);
-      layers.push({
-        type: "sand",
-        height: h,
-        bg: "#FAEEDA",
-        pattern: "url(#p-sand)",
-        opacity: 0.7,
-        label: "N=38",
-      });
-      remaining -= h;
-    }
-    // 5. Weathered Rock / Hard Rock (rest)
-    if (remaining > 0) {
-      layers.push({
-        type: "rock",
-        height: remaining,
-        bg: "#2C2C2A",
-        pattern: null,
-        opacity: 1,
-        label: "R",
-      });
-    }
-    return layers;
+
+    const svgWidth = Math.max(620, displayBoreholes.length * 125);
+
+    return (
+      <div className="relative overflow-x-auto select-none" style={{ width: "100%" }}>
+        <div style={{ width: `${svgWidth}px` }}>
+          <svg width={svgWidth} height="370" viewBox={`0 0 ${svgWidth} 370`} className="block">
+            <defs>
+              <pattern id={`p-fill-${mode}`} patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#97C459" strokeWidth="1.5" /></pattern>
+              <pattern id={`p-silt-${mode}`} patternUnits="userSpaceOnUse" width="8" height="4"><line x1="0" y1="2" x2="8" y2="2" stroke="#EF9F27" strokeWidth="1.5" /></pattern>
+              <pattern id={`p-clay-${mode}`} patternUnits="userSpaceOnUse" width="5" height="5"><line x1="0" y1="0" x2="0" y2="5" stroke="#F0997B" strokeWidth="1.5" /></pattern>
+              <pattern id={`p-sand-${mode}`} patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#BA7517" strokeWidth="1.5" /></pattern>
+              <pattern id={`p-rock-${mode}`} patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(135)"><line x1="0" y1="0" x2="0" y2="6" stroke="#888780" strokeWidth="1.5" /></pattern>
+            </defs>
+
+            {/* depth axis scaled to real max depth */}
+            <line x1="42" y1={TOP_Y} x2="42" y2={TOP_Y + CHART_H} stroke="#D3D1C7" strokeWidth="0.5" />
+            {ticks.map((d) => (
+              <g key={`tick-${d}`}>
+                <text x="4" y={depthToY(d) + 3} fontSize="9" fill="#888780" fontFamily="sans-serif">
+                  {d}m
+                </text>
+                <line x1="42" y1={depthToY(d)} x2={svgWidth} y2={depthToY(d)} stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
+              </g>
+            ))}
+
+            {/* ground surface */}
+            <line x1="54" y1={TOP_Y - 2} x2={svgWidth} y2={TOP_Y - 2} stroke="#3B6D11" strokeWidth="1.5" strokeDasharray="4,2" />
+            <text x="44" y={TOP_Y - 8} fontSize="8" fill="#3B6D11" fontFamily="sans-serif">Ground surface (RL)</text>
+
+            {/* real water table line — only across boreholes with recorded observations */}
+            {(() => {
+              const pts = displayBoreholes
+                .map((bh: any, i: number) => {
+                  const wt = bhData[bh.id]?.wtDepth;
+                  return wt != null ? { x: bhXFor(i, svgWidth), y: depthToY(wt) } : null;
+                })
+                .filter((p): p is { x: number; y: number } => p != null);
+              if (pts.length === 0) return null;
+              return (
+                <g>
+                  {pts.length > 1 && (
+                    <path
+                      d={`M ${pts.map((p) => `${p.x},${p.y}`).join(" L ")}`}
+                      stroke="#378ADD"
+                      strokeWidth="1"
+                      strokeDasharray="3,2"
+                      fill="none"
+                    />
+                  )}
+                  {pts.map((p, i) => (
+                    <g key={`wt-${i}`}>
+                      <line x1={p.x - 16} y1={p.y} x2={p.x + 16} y2={p.y} stroke="#378ADD" strokeWidth="1" strokeDasharray="3,2" />
+                      <text x={p.x - 16} y={p.y - 3} fontSize="7" fill="#378ADD" fontFamily="sans-serif">WT</text>
+                    </g>
+                  ))}
+                </g>
+              );
+            })()}
+
+            {/* boreholes drawn from real intervals */}
+            {displayBoreholes.map((bh: any, index: number) => {
+              const data = bhData[bh.id];
+              const bhX = bhXFor(index, svgWidth);
+              const intervals = data?.intervals ?? [];
+              const drawDepth = data?.drawDepth ?? sectionMax;
+              const shaftH = Math.max(4, drawDepth * pxPerM);
+              const hasAnomaly = (data?.anomalies.length ?? 0) > 0;
+              const border = STATUS_STROKE[bh.status] ?? STATUS_STROKE.PLANNED;
+
+              return (
+                <g key={`${mode}-${bh.id}`}>
+                  {intervals.length === 0 ? (
+                    <>
+                      {/* honest empty state — no fabricated strata */}
+                      <rect x={bhX - 12} y={TOP_Y} width="24" height={shaftH} fill="#F1EFE8" opacity="0.6" />
+                      <text
+                        x={bhX}
+                        y={TOP_Y + shaftH / 2}
+                        fontSize="8"
+                        fill="#B4B2A9"
+                        textAnchor="middle"
+                        fontFamily="sans-serif"
+                        transform={`rotate(-90 ${bhX} ${TOP_Y + shaftH / 2})`}
+                      >
+                        No field data yet
+                      </text>
+                    </>
+                  ) : (
+                    intervals.map((iv: any, lIdx: number) => {
+                      const from = num(iv.fromDepth);
+                      const to = num(iv.toDepth);
+                      if (from == null || to == null || to <= from) return null;
+                      const y = depthToY(from);
+                      const bandH = (to - from) * pxPerM;
+                      const soil = classifySoil(iv.soilDescription);
+                      const flagged = data.anomalyKeys.has(String(iv.id ?? lIdx));
+                      const reviewed =
+                        mode === "eng" && typeof iv.remarks === "string" && iv.remarks.includes("IS ");
+                      const n = num(iv.nValue);
+                      const b1 = num(iv.blow1);
+                      const b2 = num(iv.blow2);
+                      const b3 = num(iv.blow3);
+
+                      let nLabel: string | null = null;
+                      if (mode === "site") {
+                        const blows = b1 != null && b2 != null && b3 != null ? `${b1}/${b2}/${b3}` : null;
+                        if (n != null) nLabel = blows ? `${blows} → N=${n}` : `N=${n}`;
+                        else if (blows) nLabel = blows;
+                      } else if (n != null) {
+                        nLabel = `N=${n}${reviewed ? " (reviewed)" : ""}`;
+                      }
+
+                      const descLabel = bandH >= 22 ? truncate(iv.soilDescription, 16) : "";
+                      const midY = y + bandH / 2;
+
+                      return (
+                        <g key={`iv-${lIdx}`}>
+                          <rect x={bhX - 12} y={y} width="24" height={bandH} fill={soil.bg} />
+                          {soil.pattern && (
+                            <rect
+                              x={bhX - 12}
+                              y={y}
+                              width="24"
+                              height={bandH}
+                              fill={soil.pattern.replace(")", `-${mode})`)}
+                              opacity={soil.opacity}
+                            />
+                          )}
+                          {flagged && (
+                            <rect x={bhX - 13} y={y} width="26" height={bandH} fill="none" stroke="#E24B4A" strokeWidth="1" />
+                          )}
+                          {descLabel && (
+                            <text x={bhX + 16} y={nLabel ? midY - 2 : midY + 3} fontSize="7" fill="#5F5E5A" fontFamily="sans-serif">
+                              {descLabel}
+                            </text>
+                          )}
+                          {nLabel && (
+                            <text
+                              x={bhX + 16}
+                              y={descLabel ? midY + 7 : midY + 3}
+                              fontSize="8"
+                              fill={flagged ? "#E24B4A" : soil.textColor}
+                              fontWeight={flagged ? 600 : undefined}
+                              fontFamily="sans-serif"
+                            >
+                              {nLabel}
+                              {flagged ? "!" : ""}
+                            </text>
+                          )}
+                          {iv.isRefusal && (
+                            <text x={bhX - 22} y={midY + 3} fontSize="8" fill="#A32D2D" fontWeight={600} fontFamily="sans-serif">
+                              R
+                            </text>
+                          )}
+                        </g>
+                      );
+                    })
+                  )}
+
+                  {/* outer border by real status */}
+                  <rect
+                    x={bhX - 12}
+                    y={TOP_Y}
+                    width="24"
+                    height={shaftH}
+                    fill="none"
+                    stroke={hasAnomaly ? "#E24B4A" : border.stroke}
+                    strokeWidth={hasAnomaly ? 1.5 : 1}
+                    strokeDasharray={border.dash}
+                  />
+                  <text x={bhX} y={TOP_Y + shaftH + 10} fontSize="8" fill="#993C1D" textAnchor="middle" fontFamily="sans-serif">
+                    {bh.boreholeCode}
+                  </text>
+                </g>
+              );
+            })}
+
+            <text x={svgWidth - 10} y="366" fontSize="8" fill={mode === "site" ? "#97C459" : "#185FA5"} textAnchor="end" fontFamily="sans-serif">
+              {mode === "site" ? "Raw site data · Groundlense" : "Engineer reviewed data · Groundlense"}
+            </text>
+          </svg>
+
+          {/* hover zones */}
+          {displayBoreholes.map((bh: any, index: number) => {
+            const data = bhData[bh.id];
+            const bhX = bhXFor(index, svgWidth);
+            const lat = num(bh.latitude);
+            const lng = num(bh.longitude);
+            const rl = num(bh.groundLevelRL);
+            const plannedDepth = num(bh.plannedDepth);
+            const finalDepth = num(bh.finalDepth);
+            const anomalies = data?.anomalies ?? [];
+
+            return (
+              <div
+                key={`hover-${mode}-${bh.id}`}
+                onMouseEnter={() => setHoveredBhId(bh.id)}
+                onMouseLeave={() => setHoveredBhId(null)}
+                className="absolute cursor-pointer"
+                style={{ left: `${bhX - 20}px`, top: `${TOP_Y}px`, width: "40px", height: `${CHART_H}px` }}
+              >
+                {hoveredBhId === bh.id && (
+                  <div
+                    className="hover-card"
+                    style={{ left: "50%", transform: "translateX(-50%) translateY(-8px)", pointerEvents: "none", display: "block" }}
+                  >
+                    <div className="hc-title font-display">
+                      {bh.boreholeCode}
+                      {bh.name ? ` · ${bh.name}` : ""}
+                      {anomalies.length > 0 && " ⚠"}
+                    </div>
+                    <div className="hc-row">
+                      <span className="hc-label">Latitude</span>
+                      <span className="hc-value green">{lat != null ? `${lat.toFixed(6)}°` : "—"}</span>
+                    </div>
+                    <div className="hc-row">
+                      <span className="hc-label">Longitude</span>
+                      <span className="hc-value green">{lng != null ? `${lng.toFixed(6)}°` : "—"}</span>
+                    </div>
+                    <div className="hc-row">
+                      <span className="hc-label">RL</span>
+                      <span className="hc-value green">{rl != null ? `${rl} m` : "—"}</span>
+                    </div>
+                    <div className="hc-row">
+                      <span className="hc-label">Planned depth</span>
+                      <span className="hc-value">{plannedDepth != null ? `${plannedDepth} m` : "—"}</span>
+                    </div>
+                    <div className="hc-row">
+                      <span className="hc-label">Final depth</span>
+                      <span className="hc-value">{finalDepth != null ? `${finalDepth} m` : "—"}</span>
+                    </div>
+                    <div className="hc-row">
+                      <span className="hc-label">Start date</span>
+                      <span className="hc-value">{fmtDate(bh.startedAt) ?? "—"}</span>
+                    </div>
+                    <div className="hc-row">
+                      <span className="hc-label">End date</span>
+                      <span className="hc-value">{fmtDate(bh.completedAt) ?? "—"}</span>
+                    </div>
+                    <div className="hc-row">
+                      <span className="hc-label">Status</span>
+                      <span className="hc-value">{STATUS_LABEL[bh.status] ?? bh.status ?? "—"}</span>
+                    </div>
+                    {anomalies.length > 0 ? (
+                      <div className="hc-dev warn">⚠ {anomalies[0].reason}</div>
+                    ) : (
+                      <div className="hc-dev" style={{ background: "#2C2C2A", color: "#B4B2A9" }}>
+                        GPS deviation: not recorded
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
-  // Determine metadata for the selected site
-  const currentSiteName =
-    selectedSiteId === "mock-1"
-      ? "ROB — Km 142+500 (Bow String Bridge)"
-      : sites.find((s) => s.id === selectedSiteId)?.name || "Structure Site";
+  /** BH info row under the cross-section — real values only. */
+  const renderBhInfoRow = (mode: "site" | "eng") => {
+    if (displayBoreholes.length === 0) return null;
+    return (
+      <div className="bh-info-row mt-2 border-t border-[#F5C4B3]">
+        {displayBoreholes.map((bh: any) => {
+          const data = bhData[bh.id];
+          const lat = num(bh.latitude);
+          const lng = num(bh.longitude);
+          const rl = num(bh.groundLevelRL);
+          const plannedDepth = num(bh.plannedDepth);
+          const finalDepth = num(bh.finalDepth);
+          const deepest = (data?.intervals ?? []).reduce((max: number | null, iv: any) => {
+            const to = num(iv.toDepth);
+            return to != null && (max == null || to > max) ? to : max;
+          }, null as number | null);
+          const hasAnomaly = (data?.anomalies.length ?? 0) > 0;
 
-  // Navigation callbacks
-  const handleBackToDashboard = () => {
-    router.push("/dashboard");
-  };
+          let cellClass = "bh-info-cell";
+          if (bh.status === "PLANNED") cellClass += " pending";
+          else if (bh.status === "IN_PROGRESS") cellClass += " inprog";
 
-  const handleSwitchToPortal = () => {
-    router.push(`/projects/${project.id}/portal`);
+          const depthValue = finalDepth ?? deepest;
+          const depthLabel =
+            finalDepth != null
+              ? "final depth"
+              : deepest != null
+              ? "deepest interval"
+              : plannedDepth != null
+              ? `planned ${plannedDepth}m`
+              : "no depth recorded";
+
+          return (
+            <div key={`info-${mode}-${bh.id}`} className={cellClass}>
+              <div className="bh-info-id font-mono">
+                {bh.boreholeCode}
+                {bh.name ? ` · ${bh.name}` : ""} {hasAnomaly ? "⚠" : ""}
+              </div>
+              <div className="bh-info-depth">{depthValue != null ? `${depthValue.toFixed(1)} m` : "— m"}</div>
+              <div className="bh-info-depth-label">{depthLabel}</div>
+              <div className="bh-info-dates">
+                Start: {fmtDate(bh.startedAt, false) ?? "—"} <br />
+                End: {fmtDate(bh.completedAt, false) ?? STATUS_LABEL[bh.status] ?? "—"}
+              </div>
+              <div className="bh-info-gps font-mono">
+                {lat != null && lng != null ? (
+                  <>
+                    {lat.toFixed(5)}°, {lng.toFixed(5)}°
+                  </>
+                ) : (
+                  "GPS: —"
+                )}
+                <br />
+                RL {rl != null ? `${rl}m` : "—"}
+                <br />
+                GPS deviation: not recorded
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -216,18 +665,18 @@ export default function ContractorClient({
 
         .photos-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
         .photo-card { background: #fff; border: 0.5px solid #F5C4B3; border-radius: 7px; overflow: hidden; }
-        .photo-img { width: 100%; height: 72px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 3px; font-size: 9px; }
+        .photo-img { width: 100%; height: 72px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 3px; font-size: 9px; overflow: hidden; }
+        .photo-img img { width: 100%; height: 72px; object-fit: cover; display: block; }
         .photo-info { padding: 6px 8px; }
         .photo-bh { font-size: 11px; font-weight: 500; color: #993C1D; }
         .photo-date { font-size: 10px; color: #854F0B; margin-top: 1px; }
-        .photo-tag { font-size: 10px; color: #5F5E5A; margin-top: 1px; }
-        .photo-verified { font-size: 9px; color: #3B6D11; background: #EAF3DE; padding: 2px 5px; border-radius: 3px; display: inline-block; margin-top: 2px; }
+        .photo-tag { font-size: 10px; color: #5F5E5A; margin-top: 1px; word-break: break-all; }
         .dl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
         .dl-btn { display: flex; align-items: center; gap: 5px; padding: 8px 13px; background: #D85A30; border: none; border-radius: 7px; color: #fff; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-        .dl-btn:hover { background: #BA4822; }
+        .dl-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .dl-btn-sec { display: flex; align-items: center; gap: 5px; padding: 8px 13px; background: #fff; border: 1.5px solid #D85A30; border-radius: 7px; color: #D85A30; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-        .dl-btn-sec:hover { background: rgba(216,90,48,0.05); }
-        .cert { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #3B6D11; background: #EAF3DE; padding: 5px 9px; border-radius: 12px; border: 0.5px solid #97C459; }
+        .dl-btn-sec:disabled { opacity: 0.45; cursor: not-allowed; }
+        .dl-hint { font-size: 10px; color: #888780; }
 
         /* BH INFO ROW */
         .bh-info-row { display: flex; gap: 0; border-top: 0.5px solid #F5C4B3; overflow-x: auto; }
@@ -238,7 +687,6 @@ export default function ContractorClient({
         .bh-info-depth-label { font-size: 9px; color: #888780; }
         .bh-info-dates { font-size: 9px; color: #5F5E5A; margin-top: 3px; line-height: 1.4; }
         .bh-info-gps { font-size: 9px; color: #5F5E5A; margin-top: 3px; line-height: 1.3; }
-        .bh-info-gps.deviated { color: #A32D2D; background: #FCEBEB; border-radius: 3px; padding: 2px 4px; display: inline-block; margin-top: 3px; }
         .bh-info-cell.pending { background: #F1EFE8; opacity: 0.7; }
         .bh-info-cell.inprog { background: #FAEEDA; }
       ` }} />
@@ -282,49 +730,44 @@ export default function ContractorClient({
             </div>
             <div className="hdr-title font-display tracking-wide">{project.name}</div>
             <div className="hdr-sub font-mono">
-              Contractor: {project.epcOrganization?.name || "GR Infraprojects Ltd"} &nbsp;·&nbsp;
-              Client: {project.initiatedByCompany?.name || "NHAI"} &nbsp;·&nbsp;
-              IE: {project.billingCompany?.name || "STUP Consultants"}
+              Contractor: {project.epcOrganization?.name || "—"} &nbsp;·&nbsp;
+              Geotech: {project.geotechOrganization?.name || "—"}
             </div>
-            
-            {/* Stat Row */}
+
+            {/* Stat Row — real data only */}
             <div className="sum-grid">
               <div className="sc">
                 <div className="sc-l">Structures</div>
-                <div className="sc-v font-display">{sites.length > 0 ? sites.length : "6"}</div>
-                <div className="sc-s">ROBs, VUPs, Bridges</div>
+                <div className="sc-v font-display">{sites.length}</div>
+                <div className="sc-s">{sites.length > 0 ? "Structure sites" : "None defined yet"}</div>
               </div>
               <div className="sc">
                 <div className="sc-l">BH planned</div>
-                <div className="sc-v font-display">{displayBoreholes.length}</div>
-                <div className="sc-s">Across all structures</div>
+                <div className="sc-v font-display">{boreholes.length}</div>
+                <div className="sc-s">Across project</div>
               </div>
               <div className="sc">
                 <div className="sc-l">Completed</div>
-                <div className="sc-v font-display">{completed}</div>
+                <div className="sc-v font-display">{completedAll}</div>
                 <div className="sc-s">
-                  {displayBoreholes.length > 0
-                    ? `${Math.round((completed / displayBoreholes.length) * 100)}% done`
-                    : "0% done"}
+                  {boreholes.length > 0 ? `${Math.round((completedAll / boreholes.length) * 100)}% done` : "No boreholes"}
                 </div>
               </div>
               <div className="sc">
                 <div className="sc-l">Investigation cost</div>
-                <div className="sc-v font-display">
-                  ₹{((dashboard?.boreholes ?? displayBoreholes.length) * 5000 / 100000).toFixed(1)}L
+                <div className="sc-v font-display">{costLabel}</div>
+                <div className="sc-s">
+                  {successPayments.length > 0
+                    ? `${successPayments.length} successful payment${successPayments.length > 1 ? "s" : ""}`
+                    : "No payments yet"}
                 </div>
-                <div className="sc-s">Total budget</div>
               </div>
               <div className="sc">
-                <div className="sc-l">GPS deviations</div>
-                <div className="sc-v font-display" style={{ color: "#FAC775" }}>
-                  {displayBoreholes.some(b => b.boreholeCode?.includes("03") || b.boreholeCode?.includes("3")) ? "1" : "0"}
+                <div className="sc-l">Anomaly flags</div>
+                <div className="sc-v font-display" style={{ color: totalAnomalies > 0 ? "#FAC775" : "#fff" }}>
+                  {totalAnomalies}
                 </div>
-                <div className="sc-s">
-                  {displayBoreholes.some(b => b.boreholeCode?.includes("03") || b.boreholeCode?.includes("3"))
-                    ? "BH-03 · 4.2m off"
-                    : "All compliant"}
-                </div>
+                <div className="sc-s">{totalAnomalies > 0 ? "From field N-values" : "None detected"}</div>
               </div>
             </div>
           </div>
@@ -338,33 +781,35 @@ export default function ContractorClient({
                 className="struct-sel"
                 value={selectedSiteId}
                 onChange={(e) => setSelectedSiteId(e.target.value)}
+                disabled={sites.length === 0}
               >
                 {sites.length > 0 ? (
                   sites.map((s: any) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} ({s.code})
+                      {s.name} {s.code ? `(${s.code})` : ""}
                     </option>
                   ))
                 ) : (
-                  <option value="mock-1">ROB — Km 142+500 (Bow String Bridge)</option>
+                  <option value="">All boreholes — no structures defined</option>
                 )}
               </select>
               <div style={{ fontSize: "11px", color: "#854F0B", background: "#FAEEDA", padding: "4px 8px", borderRadius: "5px", border: "0.5px solid #EF9F27", fontWeight: 500 }}>
-                {displayBoreholes.length} boreholes · {currentSiteName.includes("ROB") ? "Bow String + RCC T Girder" : "Structure Foundations"}
+                {displayBoreholes.length} borehole{displayBoreholes.length === 1 ? "" : "s"}
+                {currentSite?.structureType ? ` · ${currentSite.structureType}` : ""}
               </div>
             </div>
 
-            {/* Warning Flags strip */}
-            {displayBoreholes.some(b => b.boreholeCode?.includes("02") || b.boreholeCode?.includes("03") || b.boreholeCode?.includes("2") || b.boreholeCode?.includes("3")) && (
+            {/* Warning flags — computed from real interval data only */}
+            {displayedAnomalies.length > 0 && (
               <div className="flag-strip">
                 <RiAlertLine className="text-[#E24B4A] text-[15px] shrink-0" />
                 <div className="flag-text font-medium">
-                  {displayBoreholes.some(b => b.boreholeCode?.includes("02") || b.boreholeCode?.includes("2")) && (
-                    <span>BH-02 (Pier P1) — N-value anomaly at 8.5m. &nbsp;|&nbsp; </span>
-                  )}
-                  {displayBoreholes.some(b => b.boreholeCode?.includes("03") || b.boreholeCode?.includes("3")) && (
-                    <span>BH-03 (Pier P2) — GPS deviation 4.2m from planned location. Flagged.</span>
-                  )}
+                  {displayedAnomalies.map((a: any, i: number) => (
+                    <span key={`${a.bh.id}-${a.intervalKey}`}>
+                      {i > 0 && <span> &nbsp;|&nbsp; </span>}
+                      {a.bh.boreholeCode} — {a.reason}
+                    </span>
+                  ))}
                 </div>
               </div>
             )}
@@ -400,7 +845,7 @@ export default function ContractorClient({
                 </div>
                 <div className="leg-item">
                   <div className="leg-sw" style={{ background: "repeating-linear-gradient(90deg,#FAC775,#FAC775 2px,#FAEEDA 2px,#FAEEDA 5px)" }} />
-                  Sandy silt
+                  Silt
                 </div>
                 <div className="leg-item">
                   <div className="leg-sw" style={{ background: "repeating-linear-gradient(0deg,#F0997B,#F0997B 2px,#FAECE7 2px,#FAECE7 4px)" }} />
@@ -408,7 +853,7 @@ export default function ContractorClient({
                 </div>
                 <div className="leg-item">
                   <div className="leg-sw" style={{ background: "repeating-linear-gradient(45deg,#BA7517,#BA7517 2px,#FAEEDA 2px,#FAEEDA 3px)" }} />
-                  Dense sand
+                  Sand / gravel
                 </div>
                 <div className="leg-item">
                   <div className="leg-sw" style={{ background: "repeating-linear-gradient(135deg,#888780,#888780 2px,#F1EFE8 2px,#F1EFE8 3px)" }} />
@@ -419,805 +864,108 @@ export default function ContractorClient({
                   Hard rock
                 </div>
                 <div className="leg-item">
+                  <div className="leg-sw" style={{ background: "#F1EFE8" }} />
+                  Unclassified
+                </div>
+                <div className="leg-item">
                   <div className="leg-sw border border-[#E24B4A]" style={{ background: "#FCEBEB" }} />
-                  Anomaly / GPS flag
+                  Anomaly / refusal
                 </div>
               </div>
 
-              {/* Site view block */}
               {viewMode === "site" ? (
-                <div>
-                  <div className="xsec-body" style={{ overflow: "visible" }}>
-                    <div className="flex items-center gap-[6px] mb-2">
-                      <span className="view-badge site">As recorded on site — raw field data · unmodified</span>
-                    </div>
-
-                    {/* SVG Container */}
-                    {displayBoreholes.length === 0 ? (
-                      <div className="py-20 text-center text-text-ter text-[12px]">
-                        No boreholes available for cross section.
-                      </div>
-                    ) : (
-                      (() => {
-                        const svgWidth = Math.max(620, displayBoreholes.length * 125);
-                        return (
-                          <div className="relative overflow-x-auto select-none" style={{ width: "100%" }}>
-                            <div style={{ width: `${svgWidth}px` }}>
-                              <svg width={svgWidth} height="370" viewBox={`0 0 ${svgWidth} 370`} className="block">
-                                <defs>
-                                  <pattern id="p-fill" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#97C459" strokeWidth="1.5" /></pattern>
-                                  <pattern id="p-silt" patternUnits="userSpaceOnUse" width="8" height="4"><line x1="0" y1="2" x2="8" y2="2" stroke="#EF9F27" strokeWidth="1.5" /></pattern>
-                                  <pattern id="p-clay" patternUnits="userSpaceOnUse" width="5" height="5"><line x1="0" y1="0" x2="0" y2="5" stroke="#F0997B" strokeWidth="1.5" /></pattern>
-                                  <pattern id="p-sand" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#BA7517" strokeWidth="1.5" /></pattern>
-                                  <pattern id="p-rock" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(135)"><line x1="0" y1="0" x2="0" y2="6" stroke="#888780" strokeWidth="1.5" /></pattern>
-                                </defs>
-
-                                {/* depth axis */}
-                                <line x1="42" y1="30" x2="42" y2="350" stroke="#D3D1C7" strokeWidth="0.5" />
-                                <text x="4" y="33" fontSize="9" fill="#888780" fontFamily="sans-serif">0m</text>
-                                <text x="4" y="83" fontSize="9" fill="#888780" fontFamily="sans-serif">3m</text>
-                                <text x="4" y="133" fontSize="9" fill="#888780" fontFamily="sans-serif">6m</text>
-                                <text x="4" y="183" fontSize="9" fill="#888780" fontFamily="sans-serif">9m</text>
-                                <text x="4" y="233" fontSize="9" fill="#888780" fontFamily="sans-serif">12m</text>
-                                <text x="4" y="283" fontSize="9" fill="#888780" fontFamily="sans-serif">15m</text>
-                                <text x="4" y="333" fontSize="9" fill="#888780" fontFamily="sans-serif">18m</text>
-
-                                {/* dashed depth gridlines */}
-                                <line x1="42" y1="30" x2={svgWidth} y2="30" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-                                <line x1="42" y1="80" x2={svgWidth} y2="80" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-                                <line x1="42" y1="130" x2={svgWidth} y2="130" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-                                <line x1="42" y1="180" x2={svgWidth} y2="180" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-                                <line x1="42" y1="230" x2={svgWidth} y2="230" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-                                <line x1="42" y1="280" x2={svgWidth} y2="280" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-                                <line x1="42" y1="330" x2={svgWidth} y2="330" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-
-                                {/* ground surface */}
-                                <path
-                                  d={`M 72,28 C 150,25 250,26 350,24 C 450,26 550,23 ${svgWidth},25`}
-                                  stroke="#3B6D11"
-                                  strokeWidth="1.5"
-                                  fill="none"
-                                  strokeDasharray="4,2"
-                                />
-                                <text x="44" y="22" fontSize="8" fill="#3B6D11" fontFamily="sans-serif">Ground surface (RL)</text>
-
-                                {/* zone boundary lines */}
-                                <line x1="42" y1="88" x2={svgWidth} y2="88" stroke="#D3D1C7" strokeWidth="0.5" strokeDasharray="6,3" />
-                                <line x1="42" y1="165" x2={svgWidth} y2="165" stroke="#D3D1C7" strokeWidth="0.5" strokeDasharray="6,3" />
-                                <line x1="42" y1="245" x2={svgWidth} y2="245" stroke="#D3D1C7" strokeWidth="0.5" strokeDasharray="6,3" />
-                                <text x="44" y="60" fontSize="8" fill="#D3D1C7" fontFamily="sans-serif">FILL</text>
-                                <text x="44" y="130" fontSize="8" fill="#D3D1C7" fontFamily="sans-serif">SHALLOW</text>
-                                <text x="44" y="205" fontSize="8" fill="#D3D1C7" fontFamily="sans-serif">INTERMEDIATE</text>
-                                <text x="44" y="268" fontSize="8" fill="#D3D1C7" fontFamily="sans-serif">DEEP</text>
-
-                                {/* water table line */}
-                                <path d={`M 60,178 L 180,172 L 300,185 L 420,176 L 540,180 L ${svgWidth},178`} stroke="#378ADD" strokeWidth="1" stroke-dasharray="3,2" fill="none" />
-                                <text x="44" y="174" fontSize="8" fill="#378ADD" fontFamily="sans-serif">WT</text>
-
-                                {/* dynamic borehole layers drawing */}
-                                {displayBoreholes.map((bh: any, index: number) => {
-                                  const bhX =
-                                    displayBoreholes.length === 1
-                                      ? svgWidth / 2
-                                      : 70 + index * ((svgWidth - 140) / (displayBoreholes.length - 1));
-
-                                  const depthVal = parseFloat(bh.finalDepth || bh.plannedDepth) || 15;
-                                  const layers = getBoreholeLayers(depthVal);
-                                  const isAnomaly = bh.boreholeCode?.includes("02") || bh.boreholeCode?.includes("2");
-                                  const isDeviated = bh.boreholeCode?.includes("03") || bh.boreholeCode?.includes("3");
-
-                                  let currentY = 30;
-
-                                  return (
-                                    <g key={bh.id}>
-                                      {/* Soil Layers */}
-                                      {layers.map((layer, lIdx) => {
-                                        const layerH = layer.height * 16.67;
-                                        const y = currentY;
-                                        currentY += layerH;
-
-                                        return (
-                                          <g key={lIdx}>
-                                            <rect x={bhX - 12} y={y} width="24" height={layerH} fill={layer.bg} />
-                                            {layer.pattern && (
-                                              <rect
-                                                x={bhX - 12}
-                                                y={y}
-                                                width="24"
-                                                height={layerH}
-                                                fill={layer.pattern}
-                                                opacity={layer.opacity}
-                                              />
-                                            )}
-                                            {/* N value text */}
-                                            {lIdx < layers.length - 1 && (
-                                              <text
-                                                x={bhX + 16}
-                                                y={y + layerH / 2 + 3}
-                                                fontSize="8"
-                                                fill={
-                                                  layer.type === "fill"
-                                                    ? "#639922"
-                                                    : layer.type === "clay"
-                                                    ? "#D85A30"
-                                                    : "#BA7517"
-                                                }
-                                                fontFamily="sans-serif"
-                                              >
-                                                {layer.label}
-                                              </text>
-                                            )}
-                                          </g>
-                                        );
-                                      })}
-
-                                      {/* End marker indicator */}
-                                      {layers.length > 0 && layers[layers.length - 1].type === "rock" && (
-                                        <text
-                                          x={bhX + 16}
-                                          y={currentY - 10}
-                                          fontSize="8"
-                                          fill="#444441"
-                                          fontFamily="sans-serif"
-                                        >
-                                          R
-                                        </text>
-                                      )}
-
-                                      {/* Anomaly raw text highlight */}
-                                      {isAnomaly && (
-                                        <g>
-                                          <rect x={bhX - 15} y="141" width="30" height="20" fill="#FCEBEB" stroke="#E24B4A" strokeWidth="1" />
-                                          <text x={bhX} y="154" fontSize="7" fill="#A32D2D" textAnchor="middle" fontFamily="sans-serif">N=42 RAW</text>
-                                          <text x={bhX + 16} y="152" fontSize="8" fill="#E24B4A" fontWeight="500" fontFamily="sans-serif">N=42!</text>
-                                        </g>
-                                      )}
-
-                                      {/* GPS Deviation Badge */}
-                                      {isDeviated && (
-                                        <g>
-                                          <rect x={bhX - 22} y="8" width="44" height="14" rx="3" fill="#FCEBEB" stroke="#E24B4A" strokeWidth="0.5" />
-                                          <text x={bhX} y="18" fontSize="7" fill="#A32D2D" textAnchor="middle" fontFamily="sans-serif">GPS +4.2m ⚠</text>
-                                        </g>
-                                      )}
-
-                                      {/* Outer Border representing status */}
-                                      {bh.status === "PLANNED" ? (
-                                        <rect
-                                          x={bhX - 12}
-                                          y="30"
-                                          width="24"
-                                          height={depthVal * 16.67}
-                                          fill="none"
-                                          stroke="#D3D1C7"
-                                          strokeWidth="1"
-                                          strokeDasharray="4,2"
-                                        />
-                                      ) : bh.status === "IN_PROGRESS" ? (
-                                        <rect
-                                          x={bhX - 12}
-                                          y="30"
-                                          width="24"
-                                          height={depthVal * 16.67}
-                                          fill="none"
-                                          stroke="#BA7517"
-                                          strokeWidth="1"
-                                          strokeDasharray="4,2"
-                                        />
-                                      ) : (
-                                        <rect
-                                          x={bhX - 12}
-                                          y="30"
-                                          width="24"
-                                          height={depthVal * 16.67}
-                                          fill="none"
-                                          stroke={isAnomaly || isDeviated ? "#E24B4A" : "#993C1D"}
-                                          strokeWidth={isAnomaly || isDeviated ? 1.5 : 1}
-                                          strokeDasharray={isAnomaly ? "4,2" : undefined}
-                                        />
-                                      )}
-                                    </g>
-                                  );
-                                })}
-
-                                {/* connecting profile lines */}
-                                {(() => {
-                                  let fillPath = "M";
-                                  let clayPath = "M";
-                                  let sandPath = "M";
-                                  let rockPath = "M";
-
-                                  displayBoreholes.forEach((bh, index) => {
-                                    const bhX =
-                                      displayBoreholes.length === 1
-                                        ? svgWidth / 2
-                                        : 70 + index * ((svgWidth - 140) / (displayBoreholes.length - 1));
-
-                                    const isPending = bh.status === "PLANNED";
-                                    if (isPending) return;
-
-                                    fillPath += ` ${bhX},53`;
-                                    clayPath += ` ${bhX},128`;
-                                    sandPath += ` ${bhX},203`;
-                                    rockPath += ` ${bhX},293`;
-                                  });
-
-                                  return (
-                                    <>
-                                      {fillPath.length > 2 && <path d={fillPath.replace("M ", "M")} stroke="#97C459" strokeWidth="0.5" strokeDasharray="2,2" fill="none" />}
-                                      {clayPath.length > 2 && <path d={clayPath.replace("M ", "M")} stroke="#F0997B" strokeWidth="0.5" strokeDasharray="2,2" fill="none" />}
-                                      {sandPath.length > 2 && <path d={sandPath.replace("M ", "M")} stroke="#BA7517" strokeWidth="0.5" strokeDasharray="2,2" fill="none" />}
-                                      {rockPath.length > 2 && <path d={rockPath.replace("M ", "M")} stroke="#444441" strokeWidth="0.5" strokeDasharray="2,2" fill="none" />}
-                                    </>
-                                  );
-                                })()}
-
-                                <text x={svgWidth - 10} y="362" fontSize="8" fill="#97C459" textAnchor="end" fontFamily="sans-serif">Raw site data · Groundlense</text>
-                              </svg>
-
-                              {/* Invisible Hover Zones absolute overlay */}
-                              {displayBoreholes.map((bh: any, index: number) => {
-                                const bhX =
-                                  displayBoreholes.length === 1
-                                    ? svgWidth / 2
-                                    : 70 + index * ((svgWidth - 140) / (displayBoreholes.length - 1));
-
-                                const isAnomaly = bh.boreholeCode?.includes("02") || bh.boreholeCode?.includes("2");
-                                const isDeviated = bh.boreholeCode?.includes("03") || bh.boreholeCode?.includes("3");
-                                const depthVal = parseFloat(bh.finalDepth || bh.plannedDepth) || 15;
-
-                                return (
-                                  <div
-                                    key={`hover-${bh.id}`}
-                                    onMouseEnter={() => setHoveredBhId(bh.id)}
-                                    onMouseLeave={() => setHoveredBhId(null)}
-                                    className="absolute cursor-pointer"
-                                    style={{
-                                      left: `${bhX - 20}px`,
-                                      top: "30px",
-                                      width: "40px",
-                                      height: "320px",
-                                    }}
-                                  >
-                                    {/* Hover Card */}
-                                    {hoveredBhId === bh.id && (
-                                      <div
-                                        className="hover-card"
-                                        style={{
-                                          left: "50%",
-                                          transform: "translateX(-50%) translateY(-8px)",
-                                          pointerEvents: "none",
-                                          display: "block",
-                                        }}
-                                      >
-                                        <div className="hc-title font-display">
-                                          {bh.boreholeCode} · {bh.name || "Foundation"}
-                                          {isAnomaly && " ⚠ Anomaly"}
-                                          {isDeviated && " ⚠ GPS Deviated"}
-                                        </div>
-                                        <div className="hc-row">
-                                          <span className="hc-label">Easting</span>
-                                          <span className="hc-value green">
-                                            {bh.longitude ? `${Number(bh.longitude).toFixed(6)}° E` : "521847.32 m E"}
-                                          </span>
-                                        </div>
-                                        <div className="hc-row">
-                                          <span className="hc-label">Northing</span>
-                                          <span className="hc-value green">
-                                            {bh.latitude ? `${Number(bh.latitude).toFixed(6)}° N` : "3148203.45 m N"}
-                                          </span>
-                                        </div>
-                                        <div className="hc-row">
-                                          <span className="hc-label">RL</span>
-                                          <span className="hc-value green">
-                                            {bh.groundLevelRL ? `${bh.groundLevelRL} m` : "198.42 m"}
-                                          </span>
-                                        </div>
-                                        <div className="hc-row">
-                                          <span className="hc-label">Start date</span>
-                                          <span className="hc-value">
-                                            {bh.startedAt
-                                              ? new Date(bh.startedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-                                              : "12 Apr 2025"}
-                                          </span>
-                                        </div>
-                                        <div className="hc-row">
-                                          <span className="hc-label">End date</span>
-                                          <span className="hc-value">
-                                            {bh.completedAt
-                                              ? new Date(bh.completedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-                                              : bh.status === "IN_PROGRESS"
-                                              ? "In progress"
-                                              : bh.status === "PLANNED"
-                                              ? "Not started"
-                                              : "14 Apr 2025"}
-                                          </span>
-                                        </div>
-                                        <div className="hc-row">
-                                          <span className="hc-label">Total depth</span>
-                                          <span className="hc-value">{depthVal} m</span>
-                                        </div>
-                                        {isDeviated ? (
-                                          <div className="hc-dev warn">
-                                            ⚠ GPS deviation 4.2m — exceeds 3m threshold
-                                          </div>
-                                        ) : bh.status === "PLANNED" ? (
-                                          <div className="hc-dev" style={{ background: "#2C2C2A", color: "#B4B2A9" }}>
-                                            Boring not yet commenced
-                                          </div>
-                                        ) : (
-                                          <div className="hc-dev ok">
-                                            ✓ GPS within 1.2m of planned location
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })()
-                    )}
-
-                    {/* BH Info cells row below SVG */}
-                    <div className="bh-info-row mt-2 border-t border-[#F5C4B3]">
-                      {displayBoreholes.map((bh: any) => {
-                        const isAnomaly = bh.boreholeCode?.includes("02") || bh.boreholeCode?.includes("2");
-                        const isDeviated = bh.boreholeCode?.includes("03") || bh.boreholeCode?.includes("3");
-                        const depthVal = parseFloat(bh.finalDepth || bh.plannedDepth) || 15;
-
-                        let cellClass = "bh-info-cell";
-                        if (bh.status === "PLANNED") cellClass += " pending";
-                        else if (bh.status === "IN_PROGRESS") cellClass += " inprog";
-
-                        return (
-                          <div key={bh.id} className={cellClass}>
-                            <div className="bh-info-id font-mono">
-                              {bh.boreholeCode} {bh.name ? `· ${bh.name}` : ""} {isAnomaly || isDeviated ? "⚠" : ""}
-                            </div>
-                            <div className="bh-info-depth">
-                              {bh.status === "PLANNED" ? "— m" : `${depthVal.toFixed(1)} m`}
-                            </div>
-                            <div className="bh-info-depth-label">
-                              {bh.status === "PLANNED"
-                                ? `planned ${depthVal.toFixed(1)}m`
-                                : bh.status === "IN_PROGRESS"
-                                ? "depth so far"
-                                : "total depth"}
-                            </div>
-                            <div className="bh-info-dates">
-                              Start: {bh.startedAt ? new Date(bh.startedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "12 Apr"}{" "}
-                              <br />
-                              End: {bh.completedAt ? new Date(bh.completedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : bh.status === "IN_PROGRESS" ? "In progress" : bh.status === "PLANNED" ? "Not started" : "14 Apr"}
-                            </div>
-                            {isDeviated ? (
-                              <div className="bh-info-gps deviated">
-                                ⚠ GPS dev 4.2m · E {bh.longitude ? Number(bh.longitude).toFixed(0) : "521981"} · N {bh.latitude ? Number(bh.latitude).toFixed(0) : "3148197"} · RL {bh.groundLevelRL ? `${bh.groundLevelRL}m` : "197.22m"}
-                              </div>
-                            ) : (
-                              <div className="bh-info-gps font-mono">
-                                E {bh.longitude ? Number(bh.longitude).toFixed(0) : "521847"} · N {bh.latitude ? Number(bh.latitude).toFixed(0) : "3148203"}
-                                <br />
-                                RL {bh.groundLevelRL ? `${bh.groundLevelRL}m` : "198.42m"}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                <div className="xsec-body" style={{ overflow: "visible" }}>
+                  <div className="flex items-center gap-[6px] mb-2">
+                    <span className="view-badge site">As recorded on site — raw field data · unmodified</span>
                   </div>
+                  {renderCrossSection("site")}
+                  {renderBhInfoRow("site")}
                 </div>
               ) : (
-                /* Engineer reviewed view block */
-                <div className="xsec-body">
+                <div className="xsec-body" style={{ overflow: "visible" }}>
                   <div className="flex items-center gap-[6px] mb-2">
                     <span className="view-badge eng">As reviewed by engineer — corrected · approved report</span>
                   </div>
-                  {displayBoreholes.some(b => b.boreholeCode?.includes("02") || b.boreholeCode?.includes("2")) && (
+
+                  {/* Engineer modification notes from real interval remarks */}
+                  {reviewedNotes.length > 0 ? (
+                    reviewedNotes.map(({ bh, iv }: any, i: number) => (
+                      <div key={`note-${bh.id}-${i}`} className="mod-note shadow-sm border border-[#85B7EB]">
+                        <RiEdit2Line className="text-[#185FA5] text-[15px] shrink-0" />
+                        <div>
+                          <strong>
+                            {bh.boreholeCode}
+                            {num(iv.fromDepth) != null ? ` · ${num(iv.fromDepth)}–${num(iv.toDepth) ?? "?"}m` : ""}
+                          </strong>{" "}
+                          — {iv.remarks}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
                     <div className="mod-note shadow-sm border border-[#85B7EB]">
                       <RiEdit2Line className="text-[#185FA5] text-[15px] shrink-0" />
-                      <div>
-                        <strong>BH-02 · 8.5m</strong> — N-value corrected from <strong>N=42</strong> to{" "}
-                        <strong>N=18</strong>. Reason: "Casing disturbance. Inconsistent with adjacent BH-01
-                        and BH-03 at same depth. Corrected per IS 2131 Cl. 6.3." — Er. Rajesh Kumar · 18 Apr
-                        2025 · 03:22 PM
-                      </div>
+                      <div>No engineer modifications recorded — identical to field data.</div>
                     </div>
                   )}
 
-                  {/* SVG Container for Engineer View */}
-                  {displayBoreholes.length === 0 ? (
-                    <div className="py-20 text-center text-text-ter text-[12px]">
-                      No boreholes available for cross section.
-                    </div>
-                  ) : (
-                    (() => {
-                      const svgWidth = Math.max(620, displayBoreholes.length * 125);
-                      return (
-                        <div className="relative overflow-x-auto select-none mt-4" style={{ width: "100%" }}>
-                          <div style={{ width: `${svgWidth}px` }}>
-                            <svg width={svgWidth} height="370" viewBox={`0 0 ${svgWidth} 370`} className="block">
-                              <defs>
-                                <pattern id="p-fill" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#97C459" strokeWidth="1.5" /></pattern>
-                                <pattern id="p-silt" patternUnits="userSpaceOnUse" width="8" height="4"><line x1="0" y1="2" x2="8" y2="2" stroke="#EF9F27" strokeWidth="1.5" /></pattern>
-                                <pattern id="p-clay" patternUnits="userSpaceOnUse" width="5" height="5"><line x1="0" y1="0" x2="0" y2="5" stroke="#F0997B" strokeWidth="1.5" /></pattern>
-                                <pattern id="p-sand" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#BA7517" strokeWidth="1.5" /></pattern>
-                                <pattern id="p-rock" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(135)"><line x1="0" y1="0" x2="0" y2="6" stroke="#888780" strokeWidth="1.5" /></pattern>
-                              </defs>
-
-                              {/* depth axis */}
-                              <line x1="42" y1="30" x2="42" y2="350" stroke="#D3D1C7" strokeWidth="0.5" />
-                              <text x="4" y="33" fontSize="9" fill="#888780" fontFamily="sans-serif">0m</text>
-                              <text x="4" y="83" fontSize="9" fill="#888780" fontFamily="sans-serif">3m</text>
-                              <text x="4" y="133" fontSize="9" fill="#888780" fontFamily="sans-serif">6m</text>
-                              <text x="4" y="183" fontSize="9" fill="#888780" fontFamily="sans-serif">9m</text>
-                              <text x="4" y="233" fontSize="9" fill="#888780" fontFamily="sans-serif">12m</text>
-                              <text x="4" y="283" fontSize="9" fill="#888780" fontFamily="sans-serif">15m</text>
-                              <text x="4" y="333" fontSize="9" fill="#888780" fontFamily="sans-serif">18m</text>
-
-                              {/* dashed gridlines */}
-                              <line x1="42" y1="30" x2={svgWidth} y2="30" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-                              <line x1="42" y1="80" x2={svgWidth} y2="80" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-                              <line x1="42" y1="130" x2={svgWidth} y2="130" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-                              <line x1="42" y1="180" x2={svgWidth} y2="180" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-                              <line x1="42" y1="230" x2={svgWidth} y2="230" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-                              <line x1="42" y1="280" x2={svgWidth} y2="280" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-                              <line x1="42" y1="330" x2={svgWidth} y2="330" stroke="#F1EFE8" strokeWidth="0.5" strokeDasharray="3,3" />
-
-                              {/* ground surface */}
-                              <path d={`M 72,28 C 150,25 250,26 350,24 C 450,26 550,23 ${svgWidth},25`} stroke="#3B6D11" strokeWidth="1.5" fill="none" strokeDasharray="4,2" />
-                              <text x="44" y="22" fontSize="8" fill="#3B6D11" fontFamily="sans-serif">Ground surface (RL)</text>
-
-                              {/* boundary lines */}
-                              <line x1="42" y1="88" x2={svgWidth} y2="88" stroke="#D3D1C7" strokeWidth="0.5" strokeDasharray="6,3" />
-                              <line x1="42" y1="165" x2={svgWidth} y2="165" stroke="#D3D1C7" strokeWidth="0.5" strokeDasharray="6,3" />
-                              <line x1="42" y1="245" x2={svgWidth} y2="245" stroke="#D3D1C7" strokeWidth="0.5" strokeDasharray="6,3" />
-                              <text x="44" y="60" fontSize="8" fill="#D3D1C7" fontFamily="sans-serif">FILL</text>
-                              <text x="44" y="130" fontSize="8" fill="#D3D1C7" fontFamily="sans-serif">SHALLOW</text>
-                              <text x="44" y="205" fontSize="8" fill="#D3D1C7" fontFamily="sans-serif">INTERMEDIATE</text>
-                              <text x="44" y="268" fontSize="8" fill="#D3D1C7" fontFamily="sans-serif">DEEP</text>
-
-                              {/* WT */}
-                              <path d={`M 60,178 L 180,172 L 300,185 L 420,176 L 540,180 L ${svgWidth},178`} stroke="#378ADD" strokeWidth="1" stroke-dasharray="3,2" fill="none" />
-                              <text x="44" y="174" fontSize="8" fill="#378ADD" fontFamily="sans-serif">WT</text>
-
-                              {displayBoreholes.map((bh: any, index: number) => {
-                                const bhX =
-                                  displayBoreholes.length === 1
-                                    ? svgWidth / 2
-                                    : 70 + index * ((svgWidth - 140) / (displayBoreholes.length - 1));
-
-                                const depthVal = parseFloat(bh.finalDepth || bh.plannedDepth) || 15;
-                                const layers = getBoreholeLayers(depthVal);
-                                const isAnomaly = bh.boreholeCode?.includes("02") || bh.boreholeCode?.includes("2");
-                                const isDeviated = bh.boreholeCode?.includes("03") || bh.boreholeCode?.includes("3");
-
-                                let currentY = 30;
-
-                                return (
-                                  <g key={`eng-${bh.id}`}>
-                                    {layers.map((layer, lIdx) => {
-                                      const layerH = layer.height * 16.67;
-                                      const y = currentY;
-                                      currentY += layerH;
-
-                                      return (
-                                        <g key={lIdx}>
-                                          <rect x={bhX - 12} y={y} width="24" height={layerH} fill={layer.bg} />
-                                          {layer.pattern && (
-                                            <rect
-                                              x={bhX - 12}
-                                              y={y}
-                                              width="24"
-                                              height={layerH}
-                                              fill={layer.pattern}
-                                              opacity={layer.opacity}
-                                            />
-                                          )}
-                                          {/* N value text */}
-                                          {lIdx < layers.length - 1 && (
-                                            <text
-                                              x={bhX + 16}
-                                              y={y + layerH / 2 + 3}
-                                              fontSize="8"
-                                              fill={
-                                                layer.type === "fill"
-                                                  ? "#639922"
-                                                  : layer.type === "clay"
-                                                  ? "#D85A30"
-                                                  : "#BA7517"
-                                              }
-                                              fontFamily="sans-serif"
-                                            >
-                                              {/* Corrected BH-02 N value in Engineer View */}
-                                              {isAnomaly && layer.type === "clay" ? "N=18 (corrected)" : layer.label}
-                                            </text>
-                                          )}
-                                        </g>
-                                      );
-                                    })}
-
-                                    {layers.length > 0 && layers[layers.length - 1].type === "rock" && (
-                                      <text x={bhX + 16} y={currentY - 10} fontSize="8" fill="#444441" fontFamily="sans-serif">R</text>
-                                    )}
-
-                                    {/* Corrected N-value display visual indicators */}
-                                    {isAnomaly && (
-                                      <g>
-                                        <rect x={bhX - 15} y="141" width="30" height="20" fill="#E6F1FB" stroke="#185FA5" strokeWidth="1" />
-                                        <text x={bhX} y="154" fontSize="7" fill="#185FA5" textAnchor="middle" fontFamily="sans-serif">N=18 OK</text>
-                                      </g>
-                                    )}
-
-                                    {/* Deviation flag still exists in engineer view */}
-                                    {isDeviated && (
-                                      <g>
-                                        <rect x={bhX - 22} y="8" width="44" height="14" rx="3" fill="#FCEBEB" stroke="#E24B4A" strokeWidth="0.5" />
-                                        <text x={bhX} y="18" fontSize="7" fill="#A32D2D" textAnchor="middle" fontFamily="sans-serif">GPS +4.2m ⚠</text>
-                                      </g>
-                                    )}
-
-                                    {/* Outer Border */}
-                                    {bh.status === "PLANNED" ? (
-                                      <rect x={bhX - 12} y="30" width="24" height={depthVal * 16.67} fill="none" stroke="#D3D1C7" strokeWidth="1" strokeDasharray="4,2" />
-                                    ) : bh.status === "IN_PROGRESS" ? (
-                                      <rect x={bhX - 12} y="30" width="24" height={depthVal * 16.67} fill="none" stroke="#BA7517" strokeWidth="1" strokeDasharray="4,2" />
-                                    ) : (
-                                      <rect x={bhX - 12} y="30" width="24" height={depthVal * 16.67} fill="none" stroke={isAnomaly ? "#185FA5" : isDeviated ? "#E24B4A" : "#993C1D"} strokeWidth={1} />
-                                    )}
-                                  </g>
-                                );
-                              })}
-
-                              {/* connecting lines */}
-                              {(() => {
-                                let fillPath = "M";
-                                let clayPath = "M";
-                                let sandPath = "M";
-                                let rockPath = "M";
-
-                                displayBoreholes.forEach((bh, index) => {
-                                  const bhX =
-                                    displayBoreholes.length === 1
-                                      ? svgWidth / 2
-                                      : 70 + index * ((svgWidth - 140) / (displayBoreholes.length - 1));
-
-                                  if (bh.status === "PLANNED") return;
-
-                                  fillPath += ` ${bhX},53`;
-                                  clayPath += ` ${bhX},128`;
-                                  sandPath += ` ${bhX},203`;
-                                  rockPath += ` ${bhX},293`;
-                                });
-
-                                return (
-                                  <>
-                                    {fillPath.length > 2 && <path d={fillPath.replace("M ", "M")} stroke="#97C459" strokeWidth="0.5" strokeDasharray="2,2" fill="none" />}
-                                    {clayPath.length > 2 && <path d={clayPath.replace("M ", "M")} stroke="#F0997B" strokeWidth="0.5" strokeDasharray="2,2" fill="none" />}
-                                    {sandPath.length > 2 && <path d={sandPath.replace("M ", "M")} stroke="#BA7517" strokeWidth="0.5" strokeDasharray="2,2" fill="none" />}
-                                    {rockPath.length > 2 && <path d={rockPath.replace("M ", "M")} stroke="#444441" strokeWidth="0.5" strokeDasharray="2,2" fill="none" />}
-                                  </>
-                                );
-                              })()}
-
-                              <text x={svgWidth - 10} y="362" fontSize="8" fill="#185FA5" textAnchor="end" fontFamily="sans-serif">Engineer reviewed data · Groundlense</text>
-                            </svg>
-
-                            {/* Hover Zones absolute overlay */}
-                            {displayBoreholes.map((bh: any, index: number) => {
-                              const bhX =
-                                displayBoreholes.length === 1
-                                  ? svgWidth / 2
-                                  : 70 + index * ((svgWidth - 140) / (displayBoreholes.length - 1));
-
-                              const isAnomaly = bh.boreholeCode?.includes("02") || bh.boreholeCode?.includes("2");
-                              const isDeviated = bh.boreholeCode?.includes("03") || bh.boreholeCode?.includes("3");
-                              const depthVal = parseFloat(bh.finalDepth || bh.plannedDepth) || 15;
-
-                              return (
-                                  <div
-                                    key={`hover-eng-${bh.id}`}
-                                    onMouseEnter={() => setHoveredBhId(bh.id)}
-                                    onMouseLeave={() => setHoveredBhId(null)}
-                                    className="absolute cursor-pointer"
-                                    style={{
-                                      left: `${bhX - 20}px`,
-                                      top: "30px",
-                                      width: "40px",
-                                      height: "320px",
-                                    }}
-                                  >
-                                    {hoveredBhId === bh.id && (
-                                      <div
-                                        className="hover-card"
-                                        style={{
-                                          left: "50%",
-                                          transform: "translateX(-50%) translateY(-8px)",
-                                          pointerEvents: "none",
-                                          display: "block",
-                                        }}
-                                      >
-                                        <div className="hc-title font-display">
-                                          {bh.boreholeCode} · {bh.name || "Foundation"} {isAnomaly && " (Reviewed)"}
-                                        </div>
-                                        <div className="hc-row">
-                                          <span className="hc-label">Easting</span>
-                                          <span className="hc-value green">
-                                            {bh.longitude ? `${Number(bh.longitude).toFixed(6)}° E` : "521847.32 m E"}
-                                          </span>
-                                        </div>
-                                        <div className="hc-row">
-                                          <span className="hc-label">Northing</span>
-                                          <span className="hc-value green">
-                                            {bh.latitude ? `${Number(bh.latitude).toFixed(6)}° N` : "3148203.45 m N"}
-                                          </span>
-                                        </div>
-                                        <div className="hc-row">
-                                          <span className="hc-label">RL</span>
-                                          <span className="hc-value green">
-                                            {bh.groundLevelRL ? `${bh.groundLevelRL} m` : "198.42 m"}
-                                          </span>
-                                        </div>
-                                        <div className="hc-row">
-                                          <span className="hc-label">Soil type at 8.5m</span>
-                                          <span className="hc-value">{isAnomaly ? "Clay (N=18 corrected)" : "Clay"}</span>
-                                        </div>
-                                        <div className="hc-row">
-                                          <span className="hc-label">Total depth</span>
-                                          <span className="hc-value">{depthVal} m</span>
-                                        </div>
-                                        {isAnomaly ? (
-                                          <div className="hc-dev ok" style={{ background: "#08415C", color: "#9FE1F5" }}>
-                                            ✓ N-value verified & approved by engineer
-                                          </div>
-                                        ) : isDeviated ? (
-                                          <div className="hc-dev warn">
-                                            ⚠ GPS deviation 4.2m — exceeds 3m threshold
-                                          </div>
-                                        ) : (
-                                          <div className="hc-dev ok">
-                                            ✓ GPS within 1.2m of planned location
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })()
-                  )}
-
-                  {/* BH Info row below SVG */}
-                  <div className="bh-info-row mt-2 border-t border-[#F5C4B3]">
-                    {displayBoreholes.map((bh: any) => {
-                      const isAnomaly = bh.boreholeCode?.includes("02") || bh.boreholeCode?.includes("2");
-                      const isDeviated = bh.boreholeCode?.includes("03") || bh.boreholeCode?.includes("3");
-                      const depthVal = parseFloat(bh.finalDepth || bh.plannedDepth) || 15;
-
-                      let cellClass = "bh-info-cell";
-                      if (bh.status === "PLANNED") cellClass += " pending";
-                      else if (bh.status === "IN_PROGRESS") cellClass += " inprog";
-
-                      return (
-                        <div key={`info-eng-${bh.id}`} className={cellClass}>
-                          <div className="bh-info-id font-mono">
-                            {bh.boreholeCode} {bh.name ? `· ${bh.name}` : ""}
-                          </div>
-                          <div className="bh-info-depth">
-                            {bh.status === "PLANNED" ? "— m" : isAnomaly ? "17.5 m (Reviewed)" : `${depthVal.toFixed(1)} m`}
-                          </div>
-                          <div className="bh-info-depth-label">
-                            {bh.status === "PLANNED"
-                              ? `planned ${depthVal.toFixed(1)}m`
-                              : bh.status === "IN_PROGRESS"
-                              ? "depth so far"
-                              : "total depth"}
-                          </div>
-                          <div className="bh-info-dates">
-                            Approved: {bh.completedAt ? new Date(bh.completedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "14 Apr 2025"}
-                          </div>
-                          {isAnomaly ? (
-                            <div className="bh-info-gps" style={{ color: "#185FA5", background: "#E6F1FB", borderRadius: "3px", padding: "2px 4px", display: "inline-block", marginTop: "3px" }}>
-                              ✓ N-value approved (N=18)
-                            </div>
-                          ) : isDeviated ? (
-                            <div className="bh-info-gps deviated">
-                              ⚠ GPS dev 4.2m · E 521981 · N 3148197
-                            </div>
-                          ) : (
-                            <div className="bh-info-gps font-mono">
-                              E {bh.longitude ? Number(bh.longitude).toFixed(0) : "521847"} · N {bh.latitude ? Number(bh.latitude).toFixed(0) : "3148203"}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {renderCrossSection("eng")}
+                  {renderBhInfoRow("eng")}
                 </div>
               )}
             </div>
 
-            {/* Site Photos section */}
-            <div className="sec-label mt-4">Site photos — GPS verified · timestamped</div>
-            <div className="photos-strip">
-              <div className="photo-card shadow-sm hover:scale-[1.01] transition-all">
-                <div className="photo-img" style={{ background: "#E6F1FB", color: "#185FA5" }}>
-                  <RiCameraLine className="text-[20px]" />
-                  <span className="font-semibold">Rig at BH-01</span>
-                </div>
-                <div className="photo-info">
-                  <div className="photo-bh">BH-01 · Abutment A</div>
-                  <div className="photo-date">12 Apr 2025 · 08:42 AM</div>
-                  <div className="photo-tag">Rig setup · start of boring</div>
-                  <div className="photo-verified font-mono">✓ GPS 521847 E · 3148203 N</div>
-                </div>
+            {/* Site Photos section — real uploaded media via the authenticated proxy */}
+            <div className="sec-label mt-4">Site photos — timestamped uploads</div>
+            {photos.length === 0 ? (
+              <div
+                className="flex flex-col items-center justify-center gap-2 mb-[14px] bg-white border border-[#F5C4B3] rounded-[7px] py-8 text-center"
+              >
+                <RiCameraLine className="text-[20px] text-[#B4B2A9]" />
+                <div className="text-[11px] text-[#888780]">No site photos uploaded yet</div>
               </div>
-
-              <div className="photo-card shadow-sm hover:scale-[1.01] transition-all">
-                <div className="photo-img" style={{ background: "#EAF3DE", color: "#3B6D11" }}>
-                  <RiCameraLine className="text-[20px]" />
-                  <span className="font-semibold">Split spoon 6m</span>
-                </div>
-                <div className="photo-info">
-                  <div className="photo-bh">BH-01 · Depth 6.0m</div>
-                  <div className="photo-date">12 Apr 2025 · 11:15 AM</div>
-                  <div className="photo-tag">Split spoon · clay stiff brown</div>
-                  <div className="photo-verified font-mono">✓ Sample GL-BH01-6.0-S1</div>
-                </div>
-              </div>
-
-              <div className="photo-card shadow-sm hover:scale-[1.01] transition-all">
-                <div className="photo-img" style={{ background: "#FCEBEB", color: "#993C1D" }}>
-                  <RiCameraLine className="text-[20px]" />
-                  <span className="font-semibold text-center">BH-03 GPS deviated</span>
-                </div>
-                <div className="photo-info">
-                  <div className="photo-bh text-red-600">BH-03 · Pier P2 ⚠ GPS dev</div>
-                  <div className="photo-date">15 Apr 2025 · 09:10 AM</div>
-                  <div className="photo-tag">Rig setup · location deviated 4.2m</div>
-                  <div className="photo-verified font-mono" style={{ color: "#A32D2D", background: "#FCEBEB" }}>
-                    ⚠ Deviation flagged
+            ) : (
+              <div className="photos-strip">
+                {photos.map((p: any) => (
+                  <div key={p.id} className="photo-card shadow-sm hover:scale-[1.01] transition-all">
+                    <div className="photo-img" style={{ background: "#F1EFE8", color: "#5F5E5A" }}>
+                      {p.mimeType?.startsWith("image/") ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={`/api/media/${p.id}`} alt={p.fileName || "Site photo"} loading="lazy" />
+                      ) : (
+                        <>
+                          <RiImageLine className="text-[20px]" />
+                          <span className="font-semibold">{truncate(p.fileName, 20) || "File"}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="photo-info">
+                      <div className="photo-bh">
+                        {p.bhCode}
+                        {p.from != null ? ` · ${p.from}–${p.to ?? "?"}m` : ""}
+                      </div>
+                      <div className="photo-date">{fmtDate(p.createdAt) ?? "—"}</div>
+                      <div className="photo-tag">{truncate(p.fileName, 32) || "—"}</div>
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
+            )}
 
-              <div className="photo-card shadow-sm hover:scale-[1.01] transition-all">
-                <div className="photo-img" style={{ background: "#F1EFE8", color: "#5F5E5A" }}>
-                  <RiCameraLine className="text-[20px]" />
-                  <span className="font-semibold">Sample jar BH-03</span>
-                </div>
-                <div className="photo-info">
-                  <div className="photo-bh">BH-03 · Pier P2 · 9.0m</div>
-                  <div className="photo-date">15 Apr 2025 · 02:30 PM</div>
-                  <div className="photo-tag">Sample jar sealed</div>
-                  <div className="photo-verified font-mono">✓ ID GL-BH03-9.0-S2</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Document downloads strip */}
+            {/* Document downloads strip — backend not available yet */}
             <div className="dl-row mt-4">
-              <button className="dl-btn">
+              <button className="dl-btn" disabled title="Available soon">
                 <RiDownloadLine className="text-[14px]" />
                 Download full report — PDF
               </button>
-              <button className="dl-btn-sec">
+              <button className="dl-btn-sec" disabled title="Available soon">
                 <RiShieldCheckLine className="text-[14px]" />
                 Tamper certificate
               </button>
-              <button className="dl-btn-sec">
+              <button className="dl-btn-sec" disabled title="Available soon">
                 <RiImageLine className="text-[14px]" />
                 All site photos
               </button>
-              <div className="cert shadow-sm">
-                <RiCheckLine className="text-[12px] text-green-700" />
-                NABL verified · Geocon Labs CC-1847
-              </div>
+              <span className="dl-hint">Downloads available soon</span>
             </div>
           </div>
         </div>

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
+  TextInput,
   ScrollView,
   Alert,
 } from 'react-native';
@@ -11,6 +12,8 @@ import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
+import { api } from '../services/api';
+import MockCameraModal from '../components/MockCameraModal';
 
 export default function SampleCollectionScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, sessionId, currentDepth, intervalNo, sptData, soilData } = route.params;
@@ -18,30 +21,101 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
 
   // Sample states
   const [sampleType, setSampleType] = useState<'DISTURBED' | 'UNDISTURBED'>('DISTURBED');
-  const [slatePhotoTaken, setSlatePhotoTaken] = useState(false);
-  const [sealedPhotoTaken, setSealedPhotoTaken] = useState(false);
+  const [sealedConfirmed, setSealedConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // Generate unique Sample ID based on borehole, depth, and type
-  const typeChar = sampleType === 'DISTURBED' ? 'S' : 'U';
-  const sampleSeq = intervalNo; // Sequence matches interval number for simplicity
-  // format GL-BH03-4.5-S1
-  const sampleId = `${borehole.boreholeCode.replace('-0047', '')}-${currentDepth.toFixed(1)}-${typeChar}${sampleSeq}`;
+  // UDS-specific states (prototype Screen 9)
+  const [tubePenetration, setTubePenetration] = useState('');
+  const [tubeRecovery, setTubeRecovery] = useState('');
+  const [waxConfirmed, setWaxConfirmed] = useState(false);
+  const [uprightConfirmed, setUprightConfirmed] = useState(false);
 
-  const handleSlatePhoto = () => {
-    setSlatePhotoTaken(true);
-    Alert.alert('Slate Photo Stamped', 'Visual check slate board photo saved.');
+  // Real count of samples already recorded at this depth (drives sequence number)
+  const [samplesAtDepth, setSamplesAtDepth] = useState(0);
+
+  const isUds = sampleType === 'UNDISTURBED';
+  const isRockBranch = soilData?.isRock === true || soilData?.soilType === 'Rock';
+
+  useEffect(() => {
+    let active = true;
+    storage.getSamples(borehole.id).then((samples: any[]) => {
+      if (!active) return;
+      const count = samples.filter(
+        (s: any) => typeof s.sampleDepth === 'number' && Math.abs(s.sampleDepth - currentDepth) < 0.05
+      ).length;
+      setSamplesAtDepth(count);
+    });
+    return () => {
+      active = false;
+    };
+  }, [borehole.id, currentDepth]);
+
+  // Derive sample ID generically from boreholeCode (GL-BH-XXXX-NN → GL-BH{NN})
+  // Format per prototype: GL-BH{n}-{depth}-S{seq} / -U{seq}
+  const typeChar = isUds ? 'U' : 'S';
+  const bhNumMatch = (borehole.boreholeCode || '').match(/-(\d+)$/);
+  const bhPrefix = bhNumMatch ? `GL-BH${bhNumMatch[1]}` : (borehole.boreholeCode || 'GL-BH');
+  const sampleSeq = samplesAtDepth + 1;
+  const sampleId = `${bhPrefix}-${currentDepth.toFixed(1)}-${typeChar}${sampleSeq}`;
+
+  // UDS recovery ratio (computed from real inputs)
+  const penetrationCm = parseFloat(tubePenetration);
+  const recoveryCm = parseFloat(tubeRecovery);
+  const recoveryRatio =
+    !isNaN(penetrationCm) && penetrationCm > 0 && !isNaN(recoveryCm)
+      ? Math.round((recoveryCm / penetrationCm) * 100)
+      : null;
+
+  const [cameraVisible, setCameraVisible] = useState(false);
+  const [activePhotoType, setActivePhotoType] = useState<string>('Slate Board Photo');
+  const [slatePhotoCaptured, setSlatePhotoCaptured] = useState(false);
+  const [sealedPhotoCaptured, setSealedPhotoCaptured] = useState(false);
+
+  const handleCapturePhoto = async (base64Data: string, filename: string) => {
+    if (activePhotoType === 'Slate Board Photo') {
+      setSlatePhotoCaptured(true);
+    } else {
+      setSealedPhotoCaptured(true);
+    }
+
+    const intervalId = `interval-${borehole.id}-${intervalNo}`;
+    try {
+      await api.uploadMedia(intervalId, base64Data, filename);
+    } catch (err) {
+      // Offline fallback: queue sync operation
+      await syncManager.queueOperation(
+        'PHOTO',
+        `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        'CREATE',
+        {
+          intervalId,
+          fileName: filename,
+          mimeType: 'image/jpeg',
+          base64Data,
+        },
+        sessionId
+      );
+    }
   };
 
-  const handleSealedPhoto = () => {
-    setSealedPhotoTaken(true);
-    Alert.alert('Sealed Sample Photo Stamped', 'Geotagged tube seal photo saved.');
-  };
+  const udsChecksOk = !isUds || (waxConfirmed && uprightConfirmed);
 
   const handleNextDepth = async () => {
-    if (!slatePhotoTaken || !sealedPhotoTaken) {
-      Alert.alert('Photos Required', 'Please take both the slate board and sealed sample photos.');
+    if (isUds && !udsChecksOk) {
+      Alert.alert(
+        'Confirmation required / पुष्टि जरूरी',
+        'Both ends waxed & sealed AND stored upright must be ticked before continuing. / दोनों चेकबॉक्स टिक करना जरूरी है।'
+      );
       return;
     }
+
+    if (isUds && recoveryRatio !== null && !isNaN(penetrationCm) && !isNaN(recoveryCm) && recoveryCm > penetrationCm) {
+      Alert.alert('Invalid values', 'Recovery cannot exceed tube penetration. / रिकवरी पेनेट्रेशन से ज्यादा नहीं हो सकती।');
+      return;
+    }
+
+    if (saving) return;
+    setSaving(true);
 
     try {
       // 1. Create the interval record locally
@@ -64,16 +138,26 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
         observedAt: new Date().toISOString(),
       };
 
-      // 2. Create the sample record locally
-      const sampleRecord = {
+      // 2. Create the sample record locally — 14-day lab deadline persisted in payload
+      const createdAt = new Date();
+      const labDeadline = new Date(createdAt.getTime() + 14 * 24 * 60 * 60 * 1000);
+      const sampleRecord: any = {
         id: `sample-${Date.now()}`,
         intervalId: intervalRecord.id,
         sampleNumber: sampleId,
         sampleType,
         sampleDepth: currentDepth,
-        condition: 'SEALED',
-        createdAt: new Date().toISOString(),
+        condition: sealedConfirmed ? 'SEALED' : 'UNSEALED',
+        labDeadline: labDeadline.toISOString(),
+        createdAt: createdAt.toISOString(),
       };
+      if (isUds) {
+        sampleRecord.tubePenetrationCm = isNaN(penetrationCm) ? undefined : penetrationCm;
+        sampleRecord.recoveryCm = isNaN(recoveryCm) ? undefined : recoveryCm;
+        sampleRecord.recoveryRatioPct = recoveryRatio !== null ? recoveryRatio : undefined;
+        sampleRecord.waxSealedBothEnds = waxConfirmed;
+        sampleRecord.storedUpright = uprightConfirmed;
+      }
 
       // Save to local storage
       const intervals = await storage.getIntervals(borehole.id);
@@ -113,38 +197,47 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
         return bh;
       });
       await storage.saveBoreholes(projectId, updated);
+      const updatedBorehole = updated.find((bh: any) => bh.id === borehole.id) || borehole;
 
-      // Loop exit condition checks
-      const nextDepth = currentDepth + 1.5;
-      const nextInterval = intervalNo + 1;
-
-      if (nextDepth >= 10.5 && sampleType === 'UNDISTURBED') {
-        // Redirect to UDS specific screen or closure
+      // Rock branch: soil description said Rock — exit the SPT loop into core mode
+      if (isRockBranch) {
         Alert.alert(
-          'Target Depth Reached / लक्ष्य गहराई पूर्ण',
-          'Borehole logging has completed target depth. Proceed to Closure.',
+          'Rock encountered / चट्टान मिली',
+          'Switching to rock coring mode (Screen 8).',
           [
             {
-              text: 'Go to Closure / क्लोजर पर जाएं',
+              text: 'Start coring / कोरिंग शुरू करें',
               onPress: () =>
-                navigation.navigate('BoringClosure', {
-                  borehole: updated.find(bh => bh.id === borehole.id),
+                navigation.replace('RockCoring', {
+                  borehole: updatedBorehole,
                   projectId,
+                  sessionId,
+                  currentDepth,
+                  intervalNo: intervalNo + 1,
                 }),
             },
           ]
         );
-      } else if (nextDepth >= 13.5) {
-        // Simulated target depth reached
+        return;
+      }
+
+      // Loop exit by the borehole's REAL planned depth (no magic numbers).
+      // If plannedDepth is missing, keep looping — worker exits via Terminate.
+      const nextDepth = currentDepth + 1.5;
+      const nextInterval = intervalNo + 1;
+      const plannedDepth = parseFloat(borehole.plannedDepth);
+      const targetReached = !isNaN(plannedDepth) && plannedDepth > 0 && currentDepth >= plannedDepth;
+
+      if (targetReached) {
         Alert.alert(
           'Target Depth Reached / लक्ष्य गहराई पूर्ण',
-          'This borehole is complete! Let\'s close the logging.',
+          `Planned depth ${plannedDepth.toFixed(1)}m reached. Proceed to closure. / नियोजित गहराई पूरी हुई।`,
           [
             {
               text: 'Boring Closure / समाप्त करें',
               onPress: () =>
                 navigation.navigate('BoringClosure', {
-                  borehole: updated.find(bh => bh.id === borehole.id),
+                  borehole: updatedBorehole,
                   projectId,
                 }),
             },
@@ -153,7 +246,7 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
       } else {
         // Return back to Screen 4 (SPT entry) for the next depth
         navigation.replace('SPTEntry', {
-          borehole: updated.find(bh => bh.id === borehole.id),
+          borehole: updatedBorehole,
           projectId,
           sessionId,
           currentDepth: nextDepth,
@@ -162,18 +255,21 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
       }
     } catch (err) {
       Alert.alert('Error', 'Failed to save interval data');
+    } finally {
+      setSaving(false);
     }
   };
 
   const formattedDeadline = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB');
+  const nextDisabled = !udsChecksOk;
 
   return (
-    <View style={[styles.container, sampleType === 'UNDISTURBED' && styles.containerUds]}>
+    <View style={[styles.container, isUds && styles.containerUds]}>
       {/* Header */}
-      <View style={[styles.headerBar, sampleType === 'UNDISTURBED' && styles.headerBarUds]}>
+      <View style={[styles.headerBar, isUds && styles.headerBarUds]}>
         <View style={styles.headerTitleRow}>
           <Text style={styles.headerTitle}>
-            {borehole.boreholeCode} · {sampleType === 'UNDISTURBED' ? 'UDS Sample' : t('sampleCollection', lang)}
+            {borehole.boreholeCode} · {isUds ? 'UDS Sample' : t('sampleCollection', lang)}
           </Text>
           <TouchableOpacity
             style={styles.langBtn}
@@ -195,83 +291,182 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
         <Text style={styles.fieldLabel}>{t('sampleType', lang)}</Text>
         <View style={styles.horizontalRow}>
           <TouchableOpacity
-            style={[styles.tileHalf, sampleType === 'DISTURBED' && styles.tileHalfActive]}
+            style={[styles.tileHalf, !isUds && styles.tileHalfActive]}
             onPress={() => setSampleType('DISTURBED')}
           >
-            <Text style={[styles.tileText, sampleType === 'DISTURBED' && styles.tileTextActive]}>
+            <Text style={[styles.tileText, !isUds && styles.tileTextActive]}>
               Disturbed SPT / विक्षुब्ध नमूना
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tileHalf, sampleType === 'UNDISTURBED' && styles.tileHalfActiveUds]}
+            style={[styles.tileHalf, isUds && styles.tileHalfActiveUds]}
             onPress={() => setSampleType('UNDISTURBED')}
           >
-            <Text style={[styles.tileText, sampleType === 'UNDISTURBED' && styles.tileTextActiveUds]}>
+            <Text style={[styles.tileText, isUds && styles.tileTextActiveUds]}>
               UDS Thin wall / अविक्षुब्ध
             </Text>
           </TouchableOpacity>
         </View>
 
+        {isUds ? (
+          <View style={styles.udsCareBox}>
+            <Text style={styles.udsCareTitle}>Undisturbed sample — handle with care</Text>
+            <Text style={styles.udsCareSub}>अविक्षुब्ध नमूना — ध्यान से रखें</Text>
+          </View>
+        ) : null}
+
         {/* Dynamic Sample ID display card */}
-        <View style={[styles.sampleIdBox, sampleType === 'UNDISTURBED' && styles.sampleIdBoxUds]}>
-          <Text style={[styles.sampleIdLabel, sampleType === 'UNDISTURBED' && styles.sampleIdLabelUds]}>
+        <View style={[styles.sampleIdBox, isUds && styles.sampleIdBoxUds]}>
+          <Text style={[styles.sampleIdLabel, isUds && styles.sampleIdLabelUds]}>
             {t('writeOnTube', lang)} / ट्यूब पर लिखें
           </Text>
           <Text style={styles.sampleIdVal}>{sampleId}</Text>
-          <Text style={[styles.sampleIdHint, sampleType === 'UNDISTURBED' && styles.sampleIdLabelUds]}>
-            Use marker pen clearly / मार्कर से साफ लिखें
+          <Text style={[styles.sampleIdHint, isUds && styles.sampleIdLabelUds]}>
+            {isUds
+              ? 'Write on tube AND core box / ट्यूब और बॉक्स दोनों पर लिखें'
+              : 'Use marker pen clearly / मार्कर से साफ लिखें'}
           </Text>
         </View>
 
-        {/* Slate board photo widget */}
+        {/* UDS-only: tube penetration / recovery inputs */}
+        {isUds ? (
+          <View style={styles.udsInputRow}>
+            <View style={styles.udsInputHalf}>
+              <Text style={styles.fieldLabel}>Tube penetration (cm) / पेनेट्रेशन</Text>
+              <TextInput
+                style={styles.input}
+                value={tubePenetration}
+                onChangeText={setTubePenetration}
+                keyboardType="numeric"
+                placeholder="e.g. 45"
+                placeholderTextColor={colors.grayMid}
+              />
+            </View>
+            <View style={styles.udsInputHalf}>
+              <Text style={styles.fieldLabel}>Recovery (cm) / रिकवरी</Text>
+              <TextInput
+                style={styles.input}
+                value={tubeRecovery}
+                onChangeText={setTubeRecovery}
+                keyboardType="numeric"
+                placeholder="e.g. 42"
+                placeholderTextColor={colors.grayMid}
+              />
+            </View>
+          </View>
+        ) : null}
+
+        {isUds ? (
+          <View style={styles.recoveryRow}>
+            <Text style={styles.recoveryLabel}>Recovery ratio / रिकवरी अनुपात</Text>
+            <Text style={styles.recoveryVal}>
+              {recoveryRatio !== null ? `${recoveryRatio}%` : '— enter values above'}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Slate board instructions — photo capture honestly unavailable */}
         <View style={styles.slateContainer}>
           <Text style={styles.slateTitle}>📋 Slate board photo required / स्लेट बोर्ड फोटो जरूरी</Text>
           <Text style={styles.slateSub}>
-            Hold slate showing: BH ID · Depth · Date (like: GL-BH03 · {currentDepth.toFixed(1)}m · {new Date().toLocaleDateString('en-GB')})
+            Hold slate showing: BH ID · Depth · Date (like: {bhPrefix} · {currentDepth.toFixed(1)}m · {new Date().toLocaleDateString('en-GB')})
           </Text>
           <TouchableOpacity
-            style={[styles.actionBtn, slatePhotoTaken && styles.actionBtnDone]}
-            onPress={handleSlatePhoto}
+            style={[styles.cameraBtn, slatePhotoCaptured && styles.cameraBtnDone]}
+            onPress={() => {
+              setActivePhotoType('Slate Board Photo');
+              setCameraVisible(true);
+            }}
           >
-            <Text style={[styles.actionBtnText, slatePhotoTaken && styles.actionBtnTextDone]}>
-              📷 {slatePhotoTaken ? '✓ Slate Board Photo Captured' : 'Take slate board photo'}
+            <Text style={[styles.cameraText, slatePhotoCaptured && styles.cameraTextDone]}>
+              {slatePhotoCaptured ? '✓ Slate Board Photo Captured / फोटो ले लिया गया' : '📷 Capture Slate Photo / स्लेट फोटो लें'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Sealed tube photo button */}
+        {/* Sealed tube photo — honestly unavailable, does not block */}
         <TouchableOpacity
-          style={[styles.cameraBtn, sealedPhotoTaken && styles.cameraBtnDone]}
-          onPress={handleSealedPhoto}
+          style={[styles.cameraBtnWide, sealedPhotoCaptured && styles.cameraBtnDone]}
+          onPress={() => {
+            setActivePhotoType('Sealed Tube Photo');
+            setCameraVisible(true);
+          }}
         >
-          <Text style={[styles.cameraBtnText, sealedPhotoTaken && styles.cameraBtnTextDone]}>
-            📷 {sealedPhotoTaken ? '✓ Sealed Tube Photo Logged' : t('sealedPhoto', lang)}
+          <Text style={[styles.cameraTextWide, sealedPhotoCaptured && styles.cameraTextDone]}>
+            {sealedPhotoCaptured ? '✓ Sealed Tube Photo Captured / फोटो ले लिया गया' : `📷 ${t('sealedPhoto', lang)} / सील ट्यूब फोटो`}
           </Text>
         </TouchableOpacity>
 
-        {/* UDS Specific wax verification checkboxes */}
-        {sampleType === 'UNDISTURBED' && (
-          <View style={styles.udsVerificationCard}>
-            <Text style={styles.udsVerificationTitle}>
-              ⚠️ Wax seal - BOTH ends mandatory
-            </Text>
-            <Text style={styles.udsVerificationSub}>
-              दोनों तरफ मोम लगाना जरूरी है। Stored upright checked.
-            </Text>
-          </View>
-        )}
+        {/* Sealing confirmation — worker attestation (no photo claimed) */}
+        <TouchableOpacity
+          style={[styles.confirmBox, sealedConfirmed && styles.confirmBoxDone]}
+          onPress={() => setSealedConfirmed(!sealedConfirmed)}
+        >
+          <Text style={[styles.confirmText, sealedConfirmed && styles.confirmTextDone]}>
+            {sealedConfirmed ? '✓ Sample sealed confirmed / नमूना सील हो गया' : 'Tap to confirm sample sealed / सील की पुष्टि करें'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* UDS mandatory confirmations */}
+        {isUds ? (
+          <>
+            <View style={styles.udsVerificationCard}>
+              <Text style={styles.udsVerificationTitle}>Wax seal — BOTH ends mandatory</Text>
+              <Text style={styles.udsVerificationSub}>दोनों तरफ मोम लगाना जरूरी है (IS 2132)</Text>
+            </View>
+            <View style={styles.checkRow}>
+              <TouchableOpacity
+                style={[styles.checkTile, waxConfirmed && styles.checkTileDone]}
+                onPress={() => setWaxConfirmed(!waxConfirmed)}
+              >
+                <Text style={[styles.checkTileText, waxConfirmed && styles.checkTileTextDone]}>
+                  {waxConfirmed ? '✓ ' : '☐ '}Both ends waxed & sealed / मोम सील
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.checkTile, uprightConfirmed && styles.checkTileDone]}
+                onPress={() => setUprightConfirmed(!uprightConfirmed)}
+              >
+                <Text style={[styles.checkTileText, uprightConfirmed && styles.checkTileTextDone]}>
+                  {uprightConfirmed ? '✓ ' : '☐ '}Stored upright in box / सीधा रखा
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : null}
 
         {/* 14-day countdown timer */}
         <View style={styles.timerBox}>
           <Text style={styles.timerTitle}>⏰ {t('labTimer', lang)}</Text>
-          <Text style={styles.timerSub}>Must reach lab by: {formattedDeadline}</Text>
+          <Text style={styles.timerSub}>Must reach lab by: {formattedDeadline} (saved with sample)</Text>
         </View>
 
         {/* Next depth action button */}
-        <TouchableOpacity style={styles.nextBtn} onPress={handleNextDepth}>
-          <Text style={styles.nextBtnText}>Next depth / अगली गहराई →</Text>
+        <TouchableOpacity
+          style={[styles.nextBtn, isUds && styles.nextBtnUds, (nextDisabled || saving) && styles.nextBtnDisabled]}
+          onPress={handleNextDepth}
+          disabled={nextDisabled || saving}
+        >
+          <Text style={styles.nextBtnText}>
+            {isRockBranch ? 'Save → Rock coring / रॉक कोरिंग →' : 'Next depth / अगली गहराई →'}
+          </Text>
         </TouchableOpacity>
+        {nextDisabled ? (
+          <Text style={styles.blockHint}>
+            Tick both UDS confirmations to continue / दोनों पुष्टि टिक करें
+          </Text>
+        ) : null}
       </ScrollView>
+
+      {/* Simulated Viewfinder Overlay */}
+      <MockCameraModal
+        visible={cameraVisible}
+        onClose={() => setCameraVisible(false)}
+        onCapture={handleCapturePhoto}
+        boreholeCode={borehole.boreholeCode}
+        depth={currentDepth}
+        photoType={activePhotoType}
+      />
     </View>
   );
 }
@@ -379,6 +574,24 @@ const styles = StyleSheet.create({
     color: colors.blueDark,
     fontWeight: '700',
   },
+  udsCareBox: {
+    backgroundColor: colors.blueLight,
+    borderWidth: 0.5,
+    borderColor: '#85B7EB',
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 10,
+  },
+  udsCareTitle: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.blueDark,
+  },
+  udsCareSub: {
+    fontSize: 8,
+    color: colors.grayMid,
+    marginTop: 2,
+  },
   sampleIdBox: {
     backgroundColor: colors.greenDark,
     borderRadius: 8,
@@ -409,6 +622,43 @@ const styles = StyleSheet.create({
     color: '#C8E6C9',
     marginTop: 4,
   },
+  udsInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  udsInputHalf: {
+    flex: 1,
+  },
+  input: {
+    backgroundColor: colors.white,
+    borderWidth: 0.5,
+    borderColor: colors.grayBorder,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 11,
+    color: colors.grayDark,
+  },
+  recoveryRow: {
+    backgroundColor: colors.grayLight,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  recoveryLabel: {
+    fontSize: 9,
+    color: colors.grayMid,
+  },
+  recoveryVal: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.blueDark,
+  },
   slateContainer: {
     backgroundColor: colors.amberLight,
     borderWidth: 0.5,
@@ -427,28 +677,43 @@ const styles = StyleSheet.create({
     color: '#633806',
     marginTop: 2,
   },
-  actionBtn: {
-    backgroundColor: colors.white,
+  cameraBtn: {
+    backgroundColor: colors.grayLight,
     borderWidth: 0.5,
-    borderColor: colors.amber,
+    borderColor: colors.grayBorder,
     borderRadius: 6,
     paddingVertical: 8,
     alignItems: 'center',
     marginTop: 8,
   },
-  actionBtnDone: {
+  cameraBtnWide: {
+    backgroundColor: colors.grayLight,
+    borderWidth: 0.5,
+    borderColor: colors.grayBorder,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  cameraBtnDone: {
     backgroundColor: colors.greenLight,
     borderColor: colors.greenMid,
   },
-  actionBtnText: {
+  cameraText: {
     fontSize: 9,
-    color: colors.amber,
+    color: colors.grayDark,
     fontWeight: '700',
   },
-  actionBtnTextDone: {
+  cameraTextWide: {
+    fontSize: 9,
+    color: colors.grayDark,
+    fontWeight: '700',
+  },
+  cameraTextDone: {
     color: colors.greenDark,
   },
-  cameraBtn: {
+  confirmBox: {
     backgroundColor: colors.grayLight,
     borderWidth: 0.5,
     borderColor: colors.greenMid,
@@ -458,15 +723,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 12,
   },
-  cameraBtnDone: {
+  confirmBoxDone: {
     backgroundColor: colors.greenLight,
   },
-  cameraBtnText: {
+  confirmText: {
     fontSize: 10,
     color: colors.greenMid,
     fontWeight: '700',
   },
-  cameraBtnTextDone: {
+  confirmTextDone: {
     color: colors.greenDark,
   },
   udsVerificationCard: {
@@ -475,7 +740,7 @@ const styles = StyleSheet.create({
     borderColor: colors.redMid,
     borderRadius: 6,
     padding: 8,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   udsVerificationTitle: {
     fontSize: 9,
@@ -486,6 +751,36 @@ const styles = StyleSheet.create({
     fontSize: 8,
     color: colors.grayMid,
     marginTop: 2,
+  },
+  checkRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 12,
+  },
+  checkTile: {
+    flex: 1,
+    backgroundColor: colors.grayLight,
+    borderWidth: 0.5,
+    borderColor: colors.grayBorder,
+    borderRadius: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+  },
+  checkTileDone: {
+    backgroundColor: colors.greenLight,
+    borderColor: colors.greenMid,
+    borderWidth: 1.5,
+  },
+  checkTileText: {
+    fontSize: 9,
+    color: colors.grayDark,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  checkTileTextDone: {
+    color: colors.greenDark,
+    fontWeight: '700',
   },
   timerBox: {
     backgroundColor: colors.amberLight,
@@ -511,11 +806,24 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: 6,
+  },
+  nextBtnUds: {
+    backgroundColor: colors.blueDark,
+  },
+  nextBtnDisabled: {
+    backgroundColor: colors.grayMid,
+    opacity: 0.7,
   },
   nextBtnText: {
     color: colors.white,
     fontSize: 12,
     fontWeight: '700',
+  },
+  blockHint: {
+    fontSize: 8,
+    color: colors.redMid,
+    textAlign: 'center',
+    marginBottom: 24,
   },
 });

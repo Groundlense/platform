@@ -12,6 +12,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { SyncService } from './sync.service';
 import { CreateSyncOperationsDto } from './dto/create-sync-operations.dto';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @ApiTags('Sync Queue')
 @ApiBearerAuth()
@@ -22,13 +23,19 @@ export class SyncController {
 
   @Permissions('BOREHOLE_EDIT')
   @Post('operations')
-  syncQueue(@Body() dto: CreateSyncOperationsDto) {
-    return this.syncService.syncQueue(dto);
+  syncQueue(
+    @Body() dto: CreateSyncOperationsDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.syncService.syncQueue(dto, user);
   }
 
   @Permissions('BOREHOLE_VIEW')
   @Get('conflicts/:deviceId')
-  getConflicts(@Param('deviceId') deviceId: string) {
-    return this.syncService.getConflicts(deviceId);
+  getConflicts(
+    @Param('deviceId') deviceId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.syncService.getConflicts(deviceId, user);
   }
 }

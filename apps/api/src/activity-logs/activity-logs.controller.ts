@@ -12,6 +12,8 @@ import {
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+
 import { ActivityLogsService } from './activity-logs.service';
 
 @ApiTags('Activity Logs')
@@ -24,22 +26,33 @@ export class ActivityLogsController {
   ) {}
 
   @Get()
-  findAll() {
-    return this.activityLogsService.findAll();
+  findAll(
+    @CurrentUser() user: any,
+  ) {
+    return this.activityLogsService.findAll(
+      user,
+    );
   }
 
   @Get('recent')
-  findRecent() {
-    return this.activityLogsService.findRecent();
+  findRecent(
+    @CurrentUser() user: any,
+  ) {
+    return this.activityLogsService.findRecent(
+      user,
+    );
   }
 
   @Get('user/:userId')
   findByUser(
     @Param('userId')
     userId: string,
+
+    @CurrentUser() user: any,
   ) {
     return this.activityLogsService.findByUser(
       userId,
+      user,
     );
   }
 }

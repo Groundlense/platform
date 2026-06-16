@@ -2,7 +2,6 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { join } from 'path';
 import { SwaggerModule } from '@nestjs/swagger';
 import { DocumentBuilder } from '@nestjs/swagger';
 
@@ -12,12 +11,9 @@ async function bootstrap() {
       AppModule,
     );
 
-  app.useStaticAssets(
-    join(process.cwd(), 'uploads'),
-    {
-      prefix: '/uploads/',
-    },
-  );
+  // NOTE: uploads are intentionally NOT served as public static assets.
+  // Field photos are project-scoped evidence; they are served through the
+  // authenticated GET media/:id/file route with project-access checks.
 
   app.setGlobalPrefix('api/v1');
 
@@ -51,7 +47,7 @@ async function bootstrap() {
     document,
   );
 
-  await app.listen(3000);
+  await app.listen(process.env.PORT || 8000);
 }
 
 bootstrap();

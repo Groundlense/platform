@@ -198,6 +198,19 @@ async function main() {
     'MEDIA_UPLOAD',
 
     'REPORT_VIEW',
+
+    'USER_VIEW',
+    'USER_MANAGE',
+
+    'NABL_LAB_APPROVE',
+
+    'REVIEW_CREATE',
+    'REVIEW_VIEW',
+
+    // Org profile management; ORG_KYC_VERIFY is assigned to no role —
+    // the SUPER_ADMIN bypass in PermissionsGuard covers it.
+    'ORG_MANAGE',
+    'ORG_KYC_VERIFY',
   ];
 
   for (const role of roles) {
@@ -296,6 +309,11 @@ async function main() {
     'SPT_VIEW',
     'MEDIA_UPLOAD',
     'REPORT_VIEW',
+    'USER_VIEW',
+    'USER_MANAGE',
+    'REVIEW_CREATE',
+    'REVIEW_VIEW',
+    'ORG_MANAGE',
   ];
   for (const perm of geotechAdminPermissions) {
     await assignPermission('GEOTECH_ADMIN', perm);
@@ -303,6 +321,7 @@ async function main() {
 
   // 2. GEOTECH_MANAGER permissions
   const geotechManagerPermissions = [
+    'USER_VIEW',
     'PROJECT_VIEW',
     'WORKER_ASSIGN',
     'BOREHOLE_CREATE',
@@ -312,6 +331,8 @@ async function main() {
     'SPT_VIEW',
     'MEDIA_UPLOAD',
     'REPORT_VIEW',
+    'REVIEW_CREATE',
+    'REVIEW_VIEW',
   ];
   for (const perm of geotechManagerPermissions) {
     await assignPermission('GEOTECH_MANAGER', perm);
@@ -324,6 +345,8 @@ async function main() {
     'BOREHOLE_EDIT',
     'SPT_VIEW',
     'REPORT_VIEW',
+    'REVIEW_CREATE',
+    'REVIEW_VIEW',
   ];
   for (const perm of geotechEngineerPermissions) {
     await assignPermission('GEOTECH_ENGINEER', perm);
@@ -349,6 +372,10 @@ async function main() {
     'BOREHOLE_VIEW',
     'SPT_VIEW',
     'REPORT_VIEW',
+    'USER_VIEW',
+    'USER_MANAGE',
+    'REVIEW_VIEW',
+    'ORG_MANAGE',
   ];
   for (const perm of epcAdminPermissions) {
     await assignPermission('EPC_ADMIN', perm);
@@ -360,6 +387,7 @@ async function main() {
     'BOREHOLE_VIEW',
     'SPT_VIEW',
     'REPORT_VIEW',
+    'REVIEW_VIEW',
   ];
   for (const perm of epcManagerPermissions) {
     await assignPermission('EPC_MANAGER', perm);
@@ -371,6 +399,7 @@ async function main() {
     'BOREHOLE_VIEW',
     'SPT_VIEW',
     'REPORT_VIEW',
+    'REVIEW_VIEW',
   ];
   for (const perm of epcViewerPermissions) {
     await assignPermission('EPC_VIEWER', perm);

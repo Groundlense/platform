@@ -1,9 +1,13 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { createPaymentAction } from "@/app/actions/projects";
+import { formatCurrency } from "@/lib/utils";
 
 interface ProjectCardProps {
   project: any;
+  orgType: string | null;
 }
 
 const STATUS_MAP: Record<string, { cls: string; text: string }> = {
@@ -14,31 +18,105 @@ const STATUS_MAP: Record<string, { cls: string; text: string }> = {
   ARCHIVED: { cls: "st-locked", text: "⬤ Archived" },
 };
 
-export default function ProjectCard({ project }: ProjectCardProps) {
+export default function ProjectCard({ project, orgType }: ProjectCardProps) {
   const router = useRouter();
+  const [isPaying, startPayment] = useTransition();
+  const [payMessage, setPayMessage] = useState<string | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
+
   const status = STATUS_MAP[project.status] || STATUS_MAP.DRAFT;
   const epcName = project.epcOrganization?.name || "—";
   const gtName = project.geotechOrganization?.name || "—";
   const isLocked = !!project.lockedAt;
 
+  // EPC contractors get the read-only contractor portal; geotech/engineers get the data portal.
+  const portalSegment = orgType === "EPC_CONTRACTOR" ? "contractor" : "portal";
+  const projectHref = `/projects/${project.id}/${portalSegment}`;
+
   const chainage = project.chainageFrom != null && project.chainageTo != null
     ? `Ch.${project.chainageFrom} – ${project.chainageTo}`
     : project.state || "";
 
+  // ── Real per-status borehole counts from GET /projects ──
+  const counts: Record<string, number> = project.boreholeStatusCounts || {};
+  const totalBoreholes: number =
+    typeof project.totalBoreholes === "number" ? project.totalBoreholes : 0;
+  const completedCount = counts.COMPLETED ?? 0;
+  const activeCount = (counts.IN_PROGRESS ?? 0) + (counts.SUSPENDED ?? 0);
+  const pendingCount = counts.PLANNED ?? 0;
+  const closedBadCount = (counts.ABANDONED ?? 0) + (counts.TERMINATED ?? 0);
+  const progressPct = totalBoreholes > 0 ? Math.round((completedCount / totalBoreholes) * 100) : null;
+
+  // Dot strip: one dot per borehole by status, capped with a "+n" overflow
+  const MAX_DOTS = 24;
+  const dotColors: { color: string; count: number }[] = [
+    { color: "var(--color-green-d)", count: completedCount },
+    { color: "var(--color-amber-d)", count: activeCount },
+    { color: "var(--color-border-mid)", count: pendingCount },
+    { color: "var(--color-red-d)", count: closedBadCount },
+  ];
+  const dots: string[] = [];
+  for (const { color, count } of dotColors) {
+    for (let i = 0; i < count; i++) dots.push(color);
+  }
+  const overflow = dots.length - MAX_DOTS;
+  const visibleDots = overflow > 0 ? dots.slice(0, MAX_DOTS) : dots;
+
+  // Amount only computable when the project declares its planned borings.
+  const boringsPlanned: number | null =
+    typeof project.totalBoringsPlanned === "number" && project.totalBoringsPlanned > 0
+      ? project.totalBoringsPlanned
+      : null;
+  const payAmount = boringsPlanned != null ? boringsPlanned * 5000 : null;
+
+  const handlePayNow = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (payAmount == null || boringsPlanned == null || isPaying) return;
+    setPayError(null);
+    const fd = new FormData();
+    fd.set("projectId", project.id);
+    fd.set("boringsPurchased", String(boringsPlanned));
+    fd.set("amountPaid", String(payAmount));
+    startPayment(async () => {
+      const res = await createPaymentAction(fd);
+      if ("error" in res && res.error) {
+        setPayError(res.error);
+      } else {
+        setPayMessage("Payment recorded as PENDING — complete via Razorpay checkout (coming soon)");
+        router.refresh();
+      }
+    });
+  };
+
   return (
     <div
-      className="relative bg-bg-surface border border-border rounded-[10px] overflow-hidden cursor-pointer transition-all duration-150 hover:border-border-mid hover:-translate-y-[1px] group"
-      onClick={() => router.push(`/projects/${project.id}/portal`)}
+      className={`relative bg-bg-surface border border-border rounded-[10px] overflow-hidden transition-all duration-150 group ${isLocked ? "cursor-default" : "cursor-pointer hover:border-border-mid hover:-translate-y-[1px]"}`}
+      onClick={() => { if (!isLocked) router.push(projectHref); }}
     >
       {/* Locked overlay — matches .proj-locked-overlay */}
       {isLocked && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[10px]"
-          style={{ background: "rgba(26,25,24,0.8)", backdropFilter: "blur(5px)" }}>
+          style={{ background: "rgba(26,25,24,0.8)", backdropFilter: "blur(5px)", padding: "12px" }}>
           <div className="text-[24px]">🔒</div>
           <div className="text-[11px] text-text-sec text-center leading-relaxed">
             Project locked<br />
             <span className="text-[10px] text-text-ter">{new Date(project.lockedAt).toLocaleDateString("en-IN")}</span>
           </div>
+          {payMessage ? (
+            <div className="text-[10px] text-amber-d text-center leading-relaxed max-w-[200px]">{payMessage}</div>
+          ) : payAmount != null ? (
+            <button
+              onClick={handlePayNow}
+              disabled={isPaying}
+              className="text-[11px] bg-rust-mid border-none rounded-[6px] text-text-pri cursor-pointer hover:bg-rust transition-colors disabled:opacity-60 disabled:cursor-default"
+              style={{ padding: "7px 16px", marginTop: "4px" }}
+            >
+              {isPaying ? "Recording…" : `Pay now · ${formatCurrency(payAmount)}`}
+            </button>
+          ) : null}
+          {payError && (
+            <div className="text-[10px] text-rust-d text-center leading-relaxed max-w-[200px]">{payError}</div>
+          )}
         </div>
       )}
 
@@ -58,21 +136,55 @@ export default function ProjectCard({ project }: ProjectCardProps) {
           <div className="text-[10px] text-text-sec mb-[10px] line-clamp-2 leading-relaxed">{project.description}</div>
         )}
 
-        {/* Stat row — matches .pc-stat-row: grid 3 cols, gap 6px */}
-        {project.totalBoringsPlanned && (
-          <div className="grid grid-cols-3 gap-[6px] mb-[10px]">
-            <div className="text-center rounded-[6px] bg-bg-card" style={{ padding: "7px 4px" }}>
-              <div className="font-mono text-[14px] font-medium text-text-pri">{project.totalBoringsPlanned}</div>
-              <div className="text-[8px] text-text-ter mt-[2px]">Planned</div>
+        {/* Stat row — real per-status borehole counts (boreholeStatusCounts from /projects) */}
+        {totalBoreholes > 0 ? (
+          <>
+            <div className="grid grid-cols-3 gap-[6px] mb-[10px]">
+              <div className="text-center rounded-[6px] bg-bg-card" style={{ padding: "7px 4px" }}>
+                <div className="font-mono text-[14px] font-medium text-green-d">{completedCount}</div>
+                <div className="text-[8px] text-text-ter mt-[2px]">Complete</div>
+              </div>
+              <div className="text-center rounded-[6px] bg-bg-card" style={{ padding: "7px 4px" }}>
+                <div className="font-mono text-[14px] font-medium text-amber-d">{activeCount}</div>
+                <div className="text-[8px] text-text-ter mt-[2px]">Active</div>
+              </div>
+              <div className="text-center rounded-[6px] bg-bg-card" style={{ padding: "7px 4px" }}>
+                <div className="font-mono text-[14px] font-medium text-text-ter">{pendingCount}</div>
+                <div className="text-[8px] text-text-ter mt-[2px]">Pending</div>
+              </div>
             </div>
-            <div className="text-center rounded-[6px] bg-bg-card" style={{ padding: "7px 4px" }}>
-              <div className="font-mono text-[14px] font-medium text-green-d">—</div>
-              <div className="text-[8px] text-text-ter mt-[2px]">Active</div>
+
+            {/* Progress — matches .pc-prog-row: COMPLETED / total */}
+            {progressPct != null && (
+              <div className="flex items-center gap-2 mb-[8px]">
+                <div className="flex-1 h-[3px] rounded-[2px] overflow-hidden" style={{ background: "var(--color-border)" }}>
+                  <div className="h-full rounded-[2px]" style={{ width: `${progressPct}%`, background: progressPct === 100 ? "var(--color-green-d)" : "var(--color-rust-mid)" }} />
+                </div>
+                <div className="font-mono text-[9px] text-text-ter">{progressPct}%</div>
+              </div>
+            )}
+
+            {/* Borehole status dot-strip — matches .bh-status-strip / .bh-dot */}
+            <div className="flex gap-[3px] flex-wrap items-center mb-[5px]">
+              {visibleDots.map((color, i) => (
+                <span key={i} className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+              ))}
+              {overflow > 0 && (
+                <span className="font-mono text-[8px] text-text-ter">+{overflow}</span>
+              )}
             </div>
-            <div className="text-center rounded-[6px] bg-bg-card" style={{ padding: "7px 4px" }}>
-              <div className="font-mono text-[14px] font-medium text-text-ter">—</div>
-              <div className="text-[8px] text-text-ter mt-[2px]">Pending</div>
+            <div className="flex gap-[10px] mb-[8px]">
+              <span className="flex items-center gap-1 text-[9px] text-text-ter"><span className="w-2 h-2 rounded-full" style={{ background: "var(--color-green-d)" }} />Done</span>
+              <span className="flex items-center gap-1 text-[9px] text-text-ter"><span className="w-2 h-2 rounded-full" style={{ background: "var(--color-amber-d)" }} />Active</span>
+              <span className="flex items-center gap-1 text-[9px] text-text-ter"><span className="w-2 h-2 rounded-full" style={{ background: "var(--color-border-mid)" }} />Pending</span>
+              {closedBadCount > 0 && (
+                <span className="flex items-center gap-1 text-[9px] text-text-ter"><span className="w-2 h-2 rounded-full" style={{ background: "var(--color-red-d)" }} />Closed</span>
+              )}
             </div>
+          </>
+        ) : (
+          <div className="text-[10px] text-text-ter mb-[10px] rounded-[6px] bg-bg-card text-center leading-relaxed" style={{ padding: "7px 8px" }}>
+            No boreholes created yet{boringsPlanned != null ? ` · ${boringsPlanned} planned` : ""} — add them from the project portal.
           </div>
         )}
 

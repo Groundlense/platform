@@ -2,11 +2,25 @@ import { Injectable } from '@nestjs/common';
 
 import { DatabaseService } from '../database/database.service';
 
+import { ProjectAccessService } from '../common/access/project-access.service';
+
 @Injectable()
 export class ActivityLogsService {
   constructor(
     private readonly db: DatabaseService,
+    private readonly access: ProjectAccessService,
   ) {}
+
+  // Audit logs are scoped to the caller's organization unless SUPER_ADMIN.
+  private orgScopeWhere(actor: any) {
+    return this.access.isSuperAdmin(actor)
+      ? {}
+      : {
+          user: {
+            organizationId: actor.organizationId,
+          },
+        };
+  }
 
   async log(
     userId: string,
@@ -14,6 +28,15 @@ export class ActivityLogsService {
     entityType: string,
     entityId: string,
     metadata?: any,
+    // Optional audit detail per the Data Ownership Rule: edits never
+    // overwrite history silently — old/new snapshots and the IS-code
+    // justification are preserved on the audit row.
+    options?: {
+      oldValue?: any;
+      newValue?: any;
+      actorCompanyId?: string;
+      isCodeReason?: string;
+    },
   ) {
     return this.db.activityLog.create({
       data: {
@@ -26,11 +49,20 @@ export class ActivityLogsService {
         entityId,
 
         metadata,
+
+        oldValue: options?.oldValue,
+
+        newValue: options?.newValue,
+
+        actorCompanyId: options?.actorCompanyId,
+
+        isCodeReason: options?.isCodeReason,
       },
     });
   }
-  async findAll() {
+  async findAll(actor: any) {
   return this.db.activityLog.findMany({
+    where: this.orgScopeWhere(actor),
     include: {
       user: {
         select: {
@@ -48,9 +80,11 @@ export class ActivityLogsService {
   });
 }
 
-async findRecent() {
+async findRecent(actor: any) {
   return this.db.activityLog.findMany({
     take: 20,
+
+    where: this.orgScopeWhere(actor),
 
     include: {
       user: {
@@ -69,10 +103,12 @@ async findRecent() {
 
 async findByUser(
   userId: string,
+  actor: any,
 ) {
   return this.db.activityLog.findMany({
     where: {
       userId,
+      ...this.orgScopeWhere(actor),
     },
 
     orderBy: {

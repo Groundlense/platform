@@ -14,6 +14,8 @@ import {
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+
 import { TeamsService } from './teams.service';
 
 import { CreateTeamDto } from './dto/create-team.dto';
@@ -38,10 +40,13 @@ export class TeamsController {
 
     @Body()
     dto: CreateTeamDto,
+
+    @CurrentUser() user: any,
   ) {
     return this.teamsService.createTeam(
       organizationId,
       dto,
+      user,
     );
   }
 
@@ -51,9 +56,12 @@ export class TeamsController {
   getTeams(
     @Param('organizationId')
     organizationId: string,
+
+    @CurrentUser() user: any,
   ) {
     return this.teamsService.getTeams(
       organizationId,
+      user,
     );
   }
 
@@ -66,10 +74,13 @@ export class TeamsController {
 
     @Body()
     dto: AddTeamMemberDto,
+
+    @CurrentUser() user: any,
   ) {
     return this.teamsService.addMember(
       teamId,
       dto.userId,
+      user,
     );
   }
 
@@ -77,9 +88,12 @@ export class TeamsController {
   getTeam(
     @Param('teamId')
     teamId: string,
+
+    @CurrentUser() user: any,
   ) {
     return this.teamsService.getTeam(
       teamId,
+      user,
     );
   }
   @Get(
@@ -88,9 +102,12 @@ export class TeamsController {
 getDashboard(
   @Param('teamId')
   teamId: string,
+
+  @CurrentUser() user: any,
 ) {
   return this.teamsService.getDashboard(
     teamId,
+    user,
   );
 }
 }

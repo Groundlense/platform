@@ -16,8 +16,13 @@ export default function WaterTableScreen({ route, navigation }: { route: any; na
   const { borehole, projectId, currentDepth } = route.params;
   const [lang, setLang] = useState<'en' | 'hi'>('hi');
 
-  const [wtDepth, setWtDepth] = useState('6.50');
-  const [remarks, setRemarks] = useState('Encountered during drilling');
+  // Inputs always start empty — the worker records what they observe.
+  const [wtDepth, setWtDepth] = useState('');
+  const [remarks, setRemarks] = useState('');
+  // DRILLING_LEVEL = reading during boring; STABILIZED_LEVEL = the IS 6935
+  // 24-hour stable reading entered manually on a later visit (push-notification
+  // reminders require the notifications module — not yet integrated).
+  const [readingType, setReadingType] = useState<'DRILLING_LEVEL' | 'STABILIZED_LEVEL'>('DRILLING_LEVEL');
 
   const handleSubmit = async () => {
     if (!wtDepth || isNaN(parseFloat(wtDepth))) {
@@ -32,7 +37,7 @@ export default function WaterTableScreen({ route, navigation }: { route: any; na
         depth: parseFloat(wtDepth),
         observedAt: new Date().toISOString(),
         remarks,
-        readingType: 'DRILLING_LEVEL',
+        readingType,
       };
 
       const cached = await storage.getWaterTable(borehole.id);
@@ -49,7 +54,9 @@ export default function WaterTableScreen({ route, navigation }: { route: any; na
 
       Alert.alert(
         'Water Table Logged / भूजल स्तर दर्ज',
-        `Water table level logged at ${wtDepth}m.\n\n⏰ 24-hour stable reading reminder scheduled automatically!`,
+        readingType === 'DRILLING_LEVEL'
+          ? `Water table level logged at ${wtDepth}m.\n\nRecord the 24-hour stable reading tomorrow from this screen — reminder notifications coming soon. / 24 घंटे बाद स्थिर रीडिंग दर्ज करें।`
+          : `24-hour stable reading logged at ${wtDepth}m (IS 6935).`,
         [
           {
             text: 'OK',
@@ -73,10 +80,36 @@ export default function WaterTableScreen({ route, navigation }: { route: any; na
           {borehole.boreholeCode} · Current depth {currentDepth}m
         </Text>
 
+        {/* Reading type — initial during-drilling vs manual 24hr stable (IS 6935) */}
+        <View style={styles.toggleRow}>
+          <TouchableOpacity
+            style={[styles.toggleBtn, readingType === 'DRILLING_LEVEL' && styles.toggleBtnActive]}
+            onPress={() => setReadingType('DRILLING_LEVEL')}
+          >
+            <Text style={[styles.toggleBtnText, readingType === 'DRILLING_LEVEL' && styles.toggleBtnTextActive]}>
+              During drilling / ड्रिलिंग के दौरान
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleBtn, readingType === 'STABILIZED_LEVEL' && styles.toggleBtnActive]}
+            onPress={() => setReadingType('STABILIZED_LEVEL')}
+          >
+            <Text style={[styles.toggleBtnText, readingType === 'STABILIZED_LEVEL' && styles.toggleBtnTextActive]}>
+              24hr stable / 24 घंटे स्थिर
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.infoBoxBlue}>
-          <Text style={styles.infoBoxBlueTitle}>Initial reading trigger (IS 1892)</Text>
+          <Text style={styles.infoBoxBlueTitle}>
+            {readingType === 'DRILLING_LEVEL'
+              ? 'Initial reading (IS 1892)'
+              : '24-hour stable reading (IS 6935)'}
+          </Text>
           <Text style={styles.infoBoxBlueSub}>
-            24 घंटे का स्थिर रीडिंग नोटिफिकेशन शुरू किया जाएगा।
+            {readingType === 'DRILLING_LEVEL'
+              ? 'कल 24 घंटे बाद स्थिर रीडिंग इसी स्क्रीन से दर्ज करें — रिमाइंडर नोटिफिकेशन जल्द आ रहा है।'
+              : 'कल दर्ज की गई रीडिंग के 24 घंटे बाद का स्थिर स्तर दर्ज करें।'}
           </Text>
         </View>
 
@@ -87,7 +120,7 @@ export default function WaterTableScreen({ route, navigation }: { route: any; na
             value={wtDepth}
             onChangeText={setWtDepth}
             keyboardType="numeric"
-            placeholder="6.50"
+            placeholder="0.00"
             placeholderTextColor={colors.grayMid}
           />
         </View>
@@ -98,7 +131,7 @@ export default function WaterTableScreen({ route, navigation }: { route: any; na
             style={styles.input}
             value={remarks}
             onChangeText={setRemarks}
-            placeholder="Encountered during drilling"
+            placeholder="e.g. Encountered during drilling"
             placeholderTextColor={colors.grayMid}
           />
         </View>
@@ -156,6 +189,33 @@ const styles = StyleSheet.create({
     color: colors.grayMid,
     textAlign: 'center',
     marginBottom: 10,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 10,
+  },
+  toggleBtn: {
+    flex: 1,
+    backgroundColor: colors.grayLight,
+    borderWidth: 0.5,
+    borderColor: colors.grayBorder,
+    borderRadius: 6,
+    paddingVertical: 7,
+    alignItems: 'center',
+  },
+  toggleBtnActive: {
+    backgroundColor: colors.blueDark,
+    borderColor: colors.blueDark,
+  },
+  toggleBtnText: {
+    fontSize: 9,
+    color: colors.grayDark,
+    fontWeight: '600',
+  },
+  toggleBtnTextActive: {
+    color: colors.white,
+    fontWeight: '700',
   },
   infoBoxBlue: {
     backgroundColor: colors.blueLight,

@@ -29,7 +29,7 @@ export class PaymentsController {
     @CurrentUser() user: any,
     @Body() dto: CreatePaymentDto,
   ) {
-    return this.paymentsService.create(user.id, user.organizationId, dto);
+    return this.paymentsService.create(user, dto);
   }
 
   @Permissions('PROJECT_EDIT')
@@ -37,13 +37,17 @@ export class PaymentsController {
   verify(
     @Param('id') paymentId: string,
     @Body() dto: VerifyPaymentDto,
+    @CurrentUser() user: any,
   ) {
-    return this.paymentsService.verify(paymentId, dto);
+    return this.paymentsService.verify(paymentId, dto, user);
   }
 
   @Permissions('PROJECT_VIEW')
   @Get('projects/:projectId/payments')
-  findByProject(@Param('projectId') projectId: string) {
-    return this.paymentsService.findByProject(projectId);
+  findByProject(
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.paymentsService.findByProject(projectId, user);
   }
 }

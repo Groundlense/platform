@@ -4,6 +4,8 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { DatabaseModule } from './database/database.module';
+import { AccessModule } from './common/access/access.module';
+import { IntegrityModule } from './common/integrity/integrity.module';
 import { ConfigModule } from '@nestjs/config';
 import { ProjectsModule } from './projects/projects.module';
 import { BoreholesModule } from './boreholes/boreholes.module';
@@ -19,6 +21,8 @@ import { SoilDescriptionsModule } from './soil-descriptions/soil-descriptions.mo
 import { NablLabsModule } from './nabl-labs/nabl-labs.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SyncModule } from './sync/sync.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { OrganizationsModule } from './organizations/organizations.module';
 
 @Module({
   imports: [ConfigModule.forRoot({
@@ -27,6 +31,8 @@ import { SyncModule } from './sync/sync.module';
     }),
 
     DatabaseModule,
+    AccessModule,
+    IntegrityModule,
     AuthModule,
     UsersModule,
     ProjectsModule,
@@ -41,6 +47,8 @@ import { SyncModule } from './sync/sync.module';
     NablLabsModule,
     PaymentsModule,
     SyncModule,
+    ReviewsModule,
+    OrganizationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

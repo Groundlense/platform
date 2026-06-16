@@ -7,11 +7,17 @@ export const metadata: Metadata = {
   description: "Sign in to the GroundLense geotech boring management platform.",
 };
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ redirect?: string }>;
+}) {
+  const { redirect } = await searchParams;
+
   return (
     <div className="flex flex-row !min-h-screen">
       <LoginLeftPanel />
-      <LoginForm />
+      <LoginForm redirectTo={redirect} />
     </div>
   );
 }

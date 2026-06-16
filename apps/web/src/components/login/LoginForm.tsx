@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { RiArrowLeftLine, RiFileCopyLine } from "react-icons/ri";
-import { useRouter } from "next/navigation";
-import { loginAction } from "@/app/actions/auth";
+import { RiArrowLeftLine } from "react-icons/ri";
+import { loginAction, registerAction } from "@/app/actions/auth";
 
 type RoleType = "contractor" | "engineer" | "gt";
-type Screen = 0 | 1 | 2 | 3 | 4;
+type Screen = 0 | 1 | 2 | 3;
 
 const ROLES = [
   { key: "contractor" as RoleType, emoji: "🏗️", name: "Contractor", desc: "EPC / HAM firm", code: "GL-CON-XXXX" },
@@ -20,49 +19,118 @@ const ROLE_META: Record<RoleType, [string, string]> = {
   gt: ["Geotech Contractor login", "Manage your field teams and boring submissions."],
 };
 
-export default function LoginForm() {
+/** Maps the role tile to the backend OrganizationType. */
+const ROLE_TO_ORG_TYPE: Record<RoleType, string> = {
+  contractor: "EPC_CONTRACTOR",
+  engineer: "GEOTECH_CONTRACTOR",
+  gt: "GEOTECH_CONTRACTOR",
+};
+
+export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
   const [screen, setScreen] = useState<Screen>(0);
   const [role, setRole] = useState<RoleType>("contractor");
-  const [copied, setCopied] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const router = useRouter();
+  // Signup — Step 1 (Company)
+  const [orgName, setOrgName] = useState("");
+  const [gstin, setGstin] = useState("");
+  const [orgCity, setOrgCity] = useState("");
+  const [orgState, setOrgState] = useState("");
+  // Signup — Step 2 (Login details)
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupMobile, setSignupMobile] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [signupLoading, setSignupLoading] = useState(false);
+  const [signupError, setSignupError] = useState("");
 
   const goLogin = () => setScreen(1);
 
-  const doLogin = async () => {
-    setLoading(true);
-    setError("");
+  const goCompanyStep = () => {
+    setSignupError("");
+    setScreen(2);
+  };
+
+  const goLoginDetailsStep = () => {
+    if (!orgName.trim()) {
+      setSignupError("Company name is required.");
+      return;
+    }
+    setSignupError("");
+    setScreen(3);
+  };
+
+  const doRegister = async () => {
+    setSignupError("");
+
+    if (!firstName.trim()) {
+      setSignupError("First name is required.");
+      return;
+    }
+    if (!signupEmail.trim()) {
+      setSignupError("Work email is required.");
+      return;
+    }
+    if (signupPassword.length < 8) {
+      setSignupError("Password must be at least 8 characters.");
+      return;
+    }
+
+    setSignupLoading(true);
     try {
-      const formData = new FormData();
-      // Provide defaults based on role for seamless click-through
-      const finalEmail = email.trim() || (role === "contractor" ? "admin@xyzinfra.com" : role === "engineer" ? "engineer@abcgeotech.com" : "admin@abcgeotech.com");
-      const finalPassword = password || "Password@123";
-      
-      formData.set("identifier", finalEmail);
-      formData.set("password", finalPassword);
-      
-      const result = await loginAction(formData);
+      const fd = new FormData();
+      fd.set("orgName", orgName.trim());
+      fd.set("orgType", ROLE_TO_ORG_TYPE[role]);
+      if (gstin.trim()) fd.set("gstin", gstin.trim());
+      if (orgCity.trim()) fd.set("city", orgCity.trim());
+      if (orgState.trim()) fd.set("state", orgState.trim());
+      fd.set("firstName", firstName.trim());
+      if (lastName.trim()) fd.set("lastName", lastName.trim());
+      fd.set("email", signupEmail.trim());
+      if (signupMobile.trim()) fd.set("mobile", signupMobile.trim());
+      fd.set("password", signupPassword);
+
+      const result = await registerAction(fd);
+      // On success the server action redirects — we only land here on failure.
       if (result?.error) {
-        console.warn("API login returned error, using fallback dashboard push:", result.error);
-        router.push("/dashboard");
+        setSignupError(result.error);
       }
     } catch {
-      // Server action redirect will throw — that's expected
-      router.push("/dashboard");
+      setSignupError("Something went wrong while creating your account. Please try again.");
+    } finally {
+      setSignupLoading(false);
+    }
+  };
+
+  const doLogin = async () => {
+    setError("");
+
+    if (!email.trim() || !password) {
+      setError("Email and password are required.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.set("identifier", email.trim());
+      formData.set("password", password);
+      if (redirectTo) formData.set("redirect", redirectTo);
+
+      const result = await loginAction(formData);
+      // On success the server action redirects — we only land here on failure.
+      if (result?.error) {
+        setError(result.error);
+      }
+    } catch {
+      setError("Something went wrong while signing in. Please try again.");
     } finally {
       setLoading(false);
     }
   };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText("GL-CON-4821");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
 
   return (
     /* Matches .lp-right: width 440px, padding 48px 40px, flex column, justify-center, bg-base */
@@ -97,7 +165,7 @@ export default function LoginForm() {
           </button>
           <div className="text-center !mt-3">
             <span className="text-[11px] text-text-ter">No account? </span>
-            <span className="text-[11px] text-rust-d cursor-pointer" onClick={() => setScreen(2)}>Create account</span>
+            <span className="text-[11px] text-rust-d cursor-pointer" onClick={goCompanyStep}>Create account</span>
           </div>
         </div>
       )}
@@ -111,7 +179,7 @@ export default function LoginForm() {
 
           <div className="flex mb-5 border-b border-border">
             <div className="py-[7px] px-[14px] text-[12px] font-medium text-rust-d cursor-pointer border-b-2 border-rust-mid -mb-[1px]">Sign in</div>
-            <div className="py-[7px] px-[14px] text-[12px] font-medium text-text-ter cursor-pointer border-b-2 border-transparent -mb-[1px]" onClick={() => setScreen(2)}>Create account</div>
+            <div className="py-[7px] px-[14px] text-[12px] font-medium text-text-ter cursor-pointer border-b-2 border-transparent -mb-[1px]" onClick={goCompanyStep}>Create account</div>
           </div>
 
           <div className="font-display text-[24px] font-semibold mb-[5px]">{ROLE_META[role][0]}</div>
@@ -129,7 +197,7 @@ export default function LoginForm() {
           </div>
           <div className="mb-3">
             <label className="text-[10px] font-medium text-text-sec mb-[5px] block tracking-wide uppercase">Password</label>
-            <input className="w-full bg-bg-card border border-border rounded-[7px] py-[10px] px-[13px] text-[12px] text-text-pri outline-none focus:border-rust-mid transition-colors placeholder:text-text-ter" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input className="w-full bg-bg-card border border-border rounded-[7px] py-[10px] px-[13px] text-[12px] text-text-pri outline-none focus:border-rust-mid transition-colors placeholder:text-text-ter" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") doLogin(); }} />
           </div>
 
           <div className="flex justify-between items-center mb-2">
@@ -142,14 +210,6 @@ export default function LoginForm() {
           <button onClick={doLogin} disabled={loading} className="w-full py-3 bg-rust-mid border-none rounded-[7px] text-[13px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-all mt-1 disabled:opacity-50 disabled:cursor-not-allowed">
             {loading ? "Signing in..." : "Sign in →"}
           </button>
-
-          <div className="flex items-center gap-[10px] my-[14px] text-[10px] text-text-ter">
-            <span className="flex-1 h-[1px] bg-border" />or<span className="flex-1 h-[1px] bg-border" />
-          </div>
-
-          <button onClick={doLogin} className="w-full py-[10px] bg-transparent border border-border-mid rounded-[7px] text-[12px] font-medium text-text-sec cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all">
-            🔑 Sign in with GL Code
-          </button>
         </div>
       )}
 
@@ -161,26 +221,36 @@ export default function LoginForm() {
           </button>
 
           <StepDots current={1} />
-          <ProgressBar percent={33} />
+          <ProgressBar percent={50} />
 
           <div className="font-display text-[24px] font-semibold mb-[5px]">Company details</div>
           <p className="text-[12px] text-text-sec mb-6 leading-relaxed">Appears on all IS 1892 reports and GL certificates.</p>
 
-          {/* Logo upload */}
-          <div className="border border-dashed border-border-mid rounded-lg p-[18px] text-center bg-bg-card cursor-pointer hover:border-rust-mid transition-colors mb-3">
+          {/* Logo upload — backend storage not available yet */}
+          <div className="border border-dashed border-border-mid rounded-lg p-[18px] text-center bg-bg-card cursor-not-allowed opacity-60 mb-3" title="Coming soon — logo upload is not available yet">
             <div className="text-[22px] mb-[5px]">🖼️</div>
             <div className="text-[11px] text-text-sec">Upload company logo</div>
-            <div className="text-[9px] text-text-ter mt-[2px]">PNG · SVG · Max 2MB · Appears on GT reports</div>
+            <div className="text-[9px] text-text-ter mt-[2px]">Coming soon — appears on GT reports</div>
           </div>
 
-          <FormField label="Company name" placeholder="XYZ Infraprojects Pvt Ltd" />
+          <div className="font-mono text-[9px] text-amber-d mb-3 tracking-wider uppercase">
+            Registering as: {ROLES.find((r) => r.key === role)?.name} · {ROLE_TO_ORG_TYPE[role]}
+          </div>
+
+          <FormField label="Company name" placeholder="Your company legal name" value={orgName} onChange={setOrgName} />
+          <FormField label="GST number (optional)" placeholder="GSTIN" mono value={gstin} onChange={setGstin} />
           <div className="grid grid-cols-2 gap-[9px]">
-            <FormField label="GST number" placeholder="27AAAAA0000A1Z5" mono />
-            <FormField label="CIN number" placeholder="U72900RJ2025..." mono />
+            <FormField label="City (optional)" placeholder="City" value={orgCity} onChange={setOrgCity} />
+            <FormField label="State (optional)" placeholder="State" value={orgState} onChange={setOrgState} />
           </div>
-          <FormField label="Registered address" placeholder="Plot, Street, City, State, PIN" />
 
-          <button onClick={() => setScreen(3)} className="w-full py-3 bg-rust-mid border-none rounded-[7px] text-[13px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-all mt-1">
+          {signupError && (
+            <div className="info-banner info-banner-red mb-3">
+              <span>⚠</span> {signupError}
+            </div>
+          )}
+
+          <button onClick={goLoginDetailsStep} className="w-full py-3 bg-rust-mid border-none rounded-[7px] text-[13px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-all mt-1">
             Next — Login details →
           </button>
         </div>
@@ -189,99 +259,47 @@ export default function LoginForm() {
       {/* Screen 3: Signup Step 2 — Login Details */}
       {screen === 3 && (
         <div className="animate-fade-up">
-          <button onClick={() => setScreen(2)} className="bg-transparent border-none text-[11px] text-text-ter cursor-pointer flex items-center gap-1 mb-[18px] p-0 hover:text-rust-d transition-colors">
+          <button onClick={goCompanyStep} className="bg-transparent border-none text-[11px] text-text-ter cursor-pointer flex items-center gap-1 mb-[18px] p-0 hover:text-rust-d transition-colors">
             <RiArrowLeftLine /> Back
           </button>
 
           <StepDots current={2} />
-          <ProgressBar percent={66} />
+          <ProgressBar percent={100} />
 
           <div className="font-display text-[24px] font-semibold mb-[5px]">Your login details</div>
           <p className="text-[12px] text-text-sec mb-6 leading-relaxed">Personal account linked to your company.</p>
 
           <div className="grid grid-cols-2 gap-[9px]">
-            <FormField label="First name" placeholder="Rajesh" />
-            <FormField label="Last name" placeholder="Sharma" />
+            <FormField label="First name" placeholder="First name" value={firstName} onChange={setFirstName} />
+            <FormField label="Last name" placeholder="Last name" value={lastName} onChange={setLastName} />
           </div>
-          <FormField label="Work email" placeholder="rajesh@xyzinfra.com" type="email" />
-          <div className="grid grid-cols-2 gap-[9px]">
-            <FormField label="Mobile" placeholder="+91 98765 43210" type="tel" />
-            <FormField label="Designation" placeholder="Project Director" />
-          </div>
+          <FormField label="Work email" placeholder="you@company.com" type="email" value={signupEmail} onChange={setSignupEmail} />
+          <FormField label="Mobile (optional)" placeholder="+91" type="tel" value={signupMobile} onChange={setSignupMobile} />
 
           <div className="mb-3">
             <label className="text-[10px] font-medium text-text-sec mb-[5px] block tracking-wide uppercase">Password</label>
-            <input className="w-full bg-bg-card border border-border rounded-[7px] py-[10px] px-[13px] text-[12px] text-text-pri outline-none focus:border-rust-mid transition-colors placeholder:text-text-ter" type="password" placeholder="Min 8 characters" />
-            <div className="flex gap-[3px] mt-[5px]">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="flex-1 h-[2px] rounded-sm bg-border" />
-              ))}
-            </div>
+            <input
+              className="w-full bg-bg-card border border-border rounded-[7px] py-[10px] px-[13px] text-[12px] text-text-pri outline-none focus:border-rust-mid transition-colors placeholder:text-text-ter"
+              type="password"
+              placeholder="Min 8 characters"
+              value={signupPassword}
+              onChange={(e) => setSignupPassword(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") doRegister(); }}
+            />
+            <PasswordStrengthBars password={signupPassword} />
           </div>
 
-          <button onClick={() => setScreen(4)} className="w-full py-3 bg-rust-mid border-none rounded-[7px] text-[13px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-all mt-1">
-            Next — Link parties →
+          {signupError && (
+            <div className="info-banner info-banner-red mb-3">
+              <span>⚠</span> {signupError}
+            </div>
+          )}
+
+          <button onClick={doRegister} disabled={signupLoading} className="w-full py-3 bg-rust-mid border-none rounded-[7px] text-[13px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-all mt-1 disabled:opacity-50 disabled:cursor-not-allowed">
+            {signupLoading ? "Creating account…" : "Complete registration →"}
           </button>
-        </div>
-      )}
-
-      {/* Screen 4: Signup Step 3 — GL Code */}
-      {screen === 4 && (
-        <div className="animate-fade-up">
-          <button onClick={() => setScreen(3)} className="bg-transparent border-none text-[11px] text-text-ter cursor-pointer flex items-center gap-1 mb-[18px] p-0 hover:text-rust-d transition-colors">
-            <RiArrowLeftLine /> Back
-          </button>
-
-          <StepDots current={3} />
-          <ProgressBar percent={100} />
-
-          <div className="font-display text-[24px] font-semibold mb-[5px]">Your GL code</div>
-          <p className="text-[12px] text-text-sec mb-6 leading-relaxed">Share with your IE firm and Geotech Contractor to link them to your projects.</p>
-
-          {/* GL Code Box */}
-          <div className="bg-bg-card border border-rust-mid rounded-lg p-[14px] mb-3 flex items-center justify-between">
-            <div>
-              <div className="text-[9px] text-text-ter uppercase tracking-wider mb-1">Your GL contractor code</div>
-              <div className="font-mono text-[18px] font-medium text-rust-d tracking-[2px]">GL-CON-4821</div>
-            </div>
-            <button onClick={handleCopy} className="text-[10px] text-text-sec py-1 px-[9px] border border-border rounded-[5px] cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all bg-transparent">
-              {copied ? "✓ Copied" : <><RiFileCopyLine className="inline mr-1" />Copy</>}
-            </button>
-          </div>
-
-          {/* Info Badge */}
-          <div className="flex gap-[7px] p-[9px_11px] bg-[rgba(186,117,23,.08)] border border-[rgba(186,117,23,.2)] rounded-[7px] mb-3">
-            <span className="text-[13px] shrink-0 mt-[1px]">💡</span>
-            <span className="text-[10px] text-amber-d leading-relaxed">Share your Project ID (generated when you create a project) with IE firms and Geotech Contractors. They search for it and send a join request — you approve from the project&apos;s link panel.</span>
-          </div>
-
-          {/* Link Section */}
-          <div className="bg-bg-card border border-border rounded-lg p-3 mb-3">
-            <div className="text-[10px] font-medium text-text-sec uppercase tracking-wide mb-[9px]">Link parties by GL code</div>
-            <div className="flex gap-[7px]">
-              <input className="flex-1 bg-bg-base border border-border rounded-[6px] py-2 px-[11px] font-mono text-[11px] text-text-pri outline-none focus:border-rust-mid tracking-wider placeholder:font-sans placeholder:tracking-normal placeholder:text-[10px] placeholder:text-text-ter" placeholder="Enter GL code e.g. GL-ENG-7734" />
-              <button className="py-2 px-[13px] bg-[rgba(153,60,29,.15)] border border-rust-mid rounded-[6px] text-[11px] text-rust-d font-medium cursor-pointer hover:bg-rust-mid hover:text-bg-base transition-all whitespace-nowrap">Send request</button>
-            </div>
-            <div className="flex flex-col gap-[5px] mt-2">
-              <div className="flex items-center justify-between py-[7px] px-[10px] bg-bg-base rounded-[6px] border border-border">
-                <div className="flex items-center gap-[7px]">
-                  <div className="w-[5px] h-[5px] rounded-full bg-amber-d" />
-                  <span className="text-[11px] text-text-pri">TASPL Engineers Pvt Ltd</span>
-                  <span className="font-mono text-[9px] text-text-ter ml-[3px]">GL-ENG-7734</span>
-                </div>
-                <div className="flex gap-1">
-                  <span className="text-[9px] py-[3px] px-2 bg-[rgba(59,109,17,.15)] border border-[rgba(59,109,17,.3)] rounded text-green-d cursor-pointer">✓ Accept</span>
-                  <span className="text-[9px] py-[3px] px-2 bg-[rgba(163,45,45,.12)] border border-[rgba(163,45,45,.25)] rounded text-red-d cursor-pointer">✗</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <button onClick={doLogin} className="w-full py-3 bg-rust-mid border-none rounded-[7px] text-[13px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-all mt-1">
-            Complete registration →
-          </button>
-          <button onClick={doLogin} className="w-full py-[10px] bg-transparent border border-border-mid rounded-[7px] text-[12px] font-medium text-text-sec cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all mt-[7px]">
-            Skip — link later from dashboard
+          <button onClick={() => { setSignupError(""); setScreen(1); }} className="w-full py-[10px] bg-transparent border border-border-mid rounded-[7px] text-[12px] font-medium text-text-sec cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all mt-[7px]">
+            Already have an account? Sign in
           </button>
         </div>
       )}
@@ -291,10 +309,10 @@ export default function LoginForm() {
 
 /* ══ Sub-components ══ */
 
-function StepDots({ current }: { current: 1 | 2 | 3 }) {
+function StepDots({ current }: { current: 1 | 2 }) {
   return (
     <div className="flex items-center gap-[5px] mb-5">
-      {[1, 2, 3].map((i) => (
+      {[1, 2].map((i) => (
         <div
           key={i}
           className={`h-[5px] rounded-full transition-all duration-250
@@ -302,7 +320,7 @@ function StepDots({ current }: { current: 1 | 2 | 3 }) {
         />
       ))}
       <span className="font-mono text-[9px] text-text-ter ml-[7px] tracking-wider">
-        STEP {current} OF 3 — {current === 1 ? "COMPANY" : current === 2 ? "LOGIN" : "LINK PARTIES"}
+        STEP {current} OF 2 — {current === 1 ? "COMPANY" : "LOGIN"}
       </span>
     </div>
   );
@@ -316,7 +334,40 @@ function ProgressBar({ percent }: { percent: number }) {
   );
 }
 
-function FormField({ label, placeholder, type = "text", mono = false }: { label: string; placeholder: string; type?: string; mono?: boolean }) {
+/* Matches prototype pwStrength(): score from length / uppercase / digit / symbol,
+   bars colored weak (red) / med (amber) / strong (green). */
+function PasswordStrengthBars({ password }: { password: string }) {
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+  if (!password.length) score = 0;
+
+  const color =
+    score <= 1 ? "var(--color-red-d)" : score <= 2 ? "var(--color-amber-d)" : "var(--color-green-d)";
+
+  return (
+    <div className="flex gap-[3px] mt-[5px]">
+      {[0, 1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="flex-1 h-[2px] rounded-sm transition-colors duration-250"
+          style={{ background: password.length && i < score ? color : "var(--color-border)" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function FormField({ label, placeholder, type = "text", mono = false, value, onChange }: {
+  label: string;
+  placeholder: string;
+  type?: string;
+  mono?: boolean;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <div className="mb-3">
       <label className="text-[10px] font-medium text-text-sec mb-[5px] block tracking-wide uppercase">{label}</label>
@@ -324,6 +375,8 @@ function FormField({ label, placeholder, type = "text", mono = false }: { label:
         className={`w-full bg-bg-card border border-border rounded-[7px] py-[10px] px-[13px] text-[12px] text-text-pri outline-none focus:border-rust-mid transition-colors placeholder:text-text-ter ${mono ? "font-mono text-[11px] tracking-wider" : ""}`}
         type={type}
         placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
       />
     </div>
   );

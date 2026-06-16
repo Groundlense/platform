@@ -5,8 +5,11 @@ import {
   Param,
   Patch,
   Post,
+  Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -30,6 +33,10 @@ import {
 
 import { UpdateBoreholeStatusDto, } from './dto/update-borehole-status.dto';
 import { CreateWaterTableDto } from './dto/create-water-table.dto';
+import {
+  ExportBoreholeQueryDto,
+  ExportProjectQueryDto,
+} from './dto/export-query.dto';
 @ApiTags('Boreholes')
 @ApiBearerAuth()
 @Controller()
@@ -55,7 +62,7 @@ export class BoreholesController {
   ) {
     return this.boreholesService.create(
       projectId,
-      user.id,
+      user,
       dto,
     );
   }
@@ -67,9 +74,13 @@ export class BoreholesController {
   findByProject(
     @Param('projectId')
     projectId: string,
+
+    @CurrentUser()
+    user: any,
   ) {
     return this.boreholesService.findByProject(
       projectId,
+      user,
     );
   }
 
@@ -78,9 +89,13 @@ export class BoreholesController {
   findOne(
     @Param('id')
     id: string,
+
+    @CurrentUser()
+    user: any,
   ) {
     return this.boreholesService.findOne(
       id,
+      user,
     );
   }
 
@@ -89,9 +104,13 @@ export class BoreholesController {
   getIntervals(
     @Param('id')
     boreholeId: string,
+
+    @CurrentUser()
+    user: any,
   ) {
     return this.boreholesService.getIntervals(
       boreholeId,
+      user,
     );
   }
 
@@ -109,7 +128,7 @@ export class BoreholesController {
   ) {
     return this.boreholesService.updateInterval(
       id,
-      user.id,
+      user,
       dto,
     );
   }
@@ -128,7 +147,7 @@ export class BoreholesController {
   ) {
     return this.boreholesService.createSample(
       intervalId,
-      user.id,
+      user,
       dto,
     );
   }
@@ -138,9 +157,13 @@ export class BoreholesController {
   getSamples(
     @Param('intervalId')
     intervalId: string,
+
+    @CurrentUser()
+    user: any,
   ) {
     return this.boreholesService.getSamples(
       intervalId,
+      user,
     );
   }
 
@@ -160,7 +183,7 @@ export class BoreholesController {
   ) {
     return this.boreholesService.assign(
       boreholeId,
-      user.id,
+      user,
       dto,
     );
   }
@@ -181,7 +204,7 @@ export class BoreholesController {
     return this.boreholesService.updateStatus(
       boreholeId,
       dto.status,
-      user.id,
+      user,
     );
   }
   @Permissions('REPORT_VIEW')
@@ -191,9 +214,13 @@ export class BoreholesController {
   getReportData(
     @Param('id')
     boreholeId: string,
+
+    @CurrentUser()
+    user: any,
   ) {
     return this.boreholesService.getReportData(
       boreholeId,
+      user,
     );
   }
   @Permissions('BOREHOLE_EDIT')
@@ -214,7 +241,7 @@ export class BoreholesController {
       .createWaterTableObservation(
         boreholeId,
         dto,
-        user.id,
+        user,
       );
   }
   @Permissions('BOREHOLE_VIEW')
@@ -224,10 +251,105 @@ export class BoreholesController {
   getWaterTableObservations(
     @Param('id')
     boreholeId: string,
+
+    @CurrentUser()
+    user: any,
   ) {
     return this.boreholesService
       .getWaterTableObservations(
         boreholeId,
+        user,
       );
+  }
+
+  @Permissions('REPORT_VIEW')
+  @Get(
+    'boreholes/:id/integrity',
+  )
+  getIntegrity(
+    @Param('id')
+    boreholeId: string,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService.getIntegrity(
+      boreholeId,
+      user,
+    );
+  }
+
+  @Permissions('REPORT_VIEW')
+  @Get(
+    'boreholes/:id/export',
+  )
+  async exportBorehole(
+    @Param('id')
+    boreholeId: string,
+
+    @Query()
+    query: ExportBoreholeQueryDto,
+
+    @CurrentUser()
+    user: any,
+
+    @Res()
+    res: Response,
+  ) {
+    if (query.format === 'csv') {
+      const { fileName, csv } =
+        await this.boreholesService.exportBoreholeCsv(
+          boreholeId,
+          user,
+        );
+
+      res.setHeader(
+        'Content-Type',
+        'text/csv; charset=utf-8',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${fileName}"`,
+      );
+
+      return res.send(csv);
+    }
+
+    const { fileName, payload } =
+      await this.boreholesService.exportBorehole(
+        boreholeId,
+        user,
+      );
+
+    res.setHeader(
+      'Content-Type',
+      'application/json; charset=utf-8',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}"`,
+    );
+
+    return res.send(JSON.stringify(payload, null, 2));
+  }
+
+  @Permissions('REPORT_VIEW')
+  @Get(
+    'projects/:projectId/export',
+  )
+  exportProject(
+    @Param('projectId')
+    projectId: string,
+
+    @Query()
+    _query: ExportProjectQueryDto,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService.exportProject(
+      projectId,
+      user,
+    );
   }
 }

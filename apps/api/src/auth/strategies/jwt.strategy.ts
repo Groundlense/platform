@@ -1,4 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -46,28 +49,31 @@ export class JwtStrategy extends PassportStrategy(
       },
     });
 
-    const roles =
-      user?.roles.map(
-        (r) => r.role.code,
-      ) ?? [];
+    if (!user || user.status !== 'ACTIVE') {
+      throw new UnauthorizedException(
+        'User no longer active',
+      );
+    }
 
-    const permissions =
-      user?.roles.flatMap(
-        (r) =>
-          r.role.rolePermissions.map(
-            (rp) =>
-              rp.permission.code,
-          ),
-      ) ?? [];
+    const roles = user.roles.map(
+      (r) => r.role.code,
+    );
+
+    const permissions = user.roles.flatMap(
+      (r) =>
+        r.role.rolePermissions.map(
+          (rp) => rp.permission.code,
+        ),
+    );
 
     return {
-      id: payload.sub,
-      organizationId: payload.organizationId,
-      firstName: user?.firstName,
-      lastName: user?.lastName,
-      employeeCode: user?.employeeCode,
-      email: user?.email,
-      organization: user?.organization,
+      id: user.id,
+      organizationId: user.organizationId,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      employeeCode: user.employeeCode,
+      email: user.email,
+      organization: user.organization,
       roles,
       permissions,
     };

@@ -49,6 +49,10 @@ enum BoreholeStatus {
   IN_PROGRESS
   COMPLETED
   ABANDONED
+  // Resumable field pause (mobile terminate-with-resume flow)
+  TERMINATED
+  // IE-ordered suspension per ERD/RBAC spec ("Suspend boring if non-compliant")
+  SUSPENDED
 }
 
 enum BoringMethod {
@@ -240,6 +244,7 @@ model User {
   collectedSamples    Sample[]                @relation("SampleCollector")
   observedWaterLevels WaterTableObservation[] @relation("WaterObservedBy")
   resolvedConflicts   ConflictLog[]           @relation("ConflictResolver")
+  recordedIntervals   BoreholeInterval[]      @relation("IntervalRecordedBy")
 
   // Reviews & Comments
   engineerReviews   EngineerReview[]
@@ -615,8 +620,10 @@ model BoreholeInterval {
   observedAt       DateTime?
   prevHash         String?
   sha256Hash       String?
+  recordedByUserId String?
 
   borehole         Borehole         @relation(fields: [boreholeId], references: [id])
+  recordedBy       User?            @relation("IntervalRecordedBy", fields: [recordedByUserId], references: [id])
   samples          Sample[]
   media            Media[]
   soilDescriptions SoilDescription?
@@ -768,7 +775,7 @@ model EngineerReview {
   reviewType       ReviewType   @default(ENGINEER_REVIEW)
   status           ReviewStatus @default(PENDING)
   comments         String?      @db.Text
-  isCodeMeson      Boolean      @default(false)
+  isCodeReason     String?      @db.VarChar(255)
   reviewedAt       DateTime     @default(now())
 
   borehole   Borehole @relation(fields: [boreholeId], references: [id])
@@ -898,7 +905,7 @@ model ActivityLog {
   actorCompanyId String?
   ipAddress      String?
   userAgent      String?
-  isCodeMeson    Boolean @default(false)
+  isCodeReason   String? @db.VarChar(255)
   oldValue       Json?
   newValue       Json?
 

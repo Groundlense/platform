@@ -10,10 +10,14 @@ import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
+import { api } from '../services/api';
 
 export default function TerminateScreen({ route, navigation }: { route: any; navigation: any }) {
-  const { borehole, projectId, currentDepth } = route.params;
+  const { borehole, projectId, currentDepth } = route.params || {};
   const [lang, setLang] = useState<'en' | 'hi'>('hi');
+
+  const depth = Number(currentDepth);
+  const safeDepth = Number.isFinite(depth) && depth >= 0 ? depth : 0;
 
   const [reason, setReason] = useState('End of day');
   const [willResume, setWillResume] = useState<boolean>(true);
@@ -30,15 +34,20 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
   const handleConfirm = async () => {
     try {
       const cachedBoreholes = await storage.getBoreholes(projectId);
-      
-      const newStatus = willResume ? 'TERMINATED' : 'COMPLETED';
+
+      // willResume → TERMINATED (resumable pause, amber).
+      // Permanent stop must NOT mark the borehole COMPLETED here — the
+      // Boring Closure screen owns the COMPLETED transition (it locks the log).
+      const sessionEndStatus = willResume ? 'TERMINATED' : 'COMPLETED';
 
       const updated = cachedBoreholes.map((bh: any) => {
         if (bh.id === borehole.id) {
           return {
             ...bh,
-            status: newStatus,
-            currentDepth: currentDepth,
+            // Keep the borehole's current status on permanent stop until closure completes
+            status: willResume ? 'TERMINATED' : bh.status,
+            currentDepth: safeDepth,
+            terminationReason: reason,
           };
         }
         return bh;
@@ -46,31 +55,47 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
 
       await storage.saveBoreholes(projectId, updated);
 
-      // Save termination context in sessions
+      // End the active session (when one exists) — locally and on the server
       const sessions = await storage.getBoringSessions(borehole.id);
+      let activeSessionId: string | undefined;
       if (sessions.length > 0) {
         const active = sessions[sessions.length - 1];
         active.endedAt = new Date().toISOString();
-        active.endDepth = currentDepth;
-        active.status = newStatus;
+        active.endDepth = safeDepth;
+        active.status = sessionEndStatus;
         active.terminationReason = reason;
         await storage.saveBoringSessions(borehole.id, sessions);
-        
-        // Queue operation
+        activeSessionId = active.id;
+
+        try {
+          await api.endBoringSession(active.id, {
+            endDepth: safeDepth,
+            status: sessionEndStatus,
+            terminationReason: reason,
+          });
+        } catch (apiErr) {
+          // Offline — the local session record above stands until sync
+        }
+      }
+
+      if (willResume) {
+        // Queue the borehole status update regardless of session existence
         await syncManager.queueOperation(
           'BORING',
           borehole.id,
           'UPDATE',
-          { status: newStatus, finalDepth: currentDepth },
-          active.id
+          { status: 'TERMINATED', finalDepth: safeDepth, terminationReason: reason },
+          activeSessionId
         );
       }
+      // Permanent stop: no COMPLETED queued here — BoringClosure queues
+      // { status: 'COMPLETED' } once the worker locks and submits the closure.
 
       Alert.alert(
-        willResume ? 'Boring Paused' : 'Boring Terminated',
-        willResume 
+        willResume ? 'Boring Paused' : 'Session Ended',
+        willResume
           ? 'Boring set to Amber. Ready for resume later.'
-          : 'Boring closed permanently.',
+          : 'Now complete the closure form to lock this boring permanently.',
         [
           {
             text: 'OK',
@@ -78,7 +103,11 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
               if (willResume) {
                 navigation.navigate('BoringList', { projectId });
               } else {
-                navigation.navigate('BoringClosure', { borehole, projectId });
+                navigation.navigate('BoringClosure', {
+                  borehole: { ...borehole, currentDepth: safeDepth },
+                  projectId,
+                  currentDepth: safeDepth,
+                });
               }
             }
           }
@@ -89,12 +118,27 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
     }
   };
 
+  // Honest error state when opened without a borehole
+  if (!borehole?.id || !projectId) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.popupCard}>
+          <Text style={styles.popupTitle}>⏹ {t('confirmTerminate', lang)}</Text>
+          <Text style={styles.popupSub}>No borehole selected / कोई बोरहोल नहीं चुना गया</Text>
+          <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.cancelBtnText}>{t('back', lang)}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.popupCard}>
         <Text style={styles.popupTitle}>⏹ {t('confirmTerminate', lang)}</Text>
         <Text style={styles.popupSub}>
-          {borehole.boreholeCode} · Depth {currentDepth}m
+          {borehole.boreholeCode} · Depth {safeDepth.toFixed(1)}m
         </Text>
 
         {/* Reasons Grid */}
@@ -143,7 +187,7 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
         {/* Info label */}
         <View style={styles.infoBoxRed}>
           <Text style={styles.infoBoxRedTitle}>
-            Depth {currentDepth}m + your ID + timestamp will be recorded
+            Depth {safeDepth.toFixed(1)}m + your ID + timestamp will be recorded
           </Text>
         </View>
 
