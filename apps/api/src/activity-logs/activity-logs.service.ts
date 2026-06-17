@@ -61,59 +61,56 @@ export class ActivityLogsService {
     });
   }
   async findAll(actor: any) {
-  return this.db.activityLog.findMany({
-    where: this.orgScopeWhere(actor),
-    include: {
-      user: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          employeeCode: true,
+    return this.db.activityLog.findMany({
+      where: this.orgScopeWhere(actor),
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            employeeCode: true,
+          },
         },
       },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
-}
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
 
-async findRecent(actor: any) {
-  return this.db.activityLog.findMany({
-    take: 20,
+  async findRecent(actor: any) {
+    return this.db.activityLog.findMany({
+      take: 20,
 
-    where: this.orgScopeWhere(actor),
+      where: this.orgScopeWhere(actor),
 
-    include: {
-      user: {
-        select: {
-          firstName: true,
-          lastName: true,
+      include: {
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
         },
       },
-    },
 
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
-}
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
 
-async findByUser(
-  userId: string,
-  actor: any,
-) {
-  return this.db.activityLog.findMany({
-    where: {
-      userId,
-      ...this.orgScopeWhere(actor),
-    },
+  async findByUser(userId: string, actor: any) {
+    return this.db.activityLog.findMany({
+      where: {
+        userId,
+        ...this.orgScopeWhere(actor),
+      },
 
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
-}
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
 }

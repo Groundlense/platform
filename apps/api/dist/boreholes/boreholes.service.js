@@ -145,25 +145,10 @@ let BoreholesService = class BoreholesService {
         const borehole = await this.access.assertBoreholeAccess(user, boreholeId);
         const current = borehole.status;
         const validTransitions = {
-            PLANNED: [
-                'IN_PROGRESS',
-                'ABANDONED',
-            ],
-            IN_PROGRESS: [
-                'COMPLETED',
-                'ABANDONED',
-                'TERMINATED',
-                'SUSPENDED',
-            ],
-            TERMINATED: [
-                'IN_PROGRESS',
-                'COMPLETED',
-                'ABANDONED',
-            ],
-            SUSPENDED: [
-                'IN_PROGRESS',
-                'ABANDONED',
-            ],
+            PLANNED: ['IN_PROGRESS', 'ABANDONED'],
+            IN_PROGRESS: ['COMPLETED', 'ABANDONED', 'TERMINATED', 'SUSPENDED'],
+            TERMINATED: ['IN_PROGRESS', 'COMPLETED', 'ABANDONED'],
+            SUSPENDED: ['IN_PROGRESS', 'ABANDONED'],
             COMPLETED: [],
             ABANDONED: [],
         };
@@ -339,8 +324,7 @@ let BoreholesService = class BoreholesService {
         });
         const integrity = {};
         for (const bh of project?.boreholes ?? []) {
-            integrity[bh.boreholeCode] =
-                await this.computeIntegritySummary(bh.id);
+            integrity[bh.boreholeCode] = await this.computeIntegritySummary(bh.id);
         }
         return {
             exportedAt: new Date().toISOString(),
@@ -407,12 +391,8 @@ let BoreholesService = class BoreholesService {
         if (value === null || value === undefined) {
             return '';
         }
-        const text = value instanceof Date
-            ? value.toISOString()
-            : String(value);
-        return /[",\r\n]/.test(text)
-            ? `"${text.replace(/"/g, '""')}"`
-            : text;
+        const text = value instanceof Date ? value.toISOString() : String(value);
+        return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
     }
 };
 exports.BoreholesService = BoreholesService;

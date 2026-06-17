@@ -121,10 +121,7 @@ export class ReviewsController {
   @ApiOperation({ summary: 'Close a resolved query thread' })
   @Permissions('REVIEW_CREATE')
   @Patch('threads/:threadId/close')
-  closeThread(
-    @Param('threadId') threadId: string,
-    @CurrentUser() user: any,
-  ) {
+  closeThread(@Param('threadId') threadId: string, @CurrentUser() user: any) {
     return this.reviewsService.closeThread(user, threadId);
   }
 }

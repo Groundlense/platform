@@ -89,10 +89,7 @@ let UsersService = class UsersService {
     async findByIdentifier(identifier) {
         return this.db.user.findFirst({
             where: {
-                OR: [
-                    { email: identifier },
-                    { employeeCode: identifier },
-                ],
+                OR: [{ email: identifier }, { employeeCode: identifier }],
             },
             include: {
                 roles: {
@@ -125,9 +122,7 @@ let UsersService = class UsersService {
         const organizationId = this.isSuperAdmin(actor)
             ? dto.organizationId
             : actor.organizationId;
-        const oneTimePassword = crypto
-            .randomBytes(9)
-            .toString('base64url');
+        const oneTimePassword = crypto.randomBytes(9).toString('base64url');
         const passwordHash = await bcrypt.hash(oneTimePassword, 10);
         let employeeCode = dto.employeeCode?.trim() || null;
         if (!employeeCode) {

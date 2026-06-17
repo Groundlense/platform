@@ -52,10 +52,7 @@ export class SyncService {
     }> = [];
 
     for (const op of dto.operations) {
-      const device = await this.resolveDevice(
-        op.deviceId,
-        user.id,
-      );
+      const device = await this.resolveDevice(op.deviceId, user.id);
 
       // Idempotency: an operation already recorded for this device is skipped.
       const existing = await this.db.syncOperation.findFirst({
@@ -96,8 +93,7 @@ export class SyncService {
           payloadJson: op.payloadJson,
           boringSessionId: op.boringSessionId || null,
           status,
-          syncedAt:
-            status === SyncStatus.SYNCED ? new Date() : null,
+          syncedAt: status === SyncStatus.SYNCED ? new Date() : null,
         },
       });
 
@@ -113,9 +109,7 @@ export class SyncService {
     ).length;
 
     return {
-      success: results.every(
-        (r) => r.status === SyncStatus.SYNCED,
-      ),
+      success: results.every((r) => r.status === SyncStatus.SYNCED),
       processedCount,
       results,
     };
@@ -123,10 +117,7 @@ export class SyncService {
 
   // Devices register bound to the authenticated caller — never to an
   // arbitrary user, and never with fabricated metadata.
-  private async resolveDevice(
-    deviceUuid: string,
-    userId: string,
-  ) {
+  private async resolveDevice(deviceUuid: string, userId: string) {
     const device = await this.db.device.findUnique({
       where: { deviceUuid },
     });
@@ -152,10 +143,7 @@ export class SyncService {
     });
   }
 
-  private async applyOperation(
-    op: SyncOperationItemDto,
-    userId: string,
-  ) {
+  private async applyOperation(op: SyncOperationItemDto, userId: string) {
     switch (op.entityType) {
       case 'BORING':
         return this.applyBoringUpdate(op);
@@ -168,17 +156,13 @@ export class SyncService {
       case 'PHOTO':
         return this.applyPhotoCreate(op, userId);
       default:
-        throw new Error(
-          `Unsupported entity type ${op.entityType}`,
-        );
+        throw new Error(`Unsupported entity type ${op.entityType}`);
     }
   }
 
   private async applyBoringUpdate(op: SyncOperationItemDto) {
     if (op.operationType !== 'UPDATE') {
-      throw new Error(
-        `Unsupported operation ${op.operationType} for BORING`,
-      );
+      throw new Error(`Unsupported operation ${op.operationType} for BORING`);
     }
 
     const payload = op.payloadJson ?? {};
@@ -188,17 +172,12 @@ export class SyncService {
     });
 
     if (!borehole) {
-      throw new NotFoundException(
-        `Borehole ${op.entityId} not found`,
-      );
+      throw new NotFoundException(`Borehole ${op.entityId} not found`);
     }
 
     const data: Record<string, any> = {};
 
-    if (
-      payload.status &&
-      BOREHOLE_STATUSES.includes(payload.status)
-    ) {
+    if (payload.status && BOREHOLE_STATUSES.includes(payload.status)) {
       data.status = payload.status;
 
       if (payload.status === 'COMPLETED') {
@@ -235,19 +214,14 @@ export class SyncService {
     });
   }
 
-  private async applyIntervalUpsert(
-    op: SyncOperationItemDto,
-    userId: string,
-  ) {
+  private async applyIntervalUpsert(op: SyncOperationItemDto, userId: string) {
     const payload = op.payloadJson ?? {};
 
     const boreholeId = payload.boreholeId;
     const intervalNo = Number(payload.intervalNo);
 
     if (!boreholeId || !Number.isInteger(intervalNo)) {
-      throw new Error(
-        'SPT_RECORD payload missing boreholeId/intervalNo',
-      );
+      throw new Error('SPT_RECORD payload missing boreholeId/intervalNo');
     }
 
     const borehole = await this.db.borehole.findUnique({
@@ -255,9 +229,7 @@ export class SyncService {
     });
 
     if (!borehole) {
-      throw new NotFoundException(
-        `Borehole ${boreholeId} not found`,
-      );
+      throw new NotFoundException(`Borehole ${boreholeId} not found`);
     }
 
     const fields = {
@@ -274,26 +246,22 @@ export class SyncService {
       isRefusal: payload.isRefusal ?? false,
       penetrationMm: payload.penetrationMm ?? null,
       dilatancyApplied: payload.dilatancyApplied ?? false,
-      observedAt: payload.observedAt
-        ? new Date(payload.observedAt)
-        : null,
+      observedAt: payload.observedAt ? new Date(payload.observedAt) : null,
     };
 
     // Tamper-evidence (spec: SPT records carry sha256_hash chained via
     // prev_hash). The recorder is the authenticated sync caller; a
     // replayed update never overwrites the original field recorder.
-    const existing =
-      await this.db.boreholeInterval.findUnique({
-        where: {
-          boreholeId_intervalNo: {
-            boreholeId,
-            intervalNo,
-          },
+    const existing = await this.db.boreholeInterval.findUnique({
+      where: {
+        boreholeId_intervalNo: {
+          boreholeId,
+          intervalNo,
         },
-      });
+      },
+    });
 
-    const recordedByUserId =
-      (existing as any)?.recordedByUserId ?? userId;
+    const recordedByUserId = (existing as any)?.recordedByUserId ?? userId;
 
     await this.db.boreholeInterval.upsert({
       where: {
@@ -317,31 +285,19 @@ export class SyncService {
     // Hash from the persisted values (Decimal-scale safe) and cascade to
     // any later intervals already on the server, so out-of-order replays
     // re-link prevHash -> sha256Hash for the whole tail of the chain.
-    await this.integrity.rehashChain(
-      boreholeId,
-      intervalNo,
-    );
+    await this.integrity.rehashChain(boreholeId, intervalNo);
   }
 
-  private async applySampleCreate(
-    op: SyncOperationItemDto,
-    userId: string,
-  ) {
+  private async applySampleCreate(op: SyncOperationItemDto, userId: string) {
     if (op.operationType !== 'CREATE') {
-      throw new Error(
-        `Unsupported operation ${op.operationType} for SAMPLE`,
-      );
+      throw new Error(`Unsupported operation ${op.operationType} for SAMPLE`);
     }
 
     const payload = op.payloadJson ?? {};
 
-    const interval = await this.resolveInterval(
-      payload.intervalId,
-    );
+    const interval = await this.resolveInterval(payload.intervalId);
 
-    const sampleType = SAMPLE_TYPES.includes(
-      payload.sampleType,
-    )
+    const sampleType = SAMPLE_TYPES.includes(payload.sampleType)
       ? payload.sampleType
       : 'DISTURBED';
 
@@ -393,9 +349,7 @@ export class SyncService {
         });
 
     if (!interval) {
-      throw new NotFoundException(
-        `Interval ${intervalId} not found`,
-      );
+      throw new NotFoundException(`Interval ${intervalId} not found`);
     }
 
     return interval;
@@ -414,9 +368,7 @@ export class SyncService {
     const payload = op.payloadJson ?? {};
 
     if (!payload.boreholeId || payload.depth == null) {
-      throw new Error(
-        'WATER_LEVEL payload missing boreholeId/depth',
-      );
+      throw new Error('WATER_LEVEL payload missing boreholeId/depth');
     }
 
     const borehole = await this.db.borehole.findUnique({
@@ -424,28 +376,23 @@ export class SyncService {
     });
 
     if (!borehole) {
-      throw new NotFoundException(
-        `Borehole ${payload.boreholeId} not found`,
-      );
+      throw new NotFoundException(`Borehole ${payload.boreholeId} not found`);
     }
 
-    const observation =
-      await this.db.waterTableObservation.create({
-        data: {
-          boreholeId: payload.boreholeId,
-          depth: payload.depth,
-          observedAt: payload.observedAt
-            ? new Date(payload.observedAt)
-            : new Date(),
-          remarks: payload.remarks ?? null,
-          readingType: WATER_READING_TYPES.includes(
-            payload.readingType,
-          )
-            ? payload.readingType
-            : null,
-          createdByUserId: userId,
-        },
-      });
+    const observation = await this.db.waterTableObservation.create({
+      data: {
+        boreholeId: payload.boreholeId,
+        depth: payload.depth,
+        observedAt: payload.observedAt
+          ? new Date(payload.observedAt)
+          : new Date(),
+        remarks: payload.remarks ?? null,
+        readingType: WATER_READING_TYPES.includes(payload.readingType)
+          ? payload.readingType
+          : null,
+        createdByUserId: userId,
+      },
+    });
 
     // WaterTableObservation has sha256Hash only (no prev chain) — a
     // standalone tamper hash computed from the persisted values.
@@ -454,9 +401,7 @@ export class SyncService {
       data: {
         sha256Hash: this.integrity.computeRecordHash(
           null,
-          this.integrity.hashWaterTablePayload(
-            observation as any,
-          ),
+          this.integrity.hashWaterTablePayload(observation as any),
         ),
       },
     });
@@ -474,13 +419,8 @@ export class SyncService {
     }
 
     // A user may only read conflicts for their own devices.
-    if (
-      device.userId !== user.id &&
-      !user.roles?.includes('SUPER_ADMIN')
-    ) {
-      throw new ForbiddenException(
-        'Device belongs to another user',
-      );
+    if (device.userId !== user.id && !user.roles?.includes('SUPER_ADMIN')) {
+      throw new ForbiddenException('Device belongs to another user');
     }
 
     return this.db.conflictLog.findMany({
@@ -500,14 +440,9 @@ export class SyncService {
     });
   }
 
-  private async applyPhotoCreate(
-    op: SyncOperationItemDto,
-    userId: string,
-  ) {
+  private async applyPhotoCreate(op: SyncOperationItemDto, userId: string) {
     if (op.operationType !== 'CREATE') {
-      throw new Error(
-        `Unsupported operation ${op.operationType} for PHOTO`,
-      );
+      throw new Error(`Unsupported operation ${op.operationType} for PHOTO`);
     }
 
     const payload = op.payloadJson ?? {};

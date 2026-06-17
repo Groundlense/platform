@@ -2,6 +2,7 @@ import { OrganizationsService } from './organizations.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { ListOrganizationsQueryDto } from './dto/list-organizations-query.dto';
+import { InviteMembersDto } from './dto/invite-members.dto';
 export declare class OrganizationsController {
     private readonly organizationsService;
     constructor(organizationsService: OrganizationsService);
@@ -12,7 +13,11 @@ export declare class OrganizationsController {
         city: string | null;
         state: string | null;
     }[]>;
-    create(dto: CreateOrganizationDto, user: any): Promise<{
+    create(dto: CreateOrganizationDto, user: {
+        id: string;
+        organizationId: string;
+        roles?: any;
+    }): Promise<{
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
@@ -36,7 +41,11 @@ export declare class OrganizationsController {
         subscriptionExpiry: Date | null;
         isActive: boolean;
     }>;
-    findOne(organizationId: string, user: any): Promise<{
+    findOne(organizationId: string, user: {
+        id: string;
+        organizationId: string;
+        roles?: any;
+    }): Promise<{
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
@@ -60,7 +69,11 @@ export declare class OrganizationsController {
         subscriptionExpiry: Date | null;
         isActive: boolean;
     }>;
-    update(organizationId: string, dto: UpdateOrganizationDto, user: any): Promise<{
+    update(organizationId: string, dto: UpdateOrganizationDto, user: {
+        id: string;
+        organizationId: string;
+        roles?: any;
+    }): Promise<{
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
@@ -84,7 +97,11 @@ export declare class OrganizationsController {
         subscriptionExpiry: Date | null;
         isActive: boolean;
     }>;
-    verifyKyc(organizationId: string, user: any): Promise<{
+    verifyKyc(organizationId: string, user: {
+        id: string;
+        organizationId: string;
+        roles?: any;
+    }): Promise<{
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
@@ -107,5 +124,48 @@ export declare class OrganizationsController {
         subscriptionPlan: string | null;
         subscriptionExpiry: Date | null;
         isActive: boolean;
+    }>;
+    inviteMembers(dto: InviteMembersDto, user: {
+        id: string;
+        organizationId: string;
+        roles?: any;
+    }): Promise<Record<string, unknown>[]>;
+    getJoinRequests(user: {
+        id: string;
+        organizationId: string;
+        roles?: any;
+    }): Promise<({
+        user: {
+            firstName: string;
+            lastName: string | null;
+            email: string | null;
+            employeeCode: string | null;
+            id: string;
+            mobile: string | null;
+        };
+    } & {
+        organizationId: string;
+        roleCode: string;
+        id: string;
+        status: string;
+        createdAt: Date;
+        updatedAt: Date;
+        userId: string;
+    })[]>;
+    approveJoinRequest(requestId: string, user: {
+        id: string;
+        organizationId: string;
+        roles?: any;
+    }): Promise<{
+        success: boolean;
+        message: string;
+    }>;
+    rejectJoinRequest(requestId: string, user: {
+        id: string;
+        organizationId: string;
+        roles?: any;
+    }): Promise<{
+        success: boolean;
+        message: string;
     }>;
 }

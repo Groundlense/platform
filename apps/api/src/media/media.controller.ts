@@ -26,10 +26,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 import { MediaService } from './media.service';
 
-import {
-  ApiBearerAuth,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 const ALLOWED_MIME_TYPES = [
   'image/jpeg',
@@ -43,45 +40,31 @@ const ALLOWED_MIME_TYPES = [
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class MediaController {
-  constructor(
-    private readonly mediaService: MediaService,
-  ) {}
+  constructor(private readonly mediaService: MediaService) {}
 
-  @Post(
-    'intervals/:intervalId/media',
-  )
+  @Post('intervals/:intervalId/media')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
-        destination:
-          './uploads',
+        destination: './uploads',
 
         // Random suffix prevents collisions on concurrent uploads.
-        filename:
-          (
-            req,
-            file,
-            cb,
-          ) => {
-            cb(
-              null,
-              `${Date.now()}-${randomBytes(6).toString('hex')}${extname(
-                file.originalname,
-              )}`,
-            );
-          },
+        filename: (req, file, cb) => {
+          cb(
+            null,
+            `${Date.now()}-${randomBytes(6).toString('hex')}${extname(
+              file.originalname,
+            )}`,
+          );
+        },
       }),
       limits: {
         fileSize: 15 * 1024 * 1024,
       },
       fileFilter: (req, file, cb) => {
-        if (
-          !ALLOWED_MIME_TYPES.includes(file.mimetype)
-        ) {
+        if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
           return cb(
-            new BadRequestException(
-              `Unsupported file type ${file.mimetype}`,
-            ),
+            new BadRequestException(`Unsupported file type ${file.mimetype}`),
             false,
           );
         }
@@ -99,16 +82,10 @@ export class MediaController {
     @CurrentUser()
     user: any,
   ) {
-    return this.mediaService.create(
-      intervalId,
-      file,
-      user,
-    );
+    return this.mediaService.create(intervalId, file, user);
   }
 
-  @Get(
-    'intervals/:intervalId/media',
-  )
+  @Get('intervals/:intervalId/media')
   getMedia(
     @Param('intervalId')
     intervalId: string,
@@ -116,10 +93,7 @@ export class MediaController {
     @CurrentUser()
     user: any,
   ) {
-    return this.mediaService.getByInterval(
-      intervalId,
-      user,
-    );
+    return this.mediaService.getByInterval(intervalId, user);
   }
 
   // Authenticated replacement for the removed public /uploads static route.
@@ -134,16 +108,12 @@ export class MediaController {
     @Res()
     res: Response,
   ) {
-    const { media, absolutePath } =
-      await this.mediaService.getFile(
-        mediaId,
-        user,
-      );
-
-    res.setHeader(
-      'Content-Type',
-      media.mimeType ?? 'application/octet-stream',
+    const { media, absolutePath } = await this.mediaService.getFile(
+      mediaId,
+      user,
     );
+
+    res.setHeader('Content-Type', media.mimeType ?? 'application/octet-stream');
 
     return res.sendFile(absolutePath);
   }

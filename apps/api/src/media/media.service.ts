@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -18,52 +15,35 @@ export class MediaService {
     private readonly access: ProjectAccessService,
   ) {}
 
-  async create(
-    intervalId: string,
-    file: Express.Multer.File,
-    user: any,
-  ) {
-    await this.access.assertIntervalAccess(
-      user,
-      intervalId,
-    );
+  async create(intervalId: string, file: Express.Multer.File, user: any) {
+    await this.access.assertIntervalAccess(user, intervalId);
 
     const media = await this.db.media.create({
       data: {
         intervalId,
 
-        fileName:
-          file.originalname,
+        fileName: file.originalname,
 
-        filePath:
-          file.filename,
+        filePath: file.filename,
 
-        mimeType:
-          file.mimetype,
+        mimeType: file.mimetype,
 
         mediaType: 'PHOTO',
 
-        uploadedByUserId:
-          user.id,
+        uploadedByUserId: user.id,
       },
     });
     await this.activityLogsService.log(
-  user.id,
-  'MEDIA_UPLOADED',
-  'MEDIA',
-  media.id,
-);
+      user.id,
+      'MEDIA_UPLOADED',
+      'MEDIA',
+      media.id,
+    );
     return media;
   }
 
-  async getByInterval(
-    intervalId: string,
-    user: any,
-  ) {
-    await this.access.assertIntervalAccess(
-      user,
-      intervalId,
-    );
+  async getByInterval(intervalId: string, user: any) {
+    await this.access.assertIntervalAccess(user, intervalId);
 
     return this.db.media.findMany({
       where: {
@@ -85,21 +65,12 @@ export class MediaService {
       throw new NotFoundException('Media not found');
     }
 
-    await this.access.assertIntervalAccess(
-      user,
-      media.intervalId,
-    );
+    await this.access.assertIntervalAccess(user, media.intervalId);
 
-    const absolutePath = join(
-      process.cwd(),
-      'uploads',
-      media.filePath,
-    );
+    const absolutePath = join(process.cwd(), 'uploads', media.filePath);
 
     if (!existsSync(absolutePath)) {
-      throw new NotFoundException(
-        'Media file missing on disk',
-      );
+      throw new NotFoundException('Media file missing on disk');
     }
 
     return { media, absolutePath };

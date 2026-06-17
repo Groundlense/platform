@@ -25,10 +25,7 @@ export class PaymentsController {
 
   @Permissions('PROJECT_EDIT')
   @Post('payments')
-  create(
-    @CurrentUser() user: any,
-    @Body() dto: CreatePaymentDto,
-  ) {
+  create(@CurrentUser() user: any, @Body() dto: CreatePaymentDto) {
     return this.paymentsService.create(user, dto);
   }
 

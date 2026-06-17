@@ -17,10 +17,7 @@ export class PaymentsService {
   ) {}
 
   async create(user: any, dto: CreatePaymentDto) {
-    await this.access.assertProjectAccess(
-      user,
-      dto.projectId,
-    );
+    await this.access.assertProjectAccess(user, dto.projectId);
 
     return this.db.payment.create({
       data: {
@@ -36,24 +33,15 @@ export class PaymentsService {
     });
   }
 
-  async verify(
-    paymentId: string,
-    dto: VerifyPaymentDto,
-    user: any,
-  ) {
+  async verify(paymentId: string, dto: VerifyPaymentDto, user: any) {
     const payment = await this.db.payment.findUnique({
       where: { id: paymentId },
     });
     if (!payment) {
-      throw new NotFoundException(
-        'Payment transaction not found',
-      );
+      throw new NotFoundException('Payment transaction not found');
     }
 
-    await this.access.assertProjectAccess(
-      user,
-      payment.projectId,
-    );
+    await this.access.assertProjectAccess(user, payment.projectId);
 
     // The client never decides the outcome: success is established only by
     // validating Razorpay's signature with our key secret.
@@ -66,14 +54,11 @@ export class PaymentsService {
 
     const expectedSignature = crypto
       .createHmac('sha256', keySecret)
-      .update(
-        `${payment.razorpayOrderId}|${dto.razorpayPaymentId}`,
-      )
+      .update(`${payment.razorpayOrderId}|${dto.razorpayPaymentId}`)
       .digest('hex');
 
     const signatureValid =
-      expectedSignature.length ===
-        dto.razorpaySignature.length &&
+      expectedSignature.length === dto.razorpaySignature.length &&
       crypto.timingSafeEqual(
         Buffer.from(expectedSignature),
         Buffer.from(dto.razorpaySignature),
@@ -88,9 +73,7 @@ export class PaymentsService {
         },
       });
 
-      throw new BadRequestException(
-        'Invalid payment signature',
-      );
+      throw new BadRequestException('Invalid payment signature');
     }
 
     return this.db.$transaction(async (tx) => {
@@ -115,10 +98,7 @@ export class PaymentsService {
   }
 
   async findByProject(projectId: string, user: any) {
-    await this.access.assertProjectAccess(
-      user,
-      projectId,
-    );
+    await this.access.assertProjectAccess(user, projectId);
 
     return this.db.payment.findMany({
       where: { projectId },

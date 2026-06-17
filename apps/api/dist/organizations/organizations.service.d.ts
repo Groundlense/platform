@@ -4,6 +4,12 @@ import { ProjectAccessService } from '../common/access/project-access.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import { InviteMembersDto } from './dto/invite-members.dto';
+interface AuthUser {
+    id: string;
+    organizationId?: string;
+    roles?: any;
+}
 export declare class OrganizationsService {
     private readonly db;
     private readonly access;
@@ -16,7 +22,7 @@ export declare class OrganizationsService {
         city: string | null;
         state: string | null;
     }[]>;
-    findOne(organizationId: string, user: any): Promise<{
+    findOne(organizationId: string, user: AuthUser): Promise<{
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
@@ -40,7 +46,7 @@ export declare class OrganizationsService {
         subscriptionExpiry: Date | null;
         isActive: boolean;
     }>;
-    create(dto: CreateOrganizationDto, user: any): Promise<{
+    create(dto: CreateOrganizationDto, user: AuthUser): Promise<{
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
@@ -64,7 +70,7 @@ export declare class OrganizationsService {
         subscriptionExpiry: Date | null;
         isActive: boolean;
     }>;
-    update(organizationId: string, dto: UpdateOrganizationDto, user: any): Promise<{
+    update(organizationId: string, dto: UpdateOrganizationDto, user: AuthUser): Promise<{
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
@@ -88,7 +94,7 @@ export declare class OrganizationsService {
         subscriptionExpiry: Date | null;
         isActive: boolean;
     }>;
-    verifyKyc(organizationId: string, user: any): Promise<{
+    verifyKyc(organizationId: string, user: AuthUser): Promise<{
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
@@ -111,5 +117,39 @@ export declare class OrganizationsService {
         subscriptionPlan: string | null;
         subscriptionExpiry: Date | null;
         isActive: boolean;
+    }>;
+    inviteMembers(dto: InviteMembersDto, user: {
+        id: string;
+        organizationId: string;
+    }): Promise<Record<string, unknown>[]>;
+    private getTransporter;
+    private sendInviteEmail;
+    private sendAddedToOrgEmail;
+    getJoinRequests(user: AuthUser): Promise<({
+        user: {
+            firstName: string;
+            lastName: string | null;
+            email: string | null;
+            employeeCode: string | null;
+            id: string;
+            mobile: string | null;
+        };
+    } & {
+        organizationId: string;
+        roleCode: string;
+        id: string;
+        status: string;
+        createdAt: Date;
+        updatedAt: Date;
+        userId: string;
+    })[]>;
+    approveJoinRequest(requestId: string, user: AuthUser): Promise<{
+        success: boolean;
+        message: string;
+    }>;
+    rejectJoinRequest(requestId: string, user: AuthUser): Promise<{
+        success: boolean;
+        message: string;
     }>;
 }
+export {};

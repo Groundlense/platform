@@ -26,47 +26,26 @@ export class ProjectsService {
     private readonly access: ProjectAccessService,
   ) {}
 
-  async create(
-    dto: CreateProjectDto,
-    userId: string,
-    organizationId: string,
-  ) {
-    const project =
-      await this.db.project.create({
-        data: {
-          projectCode:
-            dto.projectCode,
+  async create(dto: CreateProjectDto, userId: string, organizationId: string) {
+    const project = await this.db.project.create({
+      data: {
+        projectCode: dto.projectCode,
 
-          name:
-            dto.name,
+        name: dto.name,
 
-          description:
-            dto.description,
+        description: dto.description,
 
-          startDate:
-            dto.startDate
-              ? new Date(
-                  dto.startDate,
-                )
-              : null,
+        startDate: dto.startDate ? new Date(dto.startDate) : null,
 
-          endDate:
-            dto.endDate
-              ? new Date(
-                  dto.endDate,
-                )
-              : null,
+        endDate: dto.endDate ? new Date(dto.endDate) : null,
 
-          createdByUserId:
-            userId,
+        createdByUserId: userId,
 
-          epcOrganizationId:
-            organizationId,
+        epcOrganizationId: organizationId,
 
-          geotechOrganizationId:
-            dto.geotechOrganizationId,
-        },
-      });
+        geotechOrganizationId: dto.geotechOrganizationId,
+      },
+    });
 
     await this.activityLogsService.log(
       userId,
@@ -74,10 +53,8 @@ export class ProjectsService {
       'PROJECT',
       project.id,
       {
-        projectCode:
-          project.projectCode,
-        projectName:
-          project.name,
+        projectCode: project.projectCode,
+        projectName: project.name,
       },
     );
 
@@ -118,33 +95,25 @@ export class ProjectsService {
       'SUSPENDED',
     ] as const;
 
-    const countsByProject = new Map<
-      string,
-      Record<string, number>
-    >();
+    const countsByProject = new Map<string, Record<string, number>>();
 
     for (const row of grouped) {
-      const counts =
-        countsByProject.get(row.projectId) ?? {};
+      const counts = countsByProject.get(row.projectId) ?? {};
       counts[row.status] = row._count._all;
       countsByProject.set(row.projectId, counts);
     }
 
     return projects.map((project) => {
-      const counts =
-        countsByProject.get(project.id) ?? {};
+      const counts = countsByProject.get(project.id) ?? {};
 
-      const boreholeStatusCounts =
-        Object.fromEntries(
-          BOREHOLE_STATUSES.map((status) => [
-            status,
-            counts[status] ?? 0,
-          ]),
-        );
+      const boreholeStatusCounts = Object.fromEntries(
+        BOREHOLE_STATUSES.map((status) => [status, counts[status] ?? 0]),
+      );
 
-      const totalBoreholes = Object.values(
-        boreholeStatusCounts,
-      ).reduce((sum, n) => sum + n, 0);
+      const totalBoreholes = Object.values(boreholeStatusCounts).reduce(
+        (sum, n) => sum + n,
+        0,
+      );
 
       return {
         ...project,
@@ -179,11 +148,7 @@ export class ProjectsService {
       return { found: false };
     }
 
-    const hasAccess =
-      await this.access.canAccessProject(
-        user,
-        project.id,
-      );
+    const hasAccess = await this.access.canAccessProject(user, project.id);
 
     return {
       found: true,
@@ -192,15 +157,8 @@ export class ProjectsService {
     };
   }
 
-  async addMember(
-    projectId: string,
-    userId: string,
-    actor: any,
-  ) {
-    await this.access.assertProjectAccess(
-      actor,
-      projectId,
-    );
+  async addMember(projectId: string, userId: string, actor: any) {
+    await this.access.assertProjectAccess(actor, projectId);
 
     return this.db.projectMember.create({
       data: {
@@ -210,14 +168,8 @@ export class ProjectsService {
     });
   }
 
-  async getMembers(
-    projectId: string,
-    actor: any,
-  ) {
-    await this.access.assertProjectAccess(
-      actor,
-      projectId,
-    );
+  async getMembers(projectId: string, actor: any) {
+    await this.access.assertProjectAccess(actor, projectId);
 
     return this.db.projectMember.findMany({
       where: {
@@ -240,9 +192,7 @@ export class ProjectsService {
     });
   }
 
-  async getMyProjects(
-    userId: string,
-  ) {
+  async getMyProjects(userId: string) {
     return this.db.projectMember.findMany({
       where: {
         userId,
@@ -268,42 +218,32 @@ export class ProjectsService {
     dto: InviteProjectCompanyDto,
     actor: any,
   ) {
-    await this.access.assertProjectAccess(
-      actor,
-      projectId,
-    );
+    await this.access.assertProjectAccess(actor, projectId);
 
-    const organization =
-      await this.db.organization.findUnique({
-        where: { id: dto.organizationId },
-        select: { id: true, name: true },
-      });
+    const organization = await this.db.organization.findUnique({
+      where: { id: dto.organizationId },
+      select: { id: true, name: true },
+    });
 
     if (!organization) {
-      throw new NotFoundException(
-        'Organization not found',
-      );
+      throw new NotFoundException('Organization not found');
     }
 
-    const existing =
-      await this.db.projectCompany.findFirst({
-        where: {
-          projectId,
-          companyId: dto.organizationId,
-          isActive: true,
-        },
-        select: { id: true },
-      });
+    const existing = await this.db.projectCompany.findFirst({
+      where: {
+        projectId,
+        companyId: dto.organizationId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
 
     if (existing) {
-      throw new ConflictException(
-        'Company is already linked to this project',
-      );
+      throw new ConflictException('Company is already linked to this project');
     }
 
     // Inviting your own organization needs no acceptance handshake.
-    const isSelfLink =
-      dto.organizationId === actor.organizationId;
+    const isSelfLink = dto.organizationId === actor.organizationId;
 
     const link = await this.db.projectCompany.create({
       data: {
@@ -311,9 +251,7 @@ export class ProjectsService {
         companyId: dto.organizationId,
         role: dto.role,
         invitedByUserId: actor.id,
-        inviteAcceptedAt: isSelfLink
-          ? new Date()
-          : null,
+        inviteAcceptedAt: isSelfLink ? new Date() : null,
       },
       include: {
         company: {
@@ -347,14 +285,8 @@ export class ProjectsService {
   }
 
   /** Companies linked (or invited) to a project. */
-  async getCompanies(
-    projectId: string,
-    actor: any,
-  ) {
-    await this.access.assertProjectAccess(
-      actor,
-      projectId,
-    );
+  async getCompanies(projectId: string, actor: any) {
+    await this.access.assertProjectAccess(actor, projectId);
 
     return this.db.projectCompany.findMany({
       where: {
@@ -386,15 +318,12 @@ export class ProjectsService {
     accept: boolean,
     actor: any,
   ) {
-    const link =
-      await this.db.projectCompany.findUnique({
-        where: { id: companyLinkId },
-      });
+    const link = await this.db.projectCompany.findUnique({
+      where: { id: companyLinkId },
+    });
 
     if (!link || link.projectId !== projectId) {
-      throw new NotFoundException(
-        'Project-company link not found',
-      );
+      throw new NotFoundException('Project-company link not found');
     }
 
     if (
@@ -406,22 +335,14 @@ export class ProjectsService {
       );
     }
 
-    if (
-      link.inviteAcceptedAt !== null ||
-      !link.isActive
-    ) {
-      throw new ConflictException(
-        'Invitation has already been responded to',
-      );
+    if (link.inviteAcceptedAt !== null || !link.isActive) {
+      throw new ConflictException('Invitation has already been responded to');
     }
 
-    const updated =
-      await this.db.projectCompany.update({
-        where: { id: companyLinkId },
-        data: accept
-          ? { inviteAcceptedAt: new Date() }
-          : { isActive: false },
-      });
+    const updated = await this.db.projectCompany.update({
+      where: { id: companyLinkId },
+      data: accept ? { inviteAcceptedAt: new Date() } : { isActive: false },
+    });
 
     await this.activityLogsService.log(
       actor.id,
@@ -449,37 +370,28 @@ export class ProjectsService {
     companyLinkId: string,
     actor: any,
   ) {
-    await this.access.assertProjectAccess(
-      actor,
-      projectId,
-    );
+    await this.access.assertProjectAccess(actor, projectId);
 
-    const link =
-      await this.db.projectCompany.findUnique({
-        where: { id: companyLinkId },
-      });
+    const link = await this.db.projectCompany.findUnique({
+      where: { id: companyLinkId },
+    });
 
     if (!link || link.projectId !== projectId) {
-      throw new NotFoundException(
-        'Project-company link not found',
-      );
+      throw new NotFoundException('Project-company link not found');
     }
 
     if (!this.access.isSuperAdmin(actor)) {
-      const project =
-        await this.db.project.findUnique({
-          where: { id: projectId },
-          select: {
-            epcOrganizationId: true,
-            initiatedByCompanyId: true,
-          },
-        });
+      const project = await this.db.project.findUnique({
+        where: { id: projectId },
+        select: {
+          epcOrganizationId: true,
+          initiatedByCompanyId: true,
+        },
+      });
 
       const isCreatorOrg =
-        project?.epcOrganizationId ===
-          actor.organizationId ||
-        project?.initiatedByCompanyId ===
-          actor.organizationId;
+        project?.epcOrganizationId === actor.organizationId ||
+        project?.initiatedByCompanyId === actor.organizationId;
 
       const holdsInitiatorLink =
         (await this.db.projectCompany.findFirst({
@@ -531,10 +443,7 @@ export class ProjectsService {
     dto: AssignProjectRoleDto,
     actor: any,
   ) {
-    await this.access.assertProjectAccess(
-      actor,
-      projectId,
-    );
+    await this.access.assertProjectAccess(actor, projectId);
 
     const targetUser = await this.db.user.findUnique({
       where: { id: dto.userId },
@@ -552,37 +461,32 @@ export class ProjectsService {
 
     // The target's organization must be a party to the project: an EPC
     // or geotech org, or linked via an accepted project_companies row.
-    const partyProject =
-      await this.db.project.findFirst({
-        where: {
-          id: projectId,
-          OR: [
-            {
-              epcOrganizationId:
-                targetUser.organizationId,
-            },
-            {
-              geotechOrganizationId:
-                targetUser.organizationId,
-            },
-            {
-              initiatedByCompanyId:
-                targetUser.organizationId,
-            },
-            {
-              projectCompanies: {
-                some: {
-                  companyId:
-                    targetUser.organizationId,
-                  isActive: true,
-                  inviteAcceptedAt: { not: null },
-                },
+    const partyProject = await this.db.project.findFirst({
+      where: {
+        id: projectId,
+        OR: [
+          {
+            epcOrganizationId: targetUser.organizationId,
+          },
+          {
+            geotechOrganizationId: targetUser.organizationId,
+          },
+          {
+            initiatedByCompanyId: targetUser.organizationId,
+          },
+          {
+            projectCompanies: {
+              some: {
+                companyId: targetUser.organizationId,
+                isActive: true,
+                inviteAcceptedAt: { not: null },
               },
             },
-          ],
-        },
-        select: { id: true },
-      });
+          },
+        ],
+      },
+      select: { id: true },
+    });
 
     if (!partyProject) {
       throw new BadRequestException(
@@ -596,9 +500,7 @@ export class ProjectsService {
     });
 
     if (!role) {
-      throw new BadRequestException(
-        `Unknown role code: ${dto.projectRole}`,
-      );
+      throw new BadRequestException(`Unknown role code: ${dto.projectRole}`);
     }
 
     // Replace semantics: revoke any other active assignment for this
@@ -613,38 +515,37 @@ export class ProjectsService {
       data: { revokedAt: new Date() },
     });
 
-    const assignment =
-      await this.db.userProjectRole.upsert({
-        where: {
-          userId_projectId_companyId_roleId: {
-            userId: dto.userId,
-            projectId,
-            companyId: targetUser.organizationId,
-            roleId: role.id,
-          },
-        },
-        create: {
+    const assignment = await this.db.userProjectRole.upsert({
+      where: {
+        userId_projectId_companyId_roleId: {
           userId: dto.userId,
           projectId,
           companyId: targetUser.organizationId,
           roleId: role.id,
-          assignedByUserId: actor.id,
         },
-        update: {
-          revokedAt: null,
-          assignedByUserId: actor.id,
-          assignedAt: new Date(),
-        },
-        include: {
-          role: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-            },
+      },
+      create: {
+        userId: dto.userId,
+        projectId,
+        companyId: targetUser.organizationId,
+        roleId: role.id,
+        assignedByUserId: actor.id,
+      },
+      update: {
+        revokedAt: null,
+        assignedByUserId: actor.id,
+        assignedAt: new Date(),
+      },
+      include: {
+        role: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
           },
         },
-      });
+      },
+    });
 
     await this.activityLogsService.log(
       actor.id,
@@ -665,14 +566,8 @@ export class ProjectsService {
   }
 
   /** Active project-level role assignments for a project. */
-  async getUserRoles(
-    projectId: string,
-    actor: any,
-  ) {
-    await this.access.assertProjectAccess(
-      actor,
-      projectId,
-    );
+  async getUserRoles(projectId: string, actor: any) {
+    await this.access.assertProjectAccess(actor, projectId);
 
     return this.db.userProjectRole.findMany({
       where: {

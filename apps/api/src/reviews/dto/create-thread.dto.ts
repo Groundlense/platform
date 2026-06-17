@@ -1,10 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUUID,
-} from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateThreadDto {
   @ApiProperty({
@@ -17,8 +12,7 @@ export class CreateThreadDto {
   intervalId?: string;
 
   @ApiProperty({
-    description:
-      'First message of the query thread raised to the field worker',
+    description: 'First message of the query thread raised to the field worker',
   })
   @IsString()
   @IsNotEmpty()

@@ -6,7 +6,11 @@ import { CreateSoilDescriptionDto } from './dto/create-soil-description.dto';
 export class SoilDescriptionsService {
   constructor(private readonly db: DatabaseService) {}
 
-  async upsert(intervalId: string, userId: string, dto: CreateSoilDescriptionDto) {
+  async upsert(
+    intervalId: string,
+    userId: string,
+    dto: CreateSoilDescriptionDto,
+  ) {
     const interval = await this.db.boreholeInterval.findUnique({
       where: { id: intervalId },
     });
@@ -52,7 +56,9 @@ export class SoilDescriptionsService {
       },
     });
     if (!description) {
-      throw new NotFoundException('Soil description not found for this interval');
+      throw new NotFoundException(
+        'Soil description not found for this interval',
+      );
     }
     return description;
   }

@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsEnum, IsObject, IsArray, ValidateNested, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEnum,
+  IsObject,
+  IsArray,
+  ValidateNested,
+  IsOptional,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { SyncEntityType, OperationType } from '@prisma/client';
 
@@ -41,7 +49,10 @@ export class SyncOperationItemDto {
 }
 
 export class CreateSyncOperationsDto {
-  @ApiProperty({ description: 'Sync queue operations list', type: [SyncOperationItemDto] })
+  @ApiProperty({
+    description: 'Sync queue operations list',
+    type: [SyncOperationItemDto],
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => SyncOperationItemDto)

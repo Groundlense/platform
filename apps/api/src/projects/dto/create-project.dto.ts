@@ -1,10 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsDateString,
-  IsOptional,
-  IsString,
-  IsUUID,
-} from 'class-validator';
+import { IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateProjectDto {
   @ApiProperty({
@@ -22,15 +17,18 @@ export class CreateProjectDto {
   name: string;
 
   @ApiPropertyOptional({
-    description: 'Description of the project scope and investigation requirements',
-    example: 'Soil investigation for proposed flyover — 12 boreholes to 30 m depth with SPT at 1.5 m intervals',
+    description:
+      'Description of the project scope and investigation requirements',
+    example:
+      'Soil investigation for proposed flyover — 12 boreholes to 30 m depth with SPT at 1.5 m intervals',
   })
   @IsOptional()
   @IsString()
   description?: string;
 
   @ApiProperty({
-    description: 'ID of the geotechnical organization executing the investigation',
+    description:
+      'ID of the geotechnical organization executing the investigation',
     example: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
   })
   @IsString()

@@ -35,10 +35,7 @@ export class UsersService {
     return actor?.roles?.includes('SUPER_ADMIN') ?? false;
   }
 
-  private async assertSameOrganization(
-    actor: any,
-    userId: string,
-  ) {
+  private async assertSameOrganization(actor: any, userId: string) {
     const target = await this.db.user.findUnique({
       where: { id: userId },
       select: { id: true, organizationId: true },
@@ -52,9 +49,7 @@ export class UsersService {
       !this.isSuperAdmin(actor) &&
       target.organizationId !== actor.organizationId
     ) {
-      throw new ForbiddenException(
-        'User belongs to another organization',
-      );
+      throw new ForbiddenException('User belongs to another organization');
     }
 
     return target;
@@ -64,10 +59,7 @@ export class UsersService {
   async findByIdentifier(identifier: string) {
     return this.db.user.findFirst({
       where: {
-        OR: [
-          { email: identifier },
-          { employeeCode: identifier },
-        ],
+        OR: [{ email: identifier }, { employeeCode: identifier }],
       },
       include: {
         roles: {
@@ -104,14 +96,9 @@ export class UsersService {
       ? dto.organizationId
       : actor.organizationId;
 
-    const oneTimePassword = crypto
-      .randomBytes(9)
-      .toString('base64url');
+    const oneTimePassword = crypto.randomBytes(9).toString('base64url');
 
-    const passwordHash = await bcrypt.hash(
-      oneTimePassword,
-      10,
-    );
+    const passwordHash = await bcrypt.hash(oneTimePassword, 10);
 
     let employeeCode = dto.employeeCode?.trim() || null;
     if (!employeeCode) {
@@ -196,11 +183,7 @@ export class UsersService {
     };
   }
 
-  async updateStatus(
-    userId: string,
-    status: UserStatus,
-    actor: any,
-  ) {
+  async updateStatus(userId: string, status: UserStatus, actor: any) {
     await this.assertSameOrganization(actor, userId);
 
     return this.db.user.update({
@@ -237,11 +220,7 @@ export class UsersService {
     });
   }
 
-  async resetPin(
-    userId: string,
-    pin: string,
-    actor: any,
-  ) {
+  async resetPin(userId: string, pin: string, actor: any) {
     await this.assertSameOrganization(actor, userId);
 
     const pinHash = await bcrypt.hash(pin, 10);

@@ -62,10 +62,7 @@ export class ProjectAccessService {
     };
   }
 
-  async canAccessProject(
-    user: any,
-    projectId: string,
-  ): Promise<boolean> {
+  async canAccessProject(user: any, projectId: string): Promise<boolean> {
     if (this.isSuperAdmin(user)) {
       return true;
     }
@@ -92,9 +89,7 @@ export class ProjectAccessService {
     }
 
     if (!(await this.canAccessProject(user, projectId))) {
-      throw new ForbiddenException(
-        'No access to this project',
-      );
+      throw new ForbiddenException('No access to this project');
     }
   }
 
@@ -108,15 +103,8 @@ export class ProjectAccessService {
       throw new NotFoundException('Borehole not found');
     }
 
-    if (
-      !(await this.canAccessProject(
-        user,
-        borehole.projectId,
-      ))
-    ) {
-      throw new ForbiddenException(
-        'No access to this borehole',
-      );
+    if (!(await this.canAccessProject(user, borehole.projectId))) {
+      throw new ForbiddenException('No access to this borehole');
     }
 
     return borehole;
@@ -124,27 +112,19 @@ export class ProjectAccessService {
 
   /** Asserts access via the interval's parent borehole; returns the interval. */
   async assertIntervalAccess(user: any, intervalId: string) {
-    const interval =
-      await this.db.boreholeInterval.findUnique({
-        where: { id: intervalId },
-        include: {
-          borehole: { select: { projectId: true } },
-        },
-      });
+    const interval = await this.db.boreholeInterval.findUnique({
+      where: { id: intervalId },
+      include: {
+        borehole: { select: { projectId: true } },
+      },
+    });
 
     if (!interval) {
       throw new NotFoundException('Interval not found');
     }
 
-    if (
-      !(await this.canAccessProject(
-        user,
-        interval.borehole.projectId,
-      ))
-    ) {
-      throw new ForbiddenException(
-        'No access to this interval',
-      );
+    if (!(await this.canAccessProject(user, interval.borehole.projectId))) {
+      throw new ForbiddenException('No access to this interval');
     }
 
     return interval;
@@ -169,22 +149,18 @@ export class ProjectAccessService {
    *     'GEOTECH_MANAGER',
    *   ]);
    */
-  async getProjectRole(
-    user: any,
-    projectId: string,
-  ): Promise<string | null> {
-    const assignment =
-      await this.db.userProjectRole.findFirst({
-        where: {
-          userId: user.id,
-          projectId,
-          revokedAt: null,
-        },
-        orderBy: { assignedAt: 'desc' },
-        include: {
-          role: { select: { code: true } },
-        },
-      });
+  async getProjectRole(user: any, projectId: string): Promise<string | null> {
+    const assignment = await this.db.userProjectRole.findFirst({
+      where: {
+        userId: user.id,
+        projectId,
+        revokedAt: null,
+      },
+      orderBy: { assignedAt: 'desc' },
+      include: {
+        role: { select: { code: true } },
+      },
+    });
 
     if (assignment) {
       return assignment.role.code;
@@ -218,19 +194,12 @@ export class ProjectAccessService {
    * `allowed`. SUPER_ADMIN bypasses, consistent with the rest of this
    * service.
    */
-  async assertProjectRole(
-    user: any,
-    projectId: string,
-    allowed: string[],
-  ) {
+  async assertProjectRole(user: any, projectId: string, allowed: string[]) {
     if (this.isSuperAdmin(user)) {
       return;
     }
 
-    const role = await this.getProjectRole(
-      user,
-      projectId,
-    );
+    const role = await this.getProjectRole(user, projectId);
 
     if (!role || !allowed.includes(role)) {
       throw new ForbiddenException(
@@ -240,13 +209,8 @@ export class ProjectAccessService {
   }
 
   assertSameOrganization(user: any, organizationId: string) {
-    if (
-      !this.isSuperAdmin(user) &&
-      user.organizationId !== organizationId
-    ) {
-      throw new ForbiddenException(
-        'Resource belongs to another organization',
-      );
+    if (!this.isSuperAdmin(user) && user.organizationId !== organizationId) {
+      throw new ForbiddenException('Resource belongs to another organization');
     }
   }
 }

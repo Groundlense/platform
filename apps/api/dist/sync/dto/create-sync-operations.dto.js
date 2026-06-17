@@ -71,7 +71,10 @@ class CreateSyncOperationsDto {
 }
 exports.CreateSyncOperationsDto = CreateSyncOperationsDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Sync queue operations list', type: [SyncOperationItemDto] }),
+    (0, swagger_1.ApiProperty)({
+        description: 'Sync queue operations list',
+        type: [SyncOperationItemDto],
+    }),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.ValidateNested)({ each: true }),
     (0, class_transformer_1.Type)(() => SyncOperationItemDto),

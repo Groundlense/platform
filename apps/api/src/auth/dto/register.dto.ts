@@ -1,7 +1,4 @@
-import {
-  ApiProperty,
-  ApiPropertyOptional,
-} from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsEmail,
@@ -51,6 +48,11 @@ export class RegisterOrganizationDto {
   @IsOptional()
   @IsString()
   state?: string;
+
+  @ApiPropertyOptional({ description: 'URL of the company logo' })
+  @IsOptional()
+  @IsString()
+  logoUrl?: string;
 }
 
 export class RegisterAdminDto {

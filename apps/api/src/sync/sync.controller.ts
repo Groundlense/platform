@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -23,19 +16,13 @@ export class SyncController {
 
   @Permissions('BOREHOLE_EDIT')
   @Post('operations')
-  syncQueue(
-    @Body() dto: CreateSyncOperationsDto,
-    @CurrentUser() user: any,
-  ) {
+  syncQueue(@Body() dto: CreateSyncOperationsDto, @CurrentUser() user: any) {
     return this.syncService.syncQueue(dto, user);
   }
 
   @Permissions('BOREHOLE_VIEW')
   @Get('conflicts/:deviceId')
-  getConflicts(
-    @Param('deviceId') deviceId: string,
-    @CurrentUser() user: any,
-  ) {
+  getConflicts(@Param('deviceId') deviceId: string, @CurrentUser() user: any) {
     return this.syncService.getConflicts(deviceId, user);
   }
 }

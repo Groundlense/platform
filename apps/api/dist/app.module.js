@@ -35,9 +35,10 @@ let AppModule = class AppModule {
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
-        imports: [config_1.ConfigModule.forRoot({
+        imports: [
+            config_1.ConfigModule.forRoot({
                 isGlobal: true,
-                envFilePath: '.env.development',
+                envFilePath: process.env.NODE_ENV === 'production' ? undefined : '.env.development',
             }),
             database_module_1.DatabaseModule,
             access_module_1.AccessModule,

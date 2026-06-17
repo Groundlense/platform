@@ -7,7 +7,9 @@ export class CreateSoilDescriptionDto {
   @IsNotEmpty()
   soilType: string;
 
-  @ApiPropertyOptional({ description: 'Unified Soil Classification System (USCS) code' })
+  @ApiPropertyOptional({
+    description: 'Unified Soil Classification System (USCS) code',
+  })
   @IsString()
   @IsOptional()
   uscsCode?: string;

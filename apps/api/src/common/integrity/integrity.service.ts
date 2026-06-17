@@ -31,15 +31,10 @@ import { DatabaseService } from '../../database/database.service';
 export class IntegrityService {
   constructor(private readonly db: DatabaseService) {}
 
-  computeRecordHash(
-    prevHash: string | null,
-    record: object,
-  ): string {
+  computeRecordHash(prevHash: string | null, record: object): string {
     const material = `${prevHash ?? 'GENESIS'}|${this.canonicalJson(record)}`;
 
-    return createHash('sha256')
-      .update(material, 'utf8')
-      .digest('hex');
+    return createHash('sha256').update(material, 'utf8').digest('hex');
   }
 
   /**
@@ -119,14 +114,13 @@ export class IntegrityService {
     updated: number;
     chainRoot: string | null;
   }> {
-    const previous =
-      await this.db.boreholeInterval.findFirst({
-        where: {
-          boreholeId,
-          intervalNo: { lt: fromIntervalNo },
-        },
-        orderBy: { intervalNo: 'desc' },
-      });
+    const previous = await this.db.boreholeInterval.findFirst({
+      where: {
+        boreholeId,
+        intervalNo: { lt: fromIntervalNo },
+      },
+      orderBy: { intervalNo: 'desc' },
+    });
 
     const tail = await this.db.boreholeInterval.findMany({
       where: {
@@ -136,20 +130,16 @@ export class IntegrityService {
       orderBy: { intervalNo: 'asc' },
     });
 
-    let running: string | null =
-      previous?.sha256Hash ?? null;
+    let running: string | null = previous?.sha256Hash ?? null;
     let updated = 0;
 
     for (const interval of tail) {
       const sha256Hash = this.computeRecordHash(
         running,
-        this.hashIntervalPayload(interval as any),
+        this.hashIntervalPayload(interval),
       );
 
-      if (
-        interval.sha256Hash !== sha256Hash ||
-        interval.prevHash !== running
-      ) {
+      if (interval.sha256Hash !== sha256Hash || interval.prevHash !== running) {
         await this.db.boreholeInterval.update({
           where: { id: interval.id },
           data: { prevHash: running, sha256Hash },
@@ -163,19 +153,14 @@ export class IntegrityService {
     return { updated, chainRoot: running };
   }
 
-  private toIsoOrNull(
-    value: Date | string | null | undefined,
-  ): string | null {
+  private toIsoOrNull(value: Date | string | null | undefined): string | null {
     if (value == null) {
       return null;
     }
 
-    const date =
-      value instanceof Date ? value : new Date(value);
+    const date = value instanceof Date ? value : new Date(value);
 
-    return Number.isNaN(date.getTime())
-      ? null
-      : date.toISOString();
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
   }
 
   /**
@@ -189,9 +174,7 @@ export class IntegrityService {
     }
 
     if (typeof value === 'number') {
-      return Number.isFinite(value)
-        ? String(value)
-        : 'null';
+      return Number.isFinite(value) ? String(value) : 'null';
     }
 
     if (typeof value === 'boolean') {
@@ -208,24 +191,18 @@ export class IntegrityService {
 
     // Prisma Decimal (decimal.js) — normalize through Number so the DB
     // scale ("7.50") never changes the hash.
-    if (
-      typeof value === 'object' &&
-      typeof value.toNumber === 'function'
-    ) {
+    if (typeof value === 'object' && typeof value.toNumber === 'function') {
       return String(Number(value.toNumber()));
     }
 
     if (Array.isArray(value)) {
-      return `[${value
-        .map((item) => this.canonicalJson(item))
-        .join(',')}]`;
+      return `[${value.map((item) => this.canonicalJson(item)).join(',')}]`;
     }
 
     if (typeof value === 'object') {
       const keys = Object.keys(value).sort();
       const entries = keys.map(
-        (key) =>
-          `${JSON.stringify(key)}:${this.canonicalJson(value[key])}`,
+        (key) => `${JSON.stringify(key)}:${this.canonicalJson(value[key])}`,
       );
       return `{${entries.join(',')}}`;
     }

@@ -74,8 +74,8 @@ export declare class ReviewsController {
         } & {
             id: string;
             createdAt: Date;
-            message: string;
             attachments: import("@prisma/client/runtime/library").JsonValue | null;
+            message: string;
             senderId: string;
             threadId: string;
         })[];
@@ -85,8 +85,8 @@ export declare class ReviewsController {
         createdAt: Date;
         updatedAt: Date;
         boreholeId: string;
-        threadType: string;
         priority: string;
+        threadType: string;
         raisedByUserId: string;
         assignedToUserId: string;
     })[]>;
@@ -110,8 +110,8 @@ export declare class ReviewsController {
         } & {
             id: string;
             createdAt: Date;
-            message: string;
             attachments: import("@prisma/client/runtime/library").JsonValue | null;
+            message: string;
             senderId: string;
             threadId: string;
         })[];
@@ -121,8 +121,8 @@ export declare class ReviewsController {
         createdAt: Date;
         updatedAt: Date;
         boreholeId: string;
-        threadType: string;
         priority: string;
+        threadType: string;
         raisedByUserId: string;
         assignedToUserId: string;
     }>;
@@ -146,8 +146,8 @@ export declare class ReviewsController {
         } & {
             id: string;
             createdAt: Date;
-            message: string;
             attachments: import("@prisma/client/runtime/library").JsonValue | null;
+            message: string;
             senderId: string;
             threadId: string;
         })[];
@@ -157,8 +157,8 @@ export declare class ReviewsController {
         createdAt: Date;
         updatedAt: Date;
         boreholeId: string;
-        threadType: string;
         priority: string;
+        threadType: string;
         raisedByUserId: string;
         assignedToUserId: string;
     })[]>;
@@ -171,8 +171,8 @@ export declare class ReviewsController {
     } & {
         id: string;
         createdAt: Date;
-        message: string;
         attachments: import("@prisma/client/runtime/library").JsonValue | null;
+        message: string;
         senderId: string;
         threadId: string;
     }>;
@@ -193,8 +193,8 @@ export declare class ReviewsController {
         createdAt: Date;
         updatedAt: Date;
         boreholeId: string;
-        threadType: string;
         priority: string;
+        threadType: string;
         raisedByUserId: string;
         assignedToUserId: string;
     }>;

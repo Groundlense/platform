@@ -35,10 +35,7 @@ export class BoringSessionsController {
 
   @Permissions('BOREHOLE_EDIT')
   @Patch('sessions/:sessionId/end')
-  end(
-    @Param('sessionId') sessionId: string,
-    @Body() dto: EndBoringSessionDto,
-  ) {
+  end(@Param('sessionId') sessionId: string, @Body() dto: EndBoringSessionDto) {
     return this.boringSessionsService.end(sessionId, dto);
   }
 

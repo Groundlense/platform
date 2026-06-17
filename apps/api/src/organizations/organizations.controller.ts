@@ -17,15 +17,14 @@ import { OrganizationsService } from './organizations.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { ListOrganizationsQueryDto } from './dto/list-organizations-query.dto';
+import { InviteMembersDto } from './dto/invite-members.dto';
 
 @ApiTags('Organizations')
 @ApiBearerAuth()
 @Controller('organizations')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class OrganizationsController {
-  constructor(
-    private readonly organizationsService: OrganizationsService,
-  ) {}
+  constructor(private readonly organizationsService: OrganizationsService) {}
 
   // Company directory for pickers — any authenticated user; the
   // response only carries non-sensitive fields (no GSTIN/PAN).
@@ -40,7 +39,7 @@ export class OrganizationsController {
   @Post()
   create(
     @Body() dto: CreateOrganizationDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: { id: string; organizationId: string; roles?: any },
   ) {
     return this.organizationsService.create(dto, user);
   }
@@ -48,12 +47,9 @@ export class OrganizationsController {
   @Get(':id')
   findOne(
     @Param('id') organizationId: string,
-    @CurrentUser() user: any,
+    @CurrentUser() user: { id: string; organizationId: string; roles?: any },
   ) {
-    return this.organizationsService.findOne(
-      organizationId,
-      user,
-    );
+    return this.organizationsService.findOne(organizationId, user);
   }
 
   @Permissions('ORG_MANAGE')
@@ -61,13 +57,9 @@ export class OrganizationsController {
   update(
     @Param('id') organizationId: string,
     @Body() dto: UpdateOrganizationDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: { id: string; organizationId: string; roles?: any },
   ) {
-    return this.organizationsService.update(
-      organizationId,
-      dto,
-      user,
-    );
+    return this.organizationsService.update(organizationId, dto, user);
   }
 
   // Groundlense-admin action per the RBAC spec ("Verify company KYC").
@@ -76,11 +68,43 @@ export class OrganizationsController {
   @Patch(':id/kyc-verify')
   verifyKyc(
     @Param('id') organizationId: string,
-    @CurrentUser() user: any,
+    @CurrentUser() user: { id: string; organizationId: string; roles?: any },
   ) {
-    return this.organizationsService.verifyKyc(
-      organizationId,
-      user,
-    );
+    return this.organizationsService.verifyKyc(organizationId, user);
+  }
+
+  @Permissions('USER_MANAGE')
+  @Post('invite-members')
+  inviteMembers(
+    @Body() dto: InviteMembersDto,
+    @CurrentUser() user: { id: string; organizationId: string; roles?: any },
+  ) {
+    return this.organizationsService.inviteMembers(dto, user);
+  }
+
+  @Permissions('USER_MANAGE')
+  @Get('join-requests')
+  getJoinRequests(
+    @CurrentUser() user: { id: string; organizationId: string; roles?: any },
+  ) {
+    return this.organizationsService.getJoinRequests(user);
+  }
+
+  @Permissions('USER_MANAGE')
+  @Post('join-requests/:requestId/approve')
+  approveJoinRequest(
+    @Param('requestId') requestId: string,
+    @CurrentUser() user: { id: string; organizationId: string; roles?: any },
+  ) {
+    return this.organizationsService.approveJoinRequest(requestId, user);
+  }
+
+  @Permissions('USER_MANAGE')
+  @Post('join-requests/:requestId/reject')
+  rejectJoinRequest(
+    @Param('requestId') requestId: string,
+    @CurrentUser() user: { id: string; organizationId: string; roles?: any },
+  ) {
+    return this.organizationsService.rejectJoinRequest(requestId, user);
   }
 }

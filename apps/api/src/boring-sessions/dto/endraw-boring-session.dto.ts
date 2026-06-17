@@ -12,7 +12,9 @@ export class EndBoringSessionDto {
   @IsNotEmpty()
   status: string;
 
-  @ApiPropertyOptional({ description: 'Reason for terminating the boring shift early' })
+  @ApiPropertyOptional({
+    description: 'Reason for terminating the boring shift early',
+  })
   @IsString()
   @IsOptional()
   terminationReason?: string;

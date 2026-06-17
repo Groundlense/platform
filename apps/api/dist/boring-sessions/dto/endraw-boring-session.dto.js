@@ -31,7 +31,9 @@ __decorate([
     __metadata("design:type", String)
 ], EndBoringSessionDto.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Reason for terminating the boring shift early' }),
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Reason for terminating the boring shift early',
+    }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)

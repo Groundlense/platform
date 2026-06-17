@@ -21,7 +21,9 @@ class CreatePaymentDto {
 }
 exports.CreatePaymentDto = CreatePaymentDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'ID of the project associated with this payment' }),
+    (0, swagger_1.ApiProperty)({
+        description: 'ID of the project associated with this payment',
+    }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)

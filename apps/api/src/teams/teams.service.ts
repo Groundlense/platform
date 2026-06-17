@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { DatabaseService } from '../database/database.service';
 
@@ -29,10 +26,7 @@ export class TeamsService {
     private readonly access: ProjectAccessService,
   ) {}
 
-  private async assertTeamAccess(
-    actor: any,
-    teamId: string,
-  ) {
+  private async assertTeamAccess(actor: any, teamId: string) {
     const team = await this.db.team.findUnique({
       where: { id: teamId },
       select: { id: true, organizationId: true },
@@ -42,23 +36,13 @@ export class TeamsService {
       throw new NotFoundException('Team not found');
     }
 
-    this.access.assertSameOrganization(
-      actor,
-      team.organizationId,
-    );
+    this.access.assertSameOrganization(actor, team.organizationId);
 
     return team;
   }
 
-  async createTeam(
-    organizationId: string,
-    dto: CreateTeamDto,
-    actor: any,
-  ) {
-    this.access.assertSameOrganization(
-      actor,
-      organizationId,
-    );
+  async createTeam(organizationId: string, dto: CreateTeamDto, actor: any) {
+    this.access.assertSameOrganization(actor, organizationId);
 
     return this.db.team.create({
       data: {
@@ -67,20 +51,13 @@ export class TeamsService {
         code: dto.code,
         name: dto.name,
 
-        description:
-          dto.description,
+        description: dto.description,
       },
     });
   }
 
-  async getTeams(
-    organizationId: string,
-    actor: any,
-  ) {
-    this.access.assertSameOrganization(
-      actor,
-      organizationId,
-    );
+  async getTeams(organizationId: string, actor: any) {
+    this.access.assertSameOrganization(actor, organizationId);
 
     return this.db.team.findMany({
       where: {
@@ -101,11 +78,7 @@ export class TeamsService {
     });
   }
 
-  async addMember(
-    teamId: string,
-    userId: string,
-    actor: any,
-  ) {
+  async addMember(teamId: string, userId: string, actor: any) {
     await this.assertTeamAccess(actor, teamId);
 
     return this.db.teamMember.create({
@@ -116,10 +89,7 @@ export class TeamsService {
     });
   }
 
-  async getTeam(
-    teamId: string,
-    actor: any,
-  ) {
+  async getTeam(teamId: string, actor: any) {
     await this.assertTeamAccess(actor, teamId);
 
     return this.db.team.findUnique({
@@ -138,66 +108,39 @@ export class TeamsService {
     });
   }
 
-  async getDashboard(
-    teamId: string,
-    actor: any,
-  ) {
+  async getDashboard(teamId: string, actor: any) {
     await this.assertTeamAccess(actor, teamId);
 
-    const team =
-      await this.db.team.findUnique({
-        where: {
-          id: teamId,
-        },
+    const team = await this.db.team.findUnique({
+      where: {
+        id: teamId,
+      },
 
-        include: {
-          members: true,
+      include: {
+        members: true,
 
-          boreholes: true,
-        },
-      });
+        boreholes: true,
+      },
+    });
 
-    const boreholes =
-      team?.boreholes ?? [];
+    const boreholes = team?.boreholes ?? [];
 
     return {
       teamId: team?.id,
 
       teamName: team?.name,
 
-      members:
-        team?.members.length ?? 0,
+      members: team?.members.length ?? 0,
 
-      boreholes:
-        boreholes.length,
+      boreholes: boreholes.length,
 
-      planned:
-        boreholes.filter(
-          (b) =>
-            b.status ===
-            'PLANNED',
-        ).length,
+      planned: boreholes.filter((b) => b.status === 'PLANNED').length,
 
-      inProgress:
-        boreholes.filter(
-          (b) =>
-            b.status ===
-            'IN_PROGRESS',
-        ).length,
+      inProgress: boreholes.filter((b) => b.status === 'IN_PROGRESS').length,
 
-      completed:
-        boreholes.filter(
-          (b) =>
-            b.status ===
-            'COMPLETED',
-        ).length,
+      completed: boreholes.filter((b) => b.status === 'COMPLETED').length,
 
-      abandoned:
-        boreholes.filter(
-          (b) =>
-            b.status ===
-            'ABANDONED',
-        ).length,
+      abandoned: boreholes.filter((b) => b.status === 'ABANDONED').length,
     };
   }
 }

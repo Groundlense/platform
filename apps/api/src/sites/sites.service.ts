@@ -6,14 +6,9 @@ import { CreateSiteDto } from './dto/create-site.dto';
 
 @Injectable()
 export class SitesService {
-  constructor(
-    private readonly db: DatabaseService,
-  ) {}
+  constructor(private readonly db: DatabaseService) {}
 
-  async create(
-    projectId: string,
-    dto: CreateSiteDto,
-  ) {
+  async create(projectId: string, dto: CreateSiteDto) {
     return this.db.projectSite.create({
       data: {
         projectId,
@@ -21,21 +16,16 @@ export class SitesService {
         code: dto.code,
         name: dto.name,
 
-        description:
-          dto.description,
+        description: dto.description,
 
-        latitude:
-          dto.latitude,
+        latitude: dto.latitude,
 
-        longitude:
-          dto.longitude,
+        longitude: dto.longitude,
       },
     });
   }
 
-  async findByProject(
-    projectId: string,
-  ) {
+  async findByProject(projectId: string) {
     return this.db.projectSite.findMany({
       where: {
         projectId,
@@ -46,9 +36,7 @@ export class SitesService {
     });
   }
 
-  async findOne(
-    id: string,
-  ) {
+  async findOne(id: string) {
     return this.db.projectSite.findUnique({
       where: {
         id,
@@ -59,11 +47,8 @@ export class SitesService {
       },
     });
   }
-  async getDashboard(
-  siteId: string,
-) {
-  const site =
-    await this.db.projectSite.findUnique({
+  async getDashboard(siteId: string) {
+    const site = await this.db.projectSite.findUnique({
       where: {
         id: siteId,
       },
@@ -73,44 +58,22 @@ export class SitesService {
       },
     });
 
-  const boreholes =
-    site?.boreholes ?? [];
+    const boreholes = site?.boreholes ?? [];
 
-  return {
-    siteId: site?.id,
+    return {
+      siteId: site?.id,
 
-    siteName: site?.name,
+      siteName: site?.name,
 
-    boreholes:
-      boreholes.length,
+      boreholes: boreholes.length,
 
-    planned:
-      boreholes.filter(
-        (b) =>
-          b.status ===
-          'PLANNED',
-      ).length,
+      planned: boreholes.filter((b) => b.status === 'PLANNED').length,
 
-    inProgress:
-      boreholes.filter(
-        (b) =>
-          b.status ===
-          'IN_PROGRESS',
-      ).length,
+      inProgress: boreholes.filter((b) => b.status === 'IN_PROGRESS').length,
 
-    completed:
-      boreholes.filter(
-        (b) =>
-          b.status ===
-          'COMPLETED',
-      ).length,
+      completed: boreholes.filter((b) => b.status === 'COMPLETED').length,
 
-    abandoned:
-      boreholes.filter(
-        (b) =>
-          b.status ===
-          'ABANDONED',
-      ).length,
-  };
-}
+      abandoned: boreholes.filter((b) => b.status === 'ABANDONED').length,
+    };
+  }
 }

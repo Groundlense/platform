@@ -1,7 +1,4 @@
-import {
-  ApiProperty,
-  ApiPropertyOptional,
-} from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDateString,
   IsNotEmpty,
@@ -11,16 +8,14 @@ import {
 
 export class DispatchSampleDto {
   @ApiProperty({
-    description:
-      'ID of the GL-verified NABL lab the sample is dispatched to',
+    description: 'ID of the GL-verified NABL lab the sample is dispatched to',
   })
   @IsString()
   @IsNotEmpty()
   assignedLabId: string;
 
   @ApiPropertyOptional({
-    description:
-      'Date the sample was dispatched (defaults to now)',
+    description: 'Date the sample was dispatched (defaults to now)',
   })
   @IsOptional()
   @IsDateString()

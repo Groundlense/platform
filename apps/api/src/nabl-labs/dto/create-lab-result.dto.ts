@@ -27,7 +27,9 @@ export class CreateLabResultDto {
   @IsNotEmpty()
   reportNumber: string;
 
-  @ApiProperty({ description: 'URL link to the uploaded PDF certificate report' })
+  @ApiProperty({
+    description: 'URL link to the uploaded PDF certificate report',
+  })
   @IsString()
   @IsNotEmpty()
   reportPdfUrl: string;

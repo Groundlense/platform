@@ -29,7 +29,7 @@ let DashboardService = class DashboardService {
         const boreholeScope = {
             projectId: { in: projectIds },
         };
-        const [boreholes, intervals, samples, media,] = await Promise.all([
+        const [boreholes, intervals, samples, media] = await Promise.all([
             this.db.borehole.count({
                 where: boreholeScope,
             }),
@@ -107,11 +107,7 @@ let DashboardService = class DashboardService {
                 },
             },
         });
-        const completionPercentage = intervals === 0
-            ? 0
-            : Math.round((completedIntervals /
-                intervals) *
-                100);
+        const completionPercentage = intervals === 0 ? 0 : Math.round((completedIntervals / intervals) * 100);
         return {
             projectId,
             projectName: project.name,

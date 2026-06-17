@@ -20,9 +20,7 @@ let IntegrityService = class IntegrityService {
     }
     computeRecordHash(prevHash, record) {
         const material = `${prevHash ?? 'GENESIS'}|${this.canonicalJson(record)}`;
-        return (0, node_crypto_1.createHash)('sha256')
-            .update(material, 'utf8')
-            .digest('hex');
+        return (0, node_crypto_1.createHash)('sha256').update(material, 'utf8').digest('hex');
     }
     hashIntervalPayload(interval) {
         return {
@@ -70,8 +68,7 @@ let IntegrityService = class IntegrityService {
         let updated = 0;
         for (const interval of tail) {
             const sha256Hash = this.computeRecordHash(running, this.hashIntervalPayload(interval));
-            if (interval.sha256Hash !== sha256Hash ||
-                interval.prevHash !== running) {
+            if (interval.sha256Hash !== sha256Hash || interval.prevHash !== running) {
                 await this.db.boreholeInterval.update({
                     where: { id: interval.id },
                     data: { prevHash: running, sha256Hash },
@@ -87,18 +84,14 @@ let IntegrityService = class IntegrityService {
             return null;
         }
         const date = value instanceof Date ? value : new Date(value);
-        return Number.isNaN(date.getTime())
-            ? null
-            : date.toISOString();
+        return Number.isNaN(date.getTime()) ? null : date.toISOString();
     }
     canonicalJson(value) {
         if (value === null || value === undefined) {
             return 'null';
         }
         if (typeof value === 'number') {
-            return Number.isFinite(value)
-                ? String(value)
-                : 'null';
+            return Number.isFinite(value) ? String(value) : 'null';
         }
         if (typeof value === 'boolean') {
             return value ? 'true' : 'false';
@@ -109,14 +102,11 @@ let IntegrityService = class IntegrityService {
         if (value instanceof Date) {
             return JSON.stringify(value.toISOString());
         }
-        if (typeof value === 'object' &&
-            typeof value.toNumber === 'function') {
+        if (typeof value === 'object' && typeof value.toNumber === 'function') {
             return String(Number(value.toNumber()));
         }
         if (Array.isArray(value)) {
-            return `[${value
-                .map((item) => this.canonicalJson(item))
-                .join(',')}]`;
+            return `[${value.map((item) => this.canonicalJson(item)).join(',')}]`;
         }
         if (typeof value === 'object') {
             const keys = Object.keys(value).sort();
