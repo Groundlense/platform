@@ -7,6 +7,7 @@ export declare class RegisterOrganizationDto {
     phone?: string;
     city?: string;
     state?: string;
+    logoUrl?: string;
 }
 export declare class RegisterAdminDto {
     firstName: string;

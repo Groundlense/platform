@@ -151,8 +151,7 @@ let ProjectAccessService = class ProjectAccessService {
         }
     }
     assertSameOrganization(user, organizationId) {
-        if (!this.isSuperAdmin(user) &&
-            user.organizationId !== organizationId) {
+        if (!this.isSuperAdmin(user) && user.organizationId !== organizationId) {
             throw new common_1.ForbiddenException('Resource belongs to another organization');
         }
     }

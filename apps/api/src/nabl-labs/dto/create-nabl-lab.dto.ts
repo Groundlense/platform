@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsObject, IsDateString, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsObject,
+  IsDateString,
+  IsOptional,
+} from 'class-validator';
 
 export class CreateNablLabDto {
   @ApiProperty({ description: 'Organization ID associated with the lab' })

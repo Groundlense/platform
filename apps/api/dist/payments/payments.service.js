@@ -85,8 +85,7 @@ let PaymentsService = class PaymentsService {
             .createHmac('sha256', keySecret)
             .update(`${payment.razorpayOrderId}|${dto.razorpayPaymentId}`)
             .digest('hex');
-        const signatureValid = expectedSignature.length ===
-            dto.razorpaySignature.length &&
+        const signatureValid = expectedSignature.length === dto.razorpaySignature.length &&
             crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(dto.razorpaySignature));
         if (!signatureValid) {
             await this.db.payment.update({

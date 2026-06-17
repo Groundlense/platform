@@ -29,11 +29,11 @@ export default function LoginLeftPanel() {
         </p>
 
         {/* Stats — matches .stat-row: grid 3 cols, gap 1px, bg-border, border, rounded, overflow hidden */}
-        <div className="grid grid-cols-3 overflow-hidden rounded-lg !mb-4" style={{ gap: "1px", background: "var(--color-border)", border: "1px solid var(--color-border)" }}>
+        <div className="grid grid-cols-2 overflow-hidden rounded-lg !mb-4" style={{ gap: "1px", background: "var(--color-border)", border: "1px solid var(--color-border)" }}>
           {[
             { num: "IS 1892", lbl: "Auto-compliant" },
             { num: "SHA-256", lbl: "Tamper-evident" },
-            { num: "₹5K", lbl: "Per boring" },
+            //{ num: "₹5K", lbl: "Per boring" },
           ].map((s) => (
             <div key={s.num} className="bg-bg-card" style={{ padding: "14px 18px" }}>
               <div className="font-display text-[22px] text-rust-d mb-[2px]">{s.num}</div>

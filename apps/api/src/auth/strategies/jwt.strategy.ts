@@ -1,30 +1,20 @@
-import {
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { DatabaseService } from '../../database/database.service';
 
 @Injectable()
-export class JwtStrategy extends PassportStrategy(
-  Strategy,
-  'jwt',
-) {
-  constructor(
-  private readonly db: DatabaseService,
-) {
-  super({
-    jwtFromRequest:
-      ExtractJwt.fromAuthHeaderAsBearerToken(),
+export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
+  constructor(private readonly db: DatabaseService) {
+    super({
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
 
-    ignoreExpiration: false,
+      ignoreExpiration: false,
 
-    secretOrKey:
-      process.env.JWT_ACCESS_SECRET!,
-  });
-}
+      secretOrKey: process.env.JWT_ACCESS_SECRET!,
+    });
+  }
 
   async validate(payload: any) {
     const user = await this.db.user.findUnique({
@@ -50,20 +40,13 @@ export class JwtStrategy extends PassportStrategy(
     });
 
     if (!user || user.status !== 'ACTIVE') {
-      throw new UnauthorizedException(
-        'User no longer active',
-      );
+      throw new UnauthorizedException('User no longer active');
     }
 
-    const roles = user.roles.map(
-      (r) => r.role.code,
-    );
+    const roles = user.roles.map((r) => r.role.code);
 
-    const permissions = user.roles.flatMap(
-      (r) =>
-        r.role.rolePermissions.map(
-          (rp) => rp.permission.code,
-        ),
+    const permissions = user.roles.flatMap((r) =>
+      r.role.rolePermissions.map((rp) => rp.permission.code),
     );
 
     return {
@@ -79,4 +62,3 @@ export class JwtStrategy extends PassportStrategy(
     };
   }
 }
-

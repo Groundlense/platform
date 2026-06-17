@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -19,7 +12,9 @@ import { CreateSoilDescriptionDto } from './dto/create-soil-description.dto';
 @Controller('intervals')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SoilDescriptionsController {
-  constructor(private readonly soilDescriptionsService: SoilDescriptionsService) {}
+  constructor(
+    private readonly soilDescriptionsService: SoilDescriptionsService,
+  ) {}
 
   @Permissions('BOREHOLE_EDIT')
   @Post(':intervalId/soil-description')

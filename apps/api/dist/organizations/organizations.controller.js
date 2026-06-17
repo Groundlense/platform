@@ -23,6 +23,7 @@ const organizations_service_1 = require("./organizations.service");
 const create_organization_dto_1 = require("./dto/create-organization.dto");
 const update_organization_dto_1 = require("./dto/update-organization.dto");
 const list_organizations_query_dto_1 = require("./dto/list-organizations-query.dto");
+const invite_members_dto_1 = require("./dto/invite-members.dto");
 let OrganizationsController = class OrganizationsController {
     organizationsService;
     constructor(organizationsService) {
@@ -42,6 +43,18 @@ let OrganizationsController = class OrganizationsController {
     }
     verifyKyc(organizationId, user) {
         return this.organizationsService.verifyKyc(organizationId, user);
+    }
+    inviteMembers(dto, user) {
+        return this.organizationsService.inviteMembers(dto, user);
+    }
+    getJoinRequests(user) {
+        return this.organizationsService.getJoinRequests(user);
+    }
+    approveJoinRequest(requestId, user) {
+        return this.organizationsService.approveJoinRequest(requestId, user);
+    }
+    rejectJoinRequest(requestId, user) {
+        return this.organizationsService.rejectJoinRequest(requestId, user);
     }
 };
 exports.OrganizationsController = OrganizationsController;
@@ -88,6 +101,41 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], OrganizationsController.prototype, "verifyKyc", null);
+__decorate([
+    (0, permissions_decorator_1.Permissions)('USER_MANAGE'),
+    (0, common_1.Post)('invite-members'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [invite_members_dto_1.InviteMembersDto, Object]),
+    __metadata("design:returntype", void 0)
+], OrganizationsController.prototype, "inviteMembers", null);
+__decorate([
+    (0, permissions_decorator_1.Permissions)('USER_MANAGE'),
+    (0, common_1.Get)('join-requests'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], OrganizationsController.prototype, "getJoinRequests", null);
+__decorate([
+    (0, permissions_decorator_1.Permissions)('USER_MANAGE'),
+    (0, common_1.Post)('join-requests/:requestId/approve'),
+    __param(0, (0, common_1.Param)('requestId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], OrganizationsController.prototype, "approveJoinRequest", null);
+__decorate([
+    (0, permissions_decorator_1.Permissions)('USER_MANAGE'),
+    (0, common_1.Post)('join-requests/:requestId/reject'),
+    __param(0, (0, common_1.Param)('requestId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], OrganizationsController.prototype, "rejectJoinRequest", null);
 exports.OrganizationsController = OrganizationsController = __decorate([
     (0, swagger_1.ApiTags)('Organizations'),
     (0, swagger_1.ApiBearerAuth)(),

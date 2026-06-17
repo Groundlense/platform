@@ -1,13 +1,6 @@
-import {
-  Controller,
-  Get,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 
-import {
-  ApiBearerAuth,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -23,36 +16,25 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard)
 export class DashboardController {
-  constructor(
-    private readonly dashboardService: DashboardService,
-  ) {}
+  constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('summary')
-  getSummary(
-    @CurrentUser() user: any,
-  ) {
-    return this.dashboardService.getSummary(
-      user,
-    );
+  getSummary(@CurrentUser() user: any) {
+    return this.dashboardService.getSummary(user);
   }
 
   @Get('projects/:projectId')
-getProjectDashboard(
-  @Param('projectId')
-  projectId: string,
+  getProjectDashboard(
+    @Param('projectId')
+    projectId: string,
 
-  @CurrentUser() user: any,
-) {
-  return this.dashboardService.getProjectDashboard(
-    projectId,
-    user,
-  );
-}
+    @CurrentUser() user: any,
+  ) {
+    return this.dashboardService.getProjectDashboard(projectId, user);
+  }
 
-@Get('me')
-getMe(
-  @Request() req,
-) {
-  return req.user;
-}
+  @Get('me')
+  getMe(@Request() req) {
+    return req.user;
+  }
 }

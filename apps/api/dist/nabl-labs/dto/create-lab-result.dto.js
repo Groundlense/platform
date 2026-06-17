@@ -53,7 +53,9 @@ __decorate([
     __metadata("design:type", String)
 ], CreateLabResultDto.prototype, "reportNumber", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'URL link to the uploaded PDF certificate report' }),
+    (0, swagger_1.ApiProperty)({
+        description: 'URL link to the uploaded PDF certificate report',
+    }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)

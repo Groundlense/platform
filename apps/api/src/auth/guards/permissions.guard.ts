@@ -7,65 +7,36 @@ import {
 
 import { Reflector } from '@nestjs/core';
 
-import {
-  PERMISSIONS_KEY,
-} from '../decorators/permissions.decorator';
+import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 
 @Injectable()
-export class PermissionsGuard
-  implements CanActivate
-{
-  constructor(
-    private readonly reflector: Reflector,
-  ) {}
+export class PermissionsGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector) {}
 
-  canActivate(
-    context: ExecutionContext,
-  ): boolean {
-    const requiredPermissions =
-      this.reflector.getAllAndOverride<
-        string[]
-      >(
-        PERMISSIONS_KEY,
-        [
-          context.getHandler(),
-          context.getClass(),
-        ],
-      );
+  canActivate(context: ExecutionContext): boolean {
+    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
+      PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
-    if (
-      !requiredPermissions ||
-      requiredPermissions.length === 0
-    ) {
+    if (!requiredPermissions || requiredPermissions.length === 0) {
       return true;
     }
 
-    const request =
-      context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest();
 
-    const user =
-      request.user;
+    const user = request.user;
 
-    if (
-      user.roles?.includes(
-        'SUPER_ADMIN',
-      )
-    ) {
+    if (user.roles?.includes('SUPER_ADMIN')) {
       return true;
     }
 
-    const hasPermission =
-      requiredPermissions.every(
-        (permission) =>
-          user.permissions?.includes(
-            permission,
-          ),
-      );
+    const hasPermission = requiredPermissions.every((permission) =>
+      user.permissions?.includes(permission),
+    );
 
     if (!hasPermission) {
-      throw new ForbiddenException(
-        'Insufficient permissions',
-      );
+      throw new ForbiddenException('Insufficient permissions');
     }
 
     return true;

@@ -1,11 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsEnum,
-} from 'class-validator';
+import { IsEnum } from 'class-validator';
 
-import {
-  UserStatus,
-} from '@prisma/client';
+import { UserStatus } from '@prisma/client';
 
 export class UpdateUserStatusDto {
   @ApiProperty({

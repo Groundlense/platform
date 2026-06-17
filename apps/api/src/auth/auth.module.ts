@@ -33,10 +33,6 @@ import { ActivityLogsModule } from '../activity-logs/activity-logs.module';
   ],
 
   controllers: [AuthController],
-  providers: [
-    AuthService,
-    JwtStrategy,
-  ],
-
+  providers: [AuthService, JwtStrategy],
 })
 export class AuthModule {}

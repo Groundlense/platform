@@ -1,14 +1,6 @@
-import {
-  Controller,
-  Get,
-  Param,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 
-import {
-  ApiBearerAuth,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -21,26 +13,16 @@ import { ActivityLogsService } from './activity-logs.service';
 @Controller('activity-logs')
 @UseGuards(JwtAuthGuard)
 export class ActivityLogsController {
-  constructor(
-    private readonly activityLogsService: ActivityLogsService,
-  ) {}
+  constructor(private readonly activityLogsService: ActivityLogsService) {}
 
   @Get()
-  findAll(
-    @CurrentUser() user: any,
-  ) {
-    return this.activityLogsService.findAll(
-      user,
-    );
+  findAll(@CurrentUser() user: any) {
+    return this.activityLogsService.findAll(user);
   }
 
   @Get('recent')
-  findRecent(
-    @CurrentUser() user: any,
-  ) {
-    return this.activityLogsService.findRecent(
-      user,
-    );
+  findRecent(@CurrentUser() user: any) {
+    return this.activityLogsService.findRecent(user);
   }
 
   @Get('user/:userId')
@@ -50,9 +32,6 @@ export class ActivityLogsController {
 
     @CurrentUser() user: any,
   ) {
-    return this.activityLogsService.findByUser(
-      userId,
-      user,
-    );
+    return this.activityLogsService.findByUser(userId, user);
   }
 }

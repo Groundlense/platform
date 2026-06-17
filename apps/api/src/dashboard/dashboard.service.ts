@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { DatabaseService } from '../database/database.service';
 
@@ -16,26 +13,18 @@ export class DashboardService {
 
   async getSummary(user: any) {
     // Counts are limited to projects the caller can actually see.
-    const scopedProjects =
-      await this.db.project.findMany({
-        where: this.access.projectScopeWhere(user),
-        select: { id: true },
-      });
+    const scopedProjects = await this.db.project.findMany({
+      where: this.access.projectScopeWhere(user),
+      select: { id: true },
+    });
 
-    const projectIds = scopedProjects.map(
-      (p) => p.id,
-    );
+    const projectIds = scopedProjects.map((p) => p.id);
 
     const boreholeScope = {
       projectId: { in: projectIds },
     };
 
-    const [
-      boreholes,
-      intervals,
-      samples,
-      media,
-    ] = await Promise.all([
+    const [boreholes, intervals, samples, media] = await Promise.all([
       this.db.borehole.count({
         where: boreholeScope,
       }),
@@ -63,30 +52,20 @@ export class DashboardService {
     };
   }
 
-  async getProjectDashboard(
-  projectId: string,
-  user: any,
-) {
-  await this.access.assertProjectAccess(
-    user,
-    projectId,
-  );
+  async getProjectDashboard(projectId: string, user: any) {
+    await this.access.assertProjectAccess(user, projectId);
 
-  const project =
-    await this.db.project.findUnique({
+    const project = await this.db.project.findUnique({
       where: {
         id: projectId,
       },
     });
 
-  if (!project) {
-    throw new NotFoundException(
-      'Project not found',
-    );
-  }
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
 
-  const boreholes =
-    await this.db.borehole.findMany({
+    const boreholes = await this.db.borehole.findMany({
       where: {
         projectId,
       },
@@ -95,13 +74,9 @@ export class DashboardService {
       },
     });
 
-  const boreholeIds =
-    boreholes.map(
-      (b) => b.id,
-    );
+    const boreholeIds = boreholes.map((b) => b.id);
 
-  const intervals =
-    await this.db.boreholeInterval.count({
+    const intervals = await this.db.boreholeInterval.count({
       where: {
         boreholeId: {
           in: boreholeIds,
@@ -109,8 +84,7 @@ export class DashboardService {
       },
     });
 
-  const completedIntervals =
-    await this.db.boreholeInterval.count({
+    const completedIntervals = await this.db.boreholeInterval.count({
       where: {
         boreholeId: {
           in: boreholeIds,
@@ -120,8 +94,7 @@ export class DashboardService {
       },
     });
 
-  const samples =
-    await this.db.sample.count({
+    const samples = await this.db.sample.count({
       where: {
         interval: {
           boreholeId: {
@@ -131,8 +104,7 @@ export class DashboardService {
       },
     });
 
-  const media =
-    await this.db.media.count({
+    const media = await this.db.media.count({
       where: {
         interval: {
           boreholeId: {
@@ -142,33 +114,25 @@ export class DashboardService {
       },
     });
 
-  const completionPercentage =
-    intervals === 0
-      ? 0
-      : Math.round(
-          (completedIntervals /
-            intervals) *
-            100,
-        );
+    const completionPercentage =
+      intervals === 0 ? 0 : Math.round((completedIntervals / intervals) * 100);
 
-  return {
-    projectId,
+    return {
+      projectId,
 
-    projectName:
-      project.name,
+      projectName: project.name,
 
-    boreholes:
-      boreholeIds.length,
+      boreholes: boreholeIds.length,
 
-    intervals,
+      intervals,
 
-    completedIntervals,
+      completedIntervals,
 
-    completionPercentage,
+      completionPercentage,
 
-    samples,
+      samples,
 
-    media,
-  };
-}
+      media,
+    };
+  }
 }

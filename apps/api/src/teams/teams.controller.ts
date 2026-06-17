@@ -1,16 +1,6 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 
-import {
-  ApiBearerAuth,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -27,13 +17,9 @@ import { AddTeamMemberDto } from './dto/add-team-member.dto';
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class TeamsController {
-  constructor(
-    private readonly teamsService: TeamsService,
-  ) {}
+  constructor(private readonly teamsService: TeamsService) {}
 
-  @Post(
-    'organizations/:organizationId/teams',
-  )
+  @Post('organizations/:organizationId/teams')
   createTeam(
     @Param('organizationId')
     organizationId: string,
@@ -43,31 +29,20 @@ export class TeamsController {
 
     @CurrentUser() user: any,
   ) {
-    return this.teamsService.createTeam(
-      organizationId,
-      dto,
-      user,
-    );
+    return this.teamsService.createTeam(organizationId, dto, user);
   }
 
-  @Get(
-    'organizations/:organizationId/teams',
-  )
+  @Get('organizations/:organizationId/teams')
   getTeams(
     @Param('organizationId')
     organizationId: string,
 
     @CurrentUser() user: any,
   ) {
-    return this.teamsService.getTeams(
-      organizationId,
-      user,
-    );
+    return this.teamsService.getTeams(organizationId, user);
   }
 
-  @Post(
-    'teams/:teamId/members',
-  )
+  @Post('teams/:teamId/members')
   addMember(
     @Param('teamId')
     teamId: string,
@@ -77,11 +52,7 @@ export class TeamsController {
 
     @CurrentUser() user: any,
   ) {
-    return this.teamsService.addMember(
-      teamId,
-      dto.userId,
-      user,
-    );
+    return this.teamsService.addMember(teamId, dto.userId, user);
   }
 
   @Get('teams/:teamId')
@@ -91,23 +62,15 @@ export class TeamsController {
 
     @CurrentUser() user: any,
   ) {
-    return this.teamsService.getTeam(
-      teamId,
-      user,
-    );
+    return this.teamsService.getTeam(teamId, user);
   }
-  @Get(
-  'teams/:teamId/dashboard',
-)
-getDashboard(
-  @Param('teamId')
-  teamId: string,
+  @Get('teams/:teamId/dashboard')
+  getDashboard(
+    @Param('teamId')
+    teamId: string,
 
-  @CurrentUser() user: any,
-) {
-  return this.teamsService.getDashboard(
-    teamId,
-    user,
-  );
-}
+    @CurrentUser() user: any,
+  ) {
+    return this.teamsService.getDashboard(teamId, user);
+  }
 }

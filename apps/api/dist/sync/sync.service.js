@@ -178,8 +178,7 @@ let SyncService = SyncService_1 = class SyncService {
             throw new common_1.NotFoundException(`Borehole ${op.entityId} not found`);
         }
         const data = {};
-        if (payload.status &&
-            BOREHOLE_STATUSES.includes(payload.status)) {
+        if (payload.status && BOREHOLE_STATUSES.includes(payload.status)) {
             data.status = payload.status;
             if (payload.status === 'COMPLETED') {
                 data.completedAt = payload.completedAt
@@ -234,9 +233,7 @@ let SyncService = SyncService_1 = class SyncService {
             isRefusal: payload.isRefusal ?? false,
             penetrationMm: payload.penetrationMm ?? null,
             dilatancyApplied: payload.dilatancyApplied ?? false,
-            observedAt: payload.observedAt
-                ? new Date(payload.observedAt)
-                : null,
+            observedAt: payload.observedAt ? new Date(payload.observedAt) : null,
         };
         const existing = await this.db.boreholeInterval.findUnique({
             where: {
@@ -365,8 +362,7 @@ let SyncService = SyncService_1 = class SyncService {
         if (!device) {
             throw new common_1.NotFoundException('Device not registered');
         }
-        if (device.userId !== user.id &&
-            !user.roles?.includes('SUPER_ADMIN')) {
+        if (device.userId !== user.id && !user.roles?.includes('SUPER_ADMIN')) {
             throw new common_1.ForbiddenException('Device belongs to another user');
         }
         return this.db.conflictLog.findMany({

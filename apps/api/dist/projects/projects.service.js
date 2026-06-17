@@ -29,12 +29,8 @@ let ProjectsService = class ProjectsService {
                 projectCode: dto.projectCode,
                 name: dto.name,
                 description: dto.description,
-                startDate: dto.startDate
-                    ? new Date(dto.startDate)
-                    : null,
-                endDate: dto.endDate
-                    ? new Date(dto.endDate)
-                    : null,
+                startDate: dto.startDate ? new Date(dto.startDate) : null,
+                endDate: dto.endDate ? new Date(dto.endDate) : null,
                 createdByUserId: userId,
                 epcOrganizationId: organizationId,
                 geotechOrganizationId: dto.geotechOrganizationId,
@@ -82,10 +78,7 @@ let ProjectsService = class ProjectsService {
         }
         return projects.map((project) => {
             const counts = countsByProject.get(project.id) ?? {};
-            const boreholeStatusCounts = Object.fromEntries(BOREHOLE_STATUSES.map((status) => [
-                status,
-                counts[status] ?? 0,
-            ]));
+            const boreholeStatusCounts = Object.fromEntries(BOREHOLE_STATUSES.map((status) => [status, counts[status] ?? 0]));
             const totalBoreholes = Object.values(boreholeStatusCounts).reduce((sum, n) => sum + n, 0);
             return {
                 ...project,
@@ -194,9 +187,7 @@ let ProjectsService = class ProjectsService {
                 companyId: dto.organizationId,
                 role: dto.role,
                 invitedByUserId: actor.id,
-                inviteAcceptedAt: isSelfLink
-                    ? new Date()
-                    : null,
+                inviteAcceptedAt: isSelfLink ? new Date() : null,
             },
             include: {
                 company: {
@@ -250,15 +241,12 @@ let ProjectsService = class ProjectsService {
             !this.access.isSuperAdmin(actor)) {
             throw new common_1.ForbiddenException('Only the invited organization may respond to this invitation');
         }
-        if (link.inviteAcceptedAt !== null ||
-            !link.isActive) {
+        if (link.inviteAcceptedAt !== null || !link.isActive) {
             throw new common_1.ConflictException('Invitation has already been responded to');
         }
         const updated = await this.db.projectCompany.update({
             where: { id: companyLinkId },
-            data: accept
-                ? { inviteAcceptedAt: new Date() }
-                : { isActive: false },
+            data: accept ? { inviteAcceptedAt: new Date() } : { isActive: false },
         });
         await this.activityLogsService.log(actor.id, accept
             ? 'PROJECT_COMPANY_INVITE_ACCEPTED'
@@ -287,10 +275,8 @@ let ProjectsService = class ProjectsService {
                     initiatedByCompanyId: true,
                 },
             });
-            const isCreatorOrg = project?.epcOrganizationId ===
-                actor.organizationId ||
-                project?.initiatedByCompanyId ===
-                    actor.organizationId;
+            const isCreatorOrg = project?.epcOrganizationId === actor.organizationId ||
+                project?.initiatedByCompanyId === actor.organizationId;
             const holdsInitiatorLink = (await this.db.projectCompany.findFirst({
                 where: {
                     projectId,

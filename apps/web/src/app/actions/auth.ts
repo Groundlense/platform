@@ -105,7 +105,7 @@ export async function registerAction(formData: FormData) {
     return { error: "Unable to reach the server. Please try again." };
   }
 
-  redirect("/dashboard");
+  redirect("/register/members");
 }
 
 export async function logoutAction() {
@@ -121,5 +121,172 @@ export async function getCurrentUser() {
     return await apiGet<Record<string, unknown>>("/auth/me", token);
   } catch {
     return null;
+  }
+}
+
+export async function sendOtpAction(type: 'EMAIL' | 'MOBILE', target: string) {
+  try {
+    return await apiPost<any>("/auth/send-otp", { type, target });
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function verifyOtpAction(type: 'EMAIL' | 'MOBILE', target: string, code: string) {
+  try {
+    return await apiPost<any>("/auth/verify-otp", { type, target, code });
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function verifyGstAction(gstin: string) {
+  try {
+    return await apiGet<any>(`/auth/verify-gst/${gstin}`);
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function uploadLogoAction(fd: FormData) {
+  const token = await getToken();
+  const file = fd.get("file");
+  if (!file) return { error: "No file provided" };
+
+  try {
+    const API_BASE = process.env.API_URL || 'http://localhost:3000/api/v1';
+    const headers: HeadersInit = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_BASE}/auth/upload-logo`, {
+      method: 'POST',
+      headers,
+      body: fd,
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      return { error: body?.message || "Upload failed" };
+    }
+
+    return await res.json();
+  } catch (err: any) {
+    return { error: err.message || "Upload failed" };
+  }
+}
+
+export async function joinRequestAction(fd: FormData) {
+  const gstin = fd.get("gstin") as string;
+  const firstName = fd.get("firstName") as string;
+  const lastName = fd.get("lastName") as string;
+  const email = fd.get("email") as string;
+  const mobile = fd.get("mobile") as string;
+  const password = fd.get("password") as string;
+  const roleCode = fd.get("roleCode") as string;
+
+  try {
+    return await apiPost<any>("/auth/join-request", {
+      gstin,
+      firstName,
+      lastName,
+      email,
+      mobile,
+      password,
+      roleCode
+    });
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function getInviteDetailsAction(token: string) {
+  try {
+    return await apiGet<any>(`/auth/invite/${token}`);
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function acceptInviteAction(fd: FormData) {
+  const token = fd.get("token") as string;
+  const firstName = fd.get("firstName") as string;
+  const lastName = fd.get("lastName") as string;
+  const password = fd.get("password") as string;
+
+  try {
+    const result = await apiPost<{ accessToken: string; refreshToken: string }>(
+      "/auth/accept-invite",
+      { token, firstName, lastName, password }
+    );
+
+    const user = await apiGet<Record<string, unknown>>("/auth/me", result.accessToken);
+    await setSession(result.accessToken, result.refreshToken, user);
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function inviteMembersAction(members: any[]) {
+  const token = await getToken();
+  if (!token) return { error: "Unauthorized" };
+
+  try {
+    return await apiPost<any>("/organizations/invite-members", { members }, token);
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function getJoinRequestsAction() {
+  const token = await getToken();
+  if (!token) return [];
+
+  try {
+    return await apiGet<any[]>("/organizations/join-requests", token);
+  } catch {
+    return [];
+  }
+}
+
+export async function approveJoinRequestAction(requestId: string) {
+  const token = await getToken();
+  if (!token) return { error: "Unauthorized" };
+
+  try {
+    return await apiPost<any>(`/organizations/join-requests/${requestId}/approve`, {}, token);
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function rejectJoinRequestAction(requestId: string) {
+  const token = await getToken();
+  if (!token) return { error: "Unauthorized" };
+
+  try {
+    return await apiPost<any>(`/organizations/join-requests/${requestId}/reject`, {}, token);
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function forgotPasswordAction(email: string) {
+  try {
+    return await apiPost<any>("/auth/forgot-password", { email });
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function resetPasswordAction(fd: FormData) {
+  const email = fd.get("email") as string;
+  const code = fd.get("code") as string;
+  const newPassword = fd.get("newPassword") as string;
+
+  try {
+    return await apiPost<any>("/auth/reset-password", { email, code, newPassword });
+  } catch (err: any) {
+    return { error: err.message };
   }
 }

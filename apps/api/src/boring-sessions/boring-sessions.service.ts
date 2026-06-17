@@ -7,7 +7,11 @@ import { EndBoringSessionDto } from './dto/end-boring-session.dto';
 export class BoringSessionsService {
   constructor(private readonly db: DatabaseService) {}
 
-  async start(boreholeId: string, workerId: string, dto: CreateBoringSessionDto) {
+  async start(
+    boreholeId: string,
+    workerId: string,
+    dto: CreateBoringSessionDto,
+  ) {
     // Verify borehole exists
     const borehole = await this.db.borehole.findUnique({
       where: { id: boreholeId },

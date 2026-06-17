@@ -117,14 +117,10 @@ let TeamsService = class TeamsService {
             teamName: team?.name,
             members: team?.members.length ?? 0,
             boreholes: boreholes.length,
-            planned: boreholes.filter((b) => b.status ===
-                'PLANNED').length,
-            inProgress: boreholes.filter((b) => b.status ===
-                'IN_PROGRESS').length,
-            completed: boreholes.filter((b) => b.status ===
-                'COMPLETED').length,
-            abandoned: boreholes.filter((b) => b.status ===
-                'ABANDONED').length,
+            planned: boreholes.filter((b) => b.status === 'PLANNED').length,
+            inProgress: boreholes.filter((b) => b.status === 'IN_PROGRESS').length,
+            completed: boreholes.filter((b) => b.status === 'COMPLETED').length,
+            abandoned: boreholes.filter((b) => b.status === 'ABANDONED').length,
         };
     }
 };

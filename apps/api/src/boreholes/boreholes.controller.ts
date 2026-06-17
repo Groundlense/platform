@@ -26,12 +26,9 @@ import { UpdateIntervalDto } from './dto/update-interval.dto';
 import { CreateSampleDto } from './dto/create-sample.dto';
 
 import { AssignBoreholeDto } from './dto/assign-borehole.dto';
-import {
-  ApiBearerAuth,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-import { UpdateBoreholeStatusDto, } from './dto/update-borehole-status.dto';
+import { UpdateBoreholeStatusDto } from './dto/update-borehole-status.dto';
 import { CreateWaterTableDto } from './dto/create-water-table.dto';
 import {
   ExportBoreholeQueryDto,
@@ -42,14 +39,10 @@ import {
 @Controller()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class BoreholesController {
-  constructor(
-    private readonly boreholesService: BoreholesService,
-  ) {}
+  constructor(private readonly boreholesService: BoreholesService) {}
 
   @Permissions('BOREHOLE_CREATE')
-  @Post(
-    'projects/:projectId/boreholes',
-  )
+  @Post('projects/:projectId/boreholes')
   create(
     @Param('projectId')
     projectId: string,
@@ -60,17 +53,11 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService.create(
-      projectId,
-      user,
-      dto,
-    );
+    return this.boreholesService.create(projectId, user, dto);
   }
 
   @Permissions('BOREHOLE_VIEW')
-  @Get(
-    'projects/:projectId/boreholes',
-  )
+  @Get('projects/:projectId/boreholes')
   findByProject(
     @Param('projectId')
     projectId: string,
@@ -78,10 +65,7 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService.findByProject(
-      projectId,
-      user,
-    );
+    return this.boreholesService.findByProject(projectId, user);
   }
 
   @Permissions('BOREHOLE_VIEW')
@@ -93,10 +77,7 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService.findOne(
-      id,
-      user,
-    );
+    return this.boreholesService.findOne(id, user);
   }
 
   @Permissions('BOREHOLE_VIEW')
@@ -108,10 +89,7 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService.getIntervals(
-      boreholeId,
-      user,
-    );
+    return this.boreholesService.getIntervals(boreholeId, user);
   }
 
   @Permissions('BOREHOLE_EDIT')
@@ -126,11 +104,7 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService.updateInterval(
-      id,
-      user,
-      dto,
-    );
+    return this.boreholesService.updateInterval(id, user, dto);
   }
 
   @Permissions('BOREHOLE_EDIT')
@@ -145,11 +119,7 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService.createSample(
-      intervalId,
-      user,
-      dto,
-    );
+    return this.boreholesService.createSample(intervalId, user, dto);
   }
 
   @Permissions('BOREHOLE_VIEW')
@@ -161,16 +131,11 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService.getSamples(
-      intervalId,
-      user,
-    );
+    return this.boreholesService.getSamples(intervalId, user);
   }
 
   @Permissions('WORKER_ASSIGN')
-  @Patch(
-    'boreholes/:id/assignment',
-  )
+  @Patch('boreholes/:id/assignment')
   assign(
     @Param('id')
     boreholeId: string,
@@ -181,16 +146,10 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService.assign(
-      boreholeId,
-      user,
-      dto,
-    );
+    return this.boreholesService.assign(boreholeId, user, dto);
   }
   @Permissions('BOREHOLE_EDIT')
-  @Patch(
-    'boreholes/:id/status',
-  )
+  @Patch('boreholes/:id/status')
   updateStatus(
     @Param('id')
     boreholeId: string,
@@ -201,16 +160,10 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService.updateStatus(
-      boreholeId,
-      dto.status,
-      user,
-    );
+    return this.boreholesService.updateStatus(boreholeId, dto.status, user);
   }
   @Permissions('REPORT_VIEW')
-  @Get(
-    'boreholes/:id/report-data',
-  )
+  @Get('boreholes/:id/report-data')
   getReportData(
     @Param('id')
     boreholeId: string,
@@ -218,15 +171,10 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService.getReportData(
-      boreholeId,
-      user,
-    );
+    return this.boreholesService.getReportData(boreholeId, user);
   }
   @Permissions('BOREHOLE_EDIT')
-  @Post(
-    'boreholes/:id/water-table',
-  )
+  @Post('boreholes/:id/water-table')
   createWaterTableObservation(
     @Param('id')
     boreholeId: string,
@@ -237,17 +185,14 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService
-      .createWaterTableObservation(
-        boreholeId,
-        dto,
-        user,
-      );
+    return this.boreholesService.createWaterTableObservation(
+      boreholeId,
+      dto,
+      user,
+    );
   }
   @Permissions('BOREHOLE_VIEW')
-  @Get(
-    'boreholes/:id/water-table',
-  )
+  @Get('boreholes/:id/water-table')
   getWaterTableObservations(
     @Param('id')
     boreholeId: string,
@@ -255,17 +200,11 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService
-      .getWaterTableObservations(
-        boreholeId,
-        user,
-      );
+    return this.boreholesService.getWaterTableObservations(boreholeId, user);
   }
 
   @Permissions('REPORT_VIEW')
-  @Get(
-    'boreholes/:id/integrity',
-  )
+  @Get('boreholes/:id/integrity')
   getIntegrity(
     @Param('id')
     boreholeId: string,
@@ -273,16 +212,11 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService.getIntegrity(
-      boreholeId,
-      user,
-    );
+    return this.boreholesService.getIntegrity(boreholeId, user);
   }
 
   @Permissions('REPORT_VIEW')
-  @Get(
-    'boreholes/:id/export',
-  )
+  @Get('boreholes/:id/export')
   async exportBorehole(
     @Param('id')
     boreholeId: string,
@@ -297,16 +231,12 @@ export class BoreholesController {
     res: Response,
   ) {
     if (query.format === 'csv') {
-      const { fileName, csv } =
-        await this.boreholesService.exportBoreholeCsv(
-          boreholeId,
-          user,
-        );
-
-      res.setHeader(
-        'Content-Type',
-        'text/csv; charset=utf-8',
+      const { fileName, csv } = await this.boreholesService.exportBoreholeCsv(
+        boreholeId,
+        user,
       );
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader(
         'Content-Disposition',
         `attachment; filename="${fileName}"`,
@@ -315,28 +245,19 @@ export class BoreholesController {
       return res.send(csv);
     }
 
-    const { fileName, payload } =
-      await this.boreholesService.exportBorehole(
-        boreholeId,
-        user,
-      );
+    const { fileName, payload } = await this.boreholesService.exportBorehole(
+      boreholeId,
+      user,
+    );
 
-    res.setHeader(
-      'Content-Type',
-      'application/json; charset=utf-8',
-    );
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${fileName}"`,
-    );
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 
     return res.send(JSON.stringify(payload, null, 2));
   }
 
   @Permissions('REPORT_VIEW')
-  @Get(
-    'projects/:projectId/export',
-  )
+  @Get('projects/:projectId/export')
   exportProject(
     @Param('projectId')
     projectId: string,
@@ -347,9 +268,6 @@ export class BoreholesController {
     @CurrentUser()
     user: any,
   ) {
-    return this.boreholesService.exportProject(
-      projectId,
-      user,
-    );
+    return this.boreholesService.exportProject(projectId, user);
   }
 }

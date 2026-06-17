@@ -2,7 +2,9 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsNumber } from 'class-validator';
 
 export class CreatePaymentDto {
-  @ApiProperty({ description: 'ID of the project associated with this payment' })
+  @ApiProperty({
+    description: 'ID of the project associated with this payment',
+  })
   @IsString()
   @IsNotEmpty()
   projectId: string;

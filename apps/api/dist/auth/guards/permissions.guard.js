@@ -19,12 +19,8 @@ let PermissionsGuard = class PermissionsGuard {
         this.reflector = reflector;
     }
     canActivate(context) {
-        const requiredPermissions = this.reflector.getAllAndOverride(permissions_decorator_1.PERMISSIONS_KEY, [
-            context.getHandler(),
-            context.getClass(),
-        ]);
-        if (!requiredPermissions ||
-            requiredPermissions.length === 0) {
+        const requiredPermissions = this.reflector.getAllAndOverride(permissions_decorator_1.PERMISSIONS_KEY, [context.getHandler(), context.getClass()]);
+        if (!requiredPermissions || requiredPermissions.length === 0) {
             return true;
         }
         const request = context.switchToHttp().getRequest();

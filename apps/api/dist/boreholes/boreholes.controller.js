@@ -63,12 +63,10 @@ let BoreholesController = class BoreholesController {
         return this.boreholesService.getReportData(boreholeId, user);
     }
     createWaterTableObservation(boreholeId, dto, user) {
-        return this.boreholesService
-            .createWaterTableObservation(boreholeId, dto, user);
+        return this.boreholesService.createWaterTableObservation(boreholeId, dto, user);
     }
     getWaterTableObservations(boreholeId, user) {
-        return this.boreholesService
-            .getWaterTableObservations(boreholeId, user);
+        return this.boreholesService.getWaterTableObservations(boreholeId, user);
     }
     getIntegrity(boreholeId, user) {
         return this.boreholesService.getIntegrity(boreholeId, user);

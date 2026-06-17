@@ -3,7 +3,8 @@ import { IsString } from 'class-validator';
 
 export class RefreshTokenDto {
   @ApiProperty({
-    description: 'Refresh token issued at login, used to obtain a new access token',
+    description:
+      'Refresh token issued at login, used to obtain a new access token',
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
   @IsString()

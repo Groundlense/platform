@@ -59,10 +59,7 @@ export class ReviewsService {
     intervalId: string,
     dto: CreateReviewDto,
   ) {
-    const interval = await this.access.assertIntervalAccess(
-      user,
-      intervalId,
-    );
+    const interval = await this.access.assertIntervalAccess(user, intervalId);
 
     if (dto.action === ReviewAction.MODIFY_N) {
       // IS-code justification is mandatory for any N-value change.
@@ -179,10 +176,7 @@ export class ReviewsService {
   }
 
   async findReviewsByInterval(user: any, intervalId: string) {
-    const interval = await this.access.assertIntervalAccess(
-      user,
-      intervalId,
-    );
+    const interval = await this.access.assertIntervalAccess(user, intervalId);
 
     // EngineerReview has no intervalId column; interval-scoped reviews are
     // identified by the structured tag this service writes into comments.
@@ -202,15 +196,8 @@ export class ReviewsService {
   // FIELD QUERY THREADS
   // ==========================================
 
-  async createThread(
-    user: any,
-    boreholeId: string,
-    dto: CreateThreadDto,
-  ) {
-    const borehole = await this.access.assertBoreholeAccess(
-      user,
-      boreholeId,
-    );
+  async createThread(user: any, boreholeId: string, dto: CreateThreadDto) {
+    const borehole = await this.access.assertBoreholeAccess(user, boreholeId);
 
     if (dto.intervalId) {
       const interval = await this.access.assertIntervalAccess(
@@ -334,11 +321,7 @@ export class ReviewsService {
     });
   }
 
-  async addMessage(
-    user: any,
-    threadId: string,
-    dto: CreateMessageDto,
-  ) {
+  async addMessage(user: any, threadId: string, dto: CreateMessageDto) {
     const thread = await this.db.reviewThread.findUnique({
       where: { id: threadId },
       include: {

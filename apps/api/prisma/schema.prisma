@@ -179,6 +179,7 @@ model Organization {
 
   users User[]
   teams Team[]
+  joinRequests JoinRequest[] @relation("OrganizationJoinRequests")
 
   // Project relations
   epcProjects       Project[] @relation("ProjectEpcOrganization")
@@ -212,6 +213,10 @@ model User {
   lastLoginAt    DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  inviteToken     String?       @unique
+  inviteExpiresAt DateTime?
+  joinRequests    JoinRequest[] @relation("UserJoinRequests")
 
   // ERD Additional Fields
   userType          String?
@@ -913,4 +918,31 @@ model ActivityLog {
   company Organization? @relation(fields: [actorCompanyId], references: [id])
 
   @@map("activity_logs")
+}
+
+model Otp {
+  id        String   @id @default(uuid())
+  type      String   // "EMAIL" | "MOBILE"
+  target    String   // email or mobile number
+  code      String
+  verified  Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([type, target])
+  @@map("otps")
+}
+
+model JoinRequest {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation("UserJoinRequests", fields: [userId], references: [id])
+  organizationId String
+  organization   Organization @relation("OrganizationJoinRequests", fields: [organizationId], references: [id])
+  roleCode       String       // Role requested (e.g. GEOTECH_ENGINEER)
+  status         String       @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("join_requests")
 }

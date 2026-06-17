@@ -28,7 +28,8 @@ import { OrganizationsModule } from './organizations/organizations.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: process.env.NODE_ENV === 'production' ? undefined : '.env.development',
+      envFilePath:
+        process.env.NODE_ENV === 'production' ? undefined : '.env.development',
     }),
     DatabaseModule,
     AccessModule,

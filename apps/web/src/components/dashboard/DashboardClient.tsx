@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardTopbar from "./DashboardTopbar";
 import ProjectSearch from "./ProjectSearch";
 import SummaryRow from "./SummaryRow";
 import ProjectCard from "./ProjectCard";
 import NewProjectCard from "./NewProjectCard";
 import NewProjectModal from "./NewProjectModal";
+import { getJoinRequestsAction, approveJoinRequestAction, rejectJoinRequestAction } from "@/app/actions/auth";
 
 interface DashboardClientProps {
   projects: any[];
@@ -18,6 +19,54 @@ interface DashboardClientProps {
 
 export default function DashboardClient({ projects, summary, user, orgType, geotechOrgs }: DashboardClientProps) {
   const [modalOpen, setModalOpen] = useState(false);
+  const [joinRequests, setJoinRequests] = useState<any[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+
+  const isAdmin = user && ((user as any).roles?.includes("GEOTECH_ADMIN") || (user as any).roles?.includes("EPC_ADMIN"));
+
+  useEffect(() => {
+    if (isAdmin) {
+      loadRequests();
+    }
+  }, [user]);
+
+  const loadRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const res = await getJoinRequestsAction();
+      setJoinRequests(res);
+    } catch (err) {
+      console.error("Failed to load join requests:", err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const handleApprove = async (reqId: string) => {
+    try {
+      const res = await approveJoinRequestAction(reqId);
+      if (res.error) {
+        alert(res.error);
+      } else {
+        setJoinRequests(joinRequests.filter((r) => r.id !== reqId));
+      }
+    } catch {
+      alert("Failed to approve request.");
+    }
+  };
+
+  const handleReject = async (reqId: string) => {
+    try {
+      const res = await rejectJoinRequestAction(reqId);
+      if (res.error) {
+        alert(res.error);
+      } else {
+        setJoinRequests(joinRequests.filter((r) => r.id !== reqId));
+      }
+    } catch {
+      alert("Failed to reject request.");
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen bg-bg-base">
@@ -27,6 +76,42 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
       <div className="flex-1 overflow-y-auto" style={{ padding: "24px 28px" }}>
 
         <ProjectSearch projects={projects} orgType={orgType} />
+
+        {/* Pending Join Requests section */}
+        {isAdmin && joinRequests.length > 0 && (
+          <div className="bg-bg-card border border-border rounded-xl p-5 mb-5 shadow-sm animate-fade-up">
+            <h3 className="font-display text-[15px] font-semibold text-text-pri mb-3 flex items-center gap-[6px]">
+              <span>🔔</span> Pending Join Requests ({joinRequests.length})
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {joinRequests.map((req) => (
+                <div key={req.id} className="border border-border rounded-lg p-3 bg-bg-base flex items-center justify-between text-[11px]">
+                  <div>
+                    <div className="font-semibold text-text-pri">{req.user.firstName} {req.user.lastName || ""}</div>
+                    <div className="text-text-sec mt-[2px]">{req.user.email} · {req.user.mobile}</div>
+                    <div className="text-text-ter mt-[2px]">
+                      Requested Role: <strong className="text-rust-d font-medium">{req.roleCode.replace("_", " ")}</strong>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleApprove(req.id)}
+                      className="py-[6px] px-3 bg-green-600 hover:bg-green-700 text-text-pri font-medium rounded cursor-pointer border-none text-[10px] transition-colors"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleReject(req.id)}
+                      className="py-[6px] px-3 bg-red-600 hover:bg-red-700 text-text-pri font-medium rounded cursor-pointer border-none text-[10px] transition-colors"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Welcome bar — matches .welcome-bar */}
         <div className="flex items-center justify-between mb-5">

@@ -1,27 +1,14 @@
-import {
-  Controller,
-  Get,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 
-import {
-  ApiBearerAuth,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { UsersService } from './users.service';
 
-import {
-  Body,
-  Post,
-} from '@nestjs/common';
+import { Body, Post } from '@nestjs/common';
 
 import { CreateUserDto } from './dto/create-user.dto';
 
-import {
-  Patch,
-  Param,
-} from '@nestjs/common';
+import { Patch, Param } from '@nestjs/common';
 
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { ResetPinDto } from './dto/reset-pin.dto';
@@ -36,9 +23,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @Controller('users')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class UsersController {
-  constructor(
-    private readonly usersService: UsersService,
-  ) {}
+  constructor(private readonly usersService: UsersService) {}
 
   @Permissions('USER_VIEW')
   @Get()
@@ -46,73 +31,57 @@ export class UsersController {
     @CurrentUser()
     user: any,
   ) {
-    return this.usersService.findAll(
-      user,
-    );
+    return this.usersService.findAll(user);
   }
 
   @Permissions('USER_MANAGE')
   @Post()
-createUser(
-  @Body()
-  dto: CreateUserDto,
+  createUser(
+    @Body()
+    dto: CreateUserDto,
 
-  @CurrentUser()
-  user: any,
-) {
-  return this.usersService.createUser(
-    dto,
-    user,
-  );
-}
-@Permissions('USER_MANAGE')
-@Patch(':id/status')
-updateStatus(
-  @Param('id')
-  userId: string,
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.usersService.createUser(dto, user);
+  }
+  @Permissions('USER_MANAGE')
+  @Patch(':id/status')
+  updateStatus(
+    @Param('id')
+    userId: string,
 
-  @Body()
-  dto: UpdateUserStatusDto,
+    @Body()
+    dto: UpdateUserStatusDto,
 
-  @CurrentUser()
-  user: any,
-) {
-  return this.usersService.updateStatus(
-    userId,
-    dto.status,
-    user,
-  );
-}
-@Permissions('USER_VIEW')
-@Get(':id')
-findOne(
-  @Param('id')
-  userId: string,
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.usersService.updateStatus(userId, dto.status, user);
+  }
+  @Permissions('USER_VIEW')
+  @Get(':id')
+  findOne(
+    @Param('id')
+    userId: string,
 
-  @CurrentUser()
-  user: any,
-) {
-  return this.usersService.findOne(
-    userId,
-    user,
-  );
-}
-@Permissions('USER_MANAGE')
-@Patch(':id/reset-pin')
-resetPin(
-  @Param('id')
-  userId: string,
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.usersService.findOne(userId, user);
+  }
+  @Permissions('USER_MANAGE')
+  @Patch(':id/reset-pin')
+  resetPin(
+    @Param('id')
+    userId: string,
 
-  @Body()
-  dto: ResetPinDto,
+    @Body()
+    dto: ResetPinDto,
 
-  @CurrentUser()
-  user: any,
-) {
-  return this.usersService.resetPin(
-    userId,
-    dto.pin,
-    user,
-  );
-}
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.usersService.resetPin(userId, dto.pin, user);
+  }
 }

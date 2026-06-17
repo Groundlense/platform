@@ -1,9 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsEmail,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsEmail, IsOptional, IsString } from 'class-validator';
 
 export class CreateUserDto {
   @ApiProperty({
@@ -29,7 +25,8 @@ export class CreateUserDto {
   lastName?: string;
 
   @ApiPropertyOptional({
-    description: 'Email address of the user (used as login identifier when provided)',
+    description:
+      'Email address of the user (used as login identifier when provided)',
     example: 'ravi.sharma@groundlense.com',
   })
   @IsOptional()
@@ -37,7 +34,8 @@ export class CreateUserDto {
   email?: string;
 
   @ApiPropertyOptional({
-    description: 'Internal employee code (alternative login identifier for field staff)',
+    description:
+      'Internal employee code (alternative login identifier for field staff)',
     example: 'EMP-0042',
   })
   @IsOptional()
@@ -45,7 +43,8 @@ export class CreateUserDto {
   employeeCode?: string;
 
   @ApiProperty({
-    description: 'Role code to assign to the user (e.g. ADMIN, ENGINEER, FIELD_WORKER)',
+    description:
+      'Role code to assign to the user (e.g. ADMIN, ENGINEER, FIELD_WORKER)',
     example: 'FIELD_WORKER',
   })
   @IsString()
@@ -75,4 +74,3 @@ export class CreateUserDto {
   @IsString()
   preferredLanguage?: string;
 }
-

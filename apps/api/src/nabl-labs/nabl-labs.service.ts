@@ -131,11 +131,7 @@ export class NablLabsService {
     });
   }
 
-  async dispatchSample(
-    sampleId: string,
-    dto: DispatchSampleDto,
-    user: any,
-  ) {
+  async dispatchSample(sampleId: string, dto: DispatchSampleDto, user: any) {
     const sample = await this.db.sample.findUnique({
       where: { id: sampleId },
     });

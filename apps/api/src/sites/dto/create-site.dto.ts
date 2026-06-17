@@ -1,8 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class CreateSiteDto {
   @ApiProperty({
@@ -28,7 +25,8 @@ export class CreateSiteDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Latitude of the site centroid in decimal degrees (WGS84), as a numeric string',
+    description:
+      'Latitude of the site centroid in decimal degrees (WGS84), as a numeric string',
     example: '28.613939',
   })
   @IsOptional()
@@ -36,7 +34,8 @@ export class CreateSiteDto {
   latitude?: string;
 
   @ApiPropertyOptional({
-    description: 'Longitude of the site centroid in decimal degrees (WGS84), as a numeric string',
+    description:
+      'Longitude of the site centroid in decimal degrees (WGS84), as a numeric string',
     example: '77.209021',
   })
   @IsOptional()

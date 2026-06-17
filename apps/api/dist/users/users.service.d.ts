@@ -35,12 +35,14 @@ export declare class UsersService {
         preferredLanguage: string | null;
         id: string;
         mobile: string | null;
+        inviteToken: string | null;
         passwordHash: string;
         pinHash: string | null;
         status: import("@prisma/client").$Enums.UserStatus;
         lastLoginAt: Date | null;
         createdAt: Date;
         updatedAt: Date;
+        inviteExpiresAt: Date | null;
         profilePhotoUrl: string | null;
     }) | null>;
     findAll(actor: any): Promise<{
