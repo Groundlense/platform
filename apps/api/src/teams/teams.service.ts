@@ -13,6 +13,7 @@ const TEAM_MEMBER_USER_SELECT = {
   employeeCode: true,
   email: true,
   mobile: true,
+  mobileVerified: true,
   status: true,
   designation: true,
   userType: true,

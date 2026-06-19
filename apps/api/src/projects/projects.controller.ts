@@ -64,6 +64,43 @@ export class ProjectsController {
     return this.projectsService.searchByCode(code, user);
   }
 
+  @Get('global-search')
+  globalSearch(@Query('query') query: string, @CurrentUser() user: any) {
+    if (!query) {
+      throw new BadRequestException('Query parameter "query" is required');
+    }
+    return this.projectsService.globalSearch(query, user);
+  }
+
+  @Get('join-requests/pending')
+  getPendingProjectJoinRequests(@CurrentUser() user: any) {
+    return this.projectsService.getPendingProjectJoinRequests(user);
+  }
+
+  @Post('join-requests/:requestId/approve')
+  approveProjectJoinRequest(
+    @Param('requestId') requestId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectsService.approveProjectJoinRequest(requestId, user);
+  }
+
+  @Post('join-requests/:requestId/reject')
+  rejectProjectJoinRequest(
+    @Param('requestId') requestId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectsService.rejectProjectJoinRequest(requestId, user);
+  }
+
+  @Post(':projectId/join-request')
+  createJoinRequest(
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectsService.createJoinRequest(projectId, user);
+  }
+
   @Post(':projectId/members')
   addMember(
     @Param('projectId')

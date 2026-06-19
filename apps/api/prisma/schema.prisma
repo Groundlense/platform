@@ -180,6 +180,7 @@ model Organization {
   users User[]
   teams Team[]
   joinRequests JoinRequest[] @relation("OrganizationJoinRequests")
+  projectJoinRequests ProjectJoinRequest[] @relation("OrgProjectJoinRequests")
 
   // Project relations
   epcProjects       Project[] @relation("ProjectEpcOrganization")
@@ -194,6 +195,7 @@ model Organization {
   projectCompanies ProjectCompany[]
   payments         Payment[]
   activityLogs     ActivityLog[]
+  notifications    Notification[]   @relation("OrganizationNotifications")
 
   @@map("organizations")
 }
@@ -207,6 +209,7 @@ model User {
   lastName       String?
   email          String?      @unique
   mobile         String?      @unique
+  mobileVerified Boolean      @default(false)
   passwordHash   String
   pinHash        String?
   status         UserStatus   @default(ACTIVE)
@@ -217,6 +220,7 @@ model User {
   inviteToken     String?       @unique
   inviteExpiresAt DateTime?
   joinRequests    JoinRequest[] @relation("UserJoinRequests")
+  projectJoinRequests ProjectJoinRequest[] @relation("UserProjectJoinRequests")
 
   // ERD Additional Fields
   userType          String?
@@ -234,6 +238,7 @@ model User {
   uploadedMedia      Media[]         @relation("MediaUploader")
   teamMemberships    TeamMember[]
   activityLogs       ActivityLog[]
+  notifications      Notification[]  @relation("UserNotifications")
 
   // Multi-tier RBAC and Project company associations
   userCompanyRoles     UserCompanyRole[]
@@ -428,9 +433,10 @@ model Project {
   name        String
   description String?
   status      ProjectStatus @default(DRAFT)
+  tenderId    String?
 
-  epcOrganizationId     String
-  geotechOrganizationId String
+  epcOrganizationId     String?
+  geotechOrganizationId String?
   createdByUserId       String
 
   startDate DateTime?
@@ -452,8 +458,8 @@ model Project {
   lockedAt             DateTime?
 
   // Relations
-  epcOrganization     Organization  @relation("ProjectEpcOrganization", fields: [epcOrganizationId], references: [id])
-  geotechOrganization Organization  @relation("ProjectGeotechOrganization", fields: [geotechOrganizationId], references: [id])
+  epcOrganization     Organization? @relation("ProjectEpcOrganization", fields: [epcOrganizationId], references: [id])
+  geotechOrganization Organization? @relation("ProjectGeotechOrganization", fields: [geotechOrganizationId], references: [id])
   initiatedByCompany  Organization? @relation("ProjectInitiatorOrg", fields: [initiatedByCompanyId], references: [id])
   billingCompany      Organization? @relation("ProjectBillingOrg", fields: [billingCompanyId], references: [id])
   createdBy           User          @relation("ProjectCreator", fields: [createdByUserId], references: [id])
@@ -464,6 +470,8 @@ model Project {
   projectCompanies ProjectCompany[]
   userProjectRoles UserProjectRole[]
   payments         Payment[]
+  projectJoinRequests ProjectJoinRequest[] @relation("ProjectJoinRequests")
+  projectInvitations  ProjectInvitation[]  @relation("ProjectInvitations")
 
   @@map("projects")
 }
@@ -545,8 +553,8 @@ model Borehole {
   boreholeCode    String
   name            String?
   teamId          String?
-  latitude        Decimal?       @db.Decimal(10, 7)
-  longitude       Decimal?       @db.Decimal(10, 7)
+  latitude        Decimal?       @db.Decimal(15, 7)
+  longitude       Decimal?       @db.Decimal(15, 7)
   groundLevelRL   Decimal?       @db.Decimal(10, 2)
   plannedDepth    Decimal?       @db.Decimal(10, 2)
   finalDepth      Decimal?       @db.Decimal(10, 2)
@@ -945,4 +953,49 @@ model JoinRequest {
   updatedAt      DateTime     @updatedAt
 
   @@map("join_requests")
+}
+
+model Notification {
+  id             String        @id @default(uuid())
+  userId         String?
+  user           User?         @relation("UserNotifications", fields: [userId], references: [id])
+  organizationId String?
+  organization   Organization? @relation("OrganizationNotifications", fields: [organizationId], references: [id])
+  title          String
+  message        String
+  type           String        // "PROJECT_LINKED" | "JOIN_REQUEST"
+  read           Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+
+  @@map("notifications")
+}
+
+model ProjectJoinRequest {
+  id             String       @id @default(uuid())
+  projectId      String
+  project        Project      @relation("ProjectJoinRequests", fields: [projectId], references: [id])
+  organizationId String
+  organization   Organization @relation("OrgProjectJoinRequests", fields: [organizationId], references: [id])
+  userId         String
+  user           User         @relation("UserProjectJoinRequests", fields: [userId], references: [id])
+  status         String       @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  isInvitation   Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([projectId, organizationId])
+  @@map("project_join_requests")
+}
+
+model ProjectInvitation {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation("ProjectInvitations", fields: [projectId], references: [id])
+  email     String
+  status    String   @default("PENDING") // "PENDING" | "ACCEPTED"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, email])
+  @@map("project_invitations")
 }

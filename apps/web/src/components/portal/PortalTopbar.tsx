@@ -1,8 +1,8 @@
 "use client";
 
-import { RiNotification3Line } from "react-icons/ri";
 import { useRouter } from "next/navigation";
 import { getInitials } from "@/lib/utils";
+import NotificationBell from "../notifications/NotificationBell";
 
 interface PortalTopbarProps {
   project: any;
@@ -41,10 +41,7 @@ export default function PortalTopbar({ project, user }: PortalTopbarProps) {
       {/* Right — matches .topbar-right */}
       <div className="ml-auto flex items-center gap-2">
         {/* Notif — matches .notif */}
-        <div className="rounded-[5px] bg-bg-card flex items-center justify-center cursor-pointer text-[13px] relative" style={{ width: "30px", height: "30px", border: "0.5px solid var(--color-border)" }}>
-          <RiNotification3Line className="text-text-sec" />
-          <div className="absolute rounded-full bg-rust-mid" style={{ top: "3px", right: "3px", width: "6px", height: "6px", border: "1.5px solid var(--color-bg-surface)" }} />
-        </div>
+        <NotificationBell />
 
         {/* User pill — matches .user-pill */}
         <div className="flex items-center gap-[7px] bg-bg-card rounded-[5px]" style={{ border: "0.5px solid var(--color-border)", padding: "4px 9px" }}>

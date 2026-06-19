@@ -35,10 +35,18 @@ const ROLE_TO_ORG_TYPE: Record<RoleType, string> = {
   gt: "GEOTECH_CONTRACTOR",
 };
 
-export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
-  const [screen, setScreen] = useState<Screen>(0);
+export default function LoginForm({
+  redirectTo,
+  initialEmail = "",
+  initialRegister = false,
+}: {
+  redirectTo?: string;
+  initialEmail?: string;
+  initialRegister?: boolean;
+}) {
+  const [screen, setScreen] = useState<Screen>(initialRegister ? 2 : 0);
   const [role, setRole] = useState<RoleType>("contractor");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -65,7 +73,7 @@ export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
   // Signup — Step 2 (Login details)
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [signupEmail, setSignupEmail] = useState("");
+  const [signupEmail, setSignupEmail] = useState(initialEmail);
   const [signupMobile, setSignupMobile] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupLoading, setSignupLoading] = useState(false);

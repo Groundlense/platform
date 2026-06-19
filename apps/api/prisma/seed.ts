@@ -322,8 +322,9 @@ async function main() {
 
   // 2. GEOTECH_MANAGER permissions
   const geotechManagerPermissions = [
-    'USER_VIEW',
+    'PROJECT_CREATE',
     'PROJECT_VIEW',
+    'PROJECT_EDIT',
     'WORKER_ASSIGN',
     'BOREHOLE_CREATE',
     'BOREHOLE_VIEW',
@@ -332,8 +333,11 @@ async function main() {
     'SPT_VIEW',
     'MEDIA_UPLOAD',
     'REPORT_VIEW',
+    'USER_VIEW',
+    'USER_MANAGE',
     'REVIEW_CREATE',
     'REVIEW_VIEW',
+    'ORG_MANAGE',
   ];
   for (const perm of geotechManagerPermissions) {
     await assignPermission('GEOTECH_MANAGER', perm);
@@ -370,6 +374,8 @@ async function main() {
     'PROJECT_CREATE',
     'PROJECT_VIEW',
     'PROJECT_EDIT',
+    'BOREHOLE_CREATE',
+    'BOREHOLE_EDIT',
     'BOREHOLE_VIEW',
     'SPT_VIEW',
     'REPORT_VIEW',
@@ -384,11 +390,18 @@ async function main() {
 
   // 6. EPC_MANAGER permissions
   const epcManagerPermissions = [
+    'PROJECT_CREATE',
     'PROJECT_VIEW',
+    'PROJECT_EDIT',
+    'BOREHOLE_CREATE',
+    'BOREHOLE_EDIT',
     'BOREHOLE_VIEW',
     'SPT_VIEW',
     'REPORT_VIEW',
+    'USER_VIEW',
+    'USER_MANAGE',
     'REVIEW_VIEW',
+    'ORG_MANAGE',
   ];
   for (const perm of epcManagerPermissions) {
     await assignPermission('EPC_MANAGER', perm);

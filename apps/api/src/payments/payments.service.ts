@@ -19,7 +19,7 @@ export class PaymentsService {
   async create(user: any, dto: CreatePaymentDto) {
     await this.access.assertProjectAccess(user, dto.projectId);
 
-    return this.db.payment.create({
+    const payment = await this.db.payment.create({
       data: {
         projectId: dto.projectId,
         companyId: user.organizationId,
@@ -31,6 +31,13 @@ export class PaymentsService {
         status: 'PENDING',
       },
     });
+
+    await this.db.project.update({
+      where: { id: dto.projectId },
+      data: { totalBoringsPlanned: dto.boringsPurchased },
+    }).catch(() => {});
+
+    return payment;
   }
 
   async verify(paymentId: string, dto: VerifyPaymentDto, user: any) {

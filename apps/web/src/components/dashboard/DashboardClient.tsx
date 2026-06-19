@@ -8,6 +8,7 @@ import ProjectCard from "./ProjectCard";
 import NewProjectCard from "./NewProjectCard";
 import NewProjectModal from "./NewProjectModal";
 import { getJoinRequestsAction, approveJoinRequestAction, rejectJoinRequestAction } from "@/app/actions/auth";
+import { getPendingProjectJoinRequestsAction, approveProjectJoinRequestAction, rejectProjectJoinRequestAction } from "@/app/actions/projects";
 
 interface DashboardClientProps {
   projects: any[];
@@ -15,17 +16,24 @@ interface DashboardClientProps {
   user: Record<string, unknown> | null;
   orgType: string | null;
   geotechOrgs: { id: string; name: string; type: string; city: string | null; state: string | null }[];
+  epcOrgs?: { id: string; name: string; type: string; city: string | null; state: string | null }[];
 }
 
-export default function DashboardClient({ projects, summary, user, orgType, geotechOrgs }: DashboardClientProps) {
+export default function DashboardClient({ projects, summary, user, orgType, geotechOrgs, epcOrgs = [] }: DashboardClientProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
+  const [projectRequests, setProjectRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
 
-  const isAdmin = user && ((user as any).roles?.includes("GEOTECH_ADMIN") || (user as any).roles?.includes("EPC_ADMIN"));
+  const isPmOrAdmin = user && (
+    (user as any).roles?.includes("GEOTECH_ADMIN") ||
+    (user as any).roles?.includes("EPC_ADMIN") ||
+    (user as any).roles?.includes("GEOTECH_MANAGER") ||
+    (user as any).roles?.includes("EPC_MANAGER")
+  );
 
   useEffect(() => {
-    if (isAdmin) {
+    if (isPmOrAdmin) {
       loadRequests();
     }
   }, [user]);
@@ -33,10 +41,14 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
   const loadRequests = async () => {
     setLoadingRequests(true);
     try {
-      const res = await getJoinRequestsAction();
-      setJoinRequests(res);
+      const [orgRes, projRes] = await Promise.all([
+        getJoinRequestsAction(),
+        getPendingProjectJoinRequestsAction()
+      ]);
+      setJoinRequests(orgRes || []);
+      setProjectRequests(projRes || []);
     } catch (err) {
-      console.error("Failed to load join requests:", err);
+      console.error("Failed to load pending requests:", err);
     } finally {
       setLoadingRequests(false);
     }
@@ -68,6 +80,32 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
     }
   };
 
+  const handleApproveProject = async (reqId: string) => {
+    try {
+      const res = await approveProjectJoinRequestAction(reqId);
+      if (res && "error" in res && res.error) {
+        alert(res.error);
+      } else {
+        setProjectRequests(projectRequests.filter((r) => r.id !== reqId));
+      }
+    } catch {
+      alert("Failed to approve project request.");
+    }
+  };
+
+  const handleRejectProject = async (reqId: string) => {
+    try {
+      const res = await rejectProjectJoinRequestAction(reqId);
+      if (res && "error" in res && res.error) {
+        alert(res.error);
+      } else {
+        setProjectRequests(projectRequests.filter((r) => r.id !== reqId));
+      }
+    } catch {
+      alert("Failed to reject project request.");
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-bg-base">
       <DashboardTopbar user={user} />
@@ -77,39 +115,85 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
 
         <ProjectSearch projects={projects} orgType={orgType} />
 
-        {/* Pending Join Requests section */}
-        {isAdmin && joinRequests.length > 0 && (
+        {/* Pending Requests section */}
+        {isPmOrAdmin && (joinRequests.length > 0 || projectRequests.length > 0) && (
           <div className="bg-bg-card border border-border rounded-xl p-5 mb-5 shadow-sm animate-fade-up">
             <h3 className="font-display text-[15px] font-semibold text-text-pri mb-3 flex items-center gap-[6px]">
-              <span>🔔</span> Pending Join Requests ({joinRequests.length})
+              <span>🔔</span> Pending Requests ({joinRequests.length + projectRequests.length})
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {joinRequests.map((req) => (
-                <div key={req.id} className="border border-border rounded-lg p-3 bg-bg-base flex items-center justify-between text-[11px]">
-                  <div>
-                    <div className="font-semibold text-text-pri">{req.user.firstName} {req.user.lastName || ""}</div>
-                    <div className="text-text-sec mt-[2px]">{req.user.email} · {req.user.mobile}</div>
-                    <div className="text-text-ter mt-[2px]">
-                      Requested Role: <strong className="text-rust-d font-medium">{req.roleCode.replace("_", " ")}</strong>
+            
+            {joinRequests.length > 0 && (
+              <div className="mb-4">
+                <div className="text-[10px] text-text-sec uppercase tracking-wider mb-2 font-semibold">Organization Join Requests ({joinRequests.length})</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {joinRequests.map((req) => (
+                    <div key={req.id} className="border border-border rounded-lg p-3 bg-bg-base flex items-center justify-between text-[11px]">
+                      <div>
+                        <div className="font-semibold text-text-pri">{req.user.firstName} {req.user.lastName || ""}</div>
+                        <div className="text-text-sec mt-[2px]">{req.user.email} · {req.user.mobile}</div>
+                        <div className="text-text-ter mt-[2px]">
+                          Requested Role: <strong className="text-rust-d font-medium">{req.roleCode.replace("_", " ")}</strong>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApprove(req.id)}
+                          className="py-[6px] px-3 bg-green-600 hover:bg-green-700 text-text-pri font-medium rounded cursor-pointer border-none text-[10px] transition-colors"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleReject(req.id)}
+                          className="py-[6px] px-3 bg-red-600 hover:bg-red-700 text-text-pri font-medium rounded cursor-pointer border-none text-[10px] transition-colors"
+                        >
+                          Reject
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleApprove(req.id)}
-                      className="py-[6px] px-3 bg-green-600 hover:bg-green-700 text-text-pri font-medium rounded cursor-pointer border-none text-[10px] transition-colors"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => handleReject(req.id)}
-                      className="py-[6px] px-3 bg-red-600 hover:bg-red-700 text-text-pri font-medium rounded cursor-pointer border-none text-[10px] transition-colors"
-                    >
-                      Reject
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {projectRequests.length > 0 && (
+              <div>
+                <div className="text-[10px] text-text-sec uppercase tracking-wider mb-2 font-semibold">Project Invitations & Requests ({projectRequests.length})</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {projectRequests.map((req) => (
+                    <div key={req.id} className="border border-border rounded-lg p-3 bg-bg-base flex items-center justify-between text-[11px]">
+                      <div>
+                        <div className="font-semibold text-text-pri">Project: {req.project.name} ({req.project.projectCode})</div>
+                        {req.isInvitation ? (
+                          <>
+                            <div className="text-text-sec mt-[2px]"><span className="text-amber-d font-medium">📩 Project Link Invitation</span> to your organization</div>
+                            <div className="text-text-ter mt-[2px]">Invited by: {req.project.createdBy?.firstName} {req.project.createdBy?.lastName || ""} ({req.project.createdBy?.email || "owner"})</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-text-sec mt-[2px]">Requesting Org: <strong>{req.organization.name}</strong> ({req.organization.type.replace("_", " ")})</div>
+                            <div className="text-text-ter mt-[2px]">Requested by: {req.user?.firstName} {req.user?.lastName || ""} ({req.user?.email})</div>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApproveProject(req.id)}
+                          className="py-[6px] px-3 bg-green-600 hover:bg-green-700 text-text-pri font-medium rounded cursor-pointer border-none text-[10px] transition-colors"
+                        >
+                          {req.isInvitation ? "Accept" : "Approve"}
+                        </button>
+                        <button
+                          onClick={() => handleRejectProject(req.id)}
+                          className="py-[6px] px-3 bg-red-600 hover:bg-red-700 text-text-pri font-medium rounded cursor-pointer border-none text-[10px] transition-colors"
+                        >
+                          {req.isInvitation ? "Decline" : "Reject"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -154,7 +238,7 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
         )}
       </div>
 
-      <NewProjectModal open={modalOpen} onClose={() => setModalOpen(false)} geotechOrgs={geotechOrgs} user={user} orgType={orgType} />
+      <NewProjectModal open={modalOpen} onClose={() => setModalOpen(false)} geotechOrgs={geotechOrgs} epcOrgs={epcOrgs} user={user} orgType={orgType} />
     </div>
   );
 }

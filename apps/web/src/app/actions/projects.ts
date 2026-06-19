@@ -1,7 +1,7 @@
 "use server";
 
 import { getToken } from "@/lib/session";
-import { createProject, createBorehole, createPayment } from "@/lib/api/endpoints";
+import { createProject, createBorehole, createPayment, assignBorehole, globalSearchProjects, requestJoinProject, getPendingProjectJoinRequests, approveProjectJoinRequest, rejectProjectJoinRequest } from "@/lib/api/endpoints";
 import { revalidatePath } from "next/cache";
 
 export async function createProjectAction(formData: FormData) {
@@ -95,6 +95,7 @@ export async function createBoreholeAction(formData: FormData) {
   const plannedDepth = formData.get("plannedDepth") as string;
   const latitude = formData.get("latitude") as string;
   const longitude = formData.get("longitude") as string;
+  const groundLevelRL = formData.get("groundLevelRL") as string;
 
   if (!projectId || !boreholeCode) {
     return { error: "Project ID and borehole code are required." };
@@ -106,9 +107,10 @@ export async function createBoreholeAction(formData: FormData) {
       {
         boreholeCode,
         name: name || undefined,
-        plannedDepth: plannedDepth ? parseFloat(plannedDepth) : undefined,
-        latitude: latitude ? parseFloat(latitude) : undefined,
-        longitude: longitude ? parseFloat(longitude) : undefined,
+        plannedDepth: plannedDepth || undefined,
+        latitude: latitude || undefined,
+        longitude: longitude || undefined,
+        groundLevelRL: groundLevelRL || undefined,
       },
       token
     );
@@ -117,5 +119,70 @@ export async function createBoreholeAction(formData: FormData) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to create borehole";
     return { error: message };
+  }
+}
+
+export async function assignBoreholeTeamAction(boreholeId: string, teamId: string) {
+  const token = await getToken();
+  if (!token) return { error: "Not authenticated" };
+  try {
+    const res = await assignBorehole(boreholeId, { teamId }, token);
+    return { success: true, data: res };
+  } catch (err: any) {
+    return { error: err.message || "Failed to assign team to borehole" };
+  }
+}
+
+export async function globalSearchProjectsAction(query: string) {
+  const token = await getToken();
+  if (!token) return [];
+  try {
+    return await globalSearchProjects(query, token);
+  } catch {
+    return [];
+  }
+}
+
+export async function requestJoinProjectAction(projectId: string) {
+  const token = await getToken();
+  if (!token) return { error: "Unauthorized" };
+  try {
+    return await requestJoinProject(projectId, token);
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function getPendingProjectJoinRequestsAction() {
+  const token = await getToken();
+  if (!token) return [];
+  try {
+    return await getPendingProjectJoinRequests(token);
+  } catch {
+    return [];
+  }
+}
+
+export async function approveProjectJoinRequestAction(requestId: string) {
+  const token = await getToken();
+  if (!token) return { error: "Unauthorized" };
+  try {
+    const res = await approveProjectJoinRequest(requestId, token);
+    revalidatePath("/dashboard");
+    return res;
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function rejectProjectJoinRequestAction(requestId: string) {
+  const token = await getToken();
+  if (!token) return { error: "Unauthorized" };
+  try {
+    const res = await rejectProjectJoinRequest(requestId, token);
+    revalidatePath("/dashboard");
+    return res;
+  } catch (err: any) {
+    return { error: err.message };
   }
 }

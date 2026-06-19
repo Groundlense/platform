@@ -17,6 +17,7 @@ const SAFE_USER_SELECT = {
   lastName: true,
   email: true,
   mobile: true,
+  mobileVerified: true,
   status: true,
   lastLoginAt: true,
   userType: true,
@@ -146,12 +147,24 @@ export class UsersService {
       }
     }
 
+    let mobileVerified = false;
+    if (dto.mobile) {
+      const otpRecord = await this.db.otp.findUnique({
+        where: { type_target: { type: 'MOBILE', target: dto.mobile } },
+      });
+      if (otpRecord && otpRecord.verified) {
+        mobileVerified = true;
+      }
+    }
+
     const user = await this.db.user.create({
       data: {
         organizationId,
         firstName: dto.firstName,
         lastName: dto.lastName,
         email: dto.email,
+        mobile: dto.mobile,
+        mobileVerified,
         employeeCode,
         passwordHash,
         designation: dto.designation,

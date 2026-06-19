@@ -1,8 +1,9 @@
 "use client";
 
-import { RiNotification3Line, RiLogoutBoxRLine } from "react-icons/ri";
+import { RiLogoutBoxRLine } from "react-icons/ri";
 import { logoutAction } from "@/app/actions/auth";
 import { getInitials } from "@/lib/utils";
+import NotificationBell from "../notifications/NotificationBell";
 
 interface DashboardTopbarProps {
   user: Record<string, unknown> | null;
@@ -41,11 +42,7 @@ export default function DashboardTopbar({ user }: DashboardTopbarProps) {
       {/* Right side — matches .tb-right */}
       <div className="ml-auto flex items-center gap-2">
         {/* Notification — matches .tb-notif */}
-        <div className="rounded-[5px] bg-bg-card flex items-center justify-center cursor-pointer text-[12px] relative"
-          style={{ width: "28px", height: "28px", border: "0.5px solid var(--color-border)" }}>
-          <RiNotification3Line className="text-text-sec" />
-          <div className="absolute rounded-full bg-rust-mid" style={{ top: "2px", right: "2px", width: "5px", height: "5px", border: "1px solid var(--color-bg-surface)" }} />
-        </div>
+        <NotificationBell />
 
         {/* GL Code — matches .tb-gl */}
         {employeeCode && (

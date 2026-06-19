@@ -205,6 +205,7 @@ export async function createUserAction(payload: {
   firstName: string;
   lastName?: string;
   email?: string;
+  mobile?: string;
   employeeCode?: string;
   roleCode: string;
   designation?: string;
@@ -220,4 +221,30 @@ export async function createUserAction(payload: {
     return { success: false, error: toErrorMessage(err, "Failed to create user.") };
   }
 }
+
+export async function sendOtpAction(payload: {
+  type: "EMAIL" | "MOBILE";
+  target: string;
+}): Promise<PortalActionResult<any>> {
+  try {
+    const res = await apiPost<any>("/auth/send-otp", payload);
+    return { success: true, data: res };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to send OTP.") };
+  }
+}
+
+export async function verifyOtpAction(payload: {
+  type: "EMAIL" | "MOBILE";
+  target: string;
+  code: string;
+}): Promise<PortalActionResult<any>> {
+  try {
+    const res = await apiPost<any>("/auth/verify-otp", payload);
+    return { success: true, data: res };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to verify OTP.") };
+  }
+}
+
 

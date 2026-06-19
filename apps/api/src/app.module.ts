@@ -23,6 +23,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { SyncModule } from './sync/sync.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { OrganizationsModule } from './organizations/organizations.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { OrganizationsModule } from './organizations/organizations.module';
     SyncModule,
     ReviewsModule,
     OrganizationsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
