@@ -28,9 +28,11 @@ import {
   createUserAction,
   sendOtpAction,
   verifyOtpAction,
+  deleteTeamAction,
+  updateUserProfileAction,
   type BoreholeIntegrity,
 } from "@/app/actions/portal";
-import { createBoreholeAction, assignBoreholeTeamAction } from "@/app/actions/projects";
+import { createBoreholeAction, assignBoreholeTeamAction, approveProjectJoinRequestAction, rejectProjectJoinRequestAction } from "@/app/actions/projects";
 
 interface PortalClientProps {
   project: any;
@@ -44,6 +46,7 @@ interface PortalClientProps {
   projectDashboard: any; // { boreholes, intervals, completedIntervals, completionPercentage, samples, media }
   teams?: any[];
   orgUsers?: any[];
+  pendingRequests?: any[];
 }
 
 // Soil color mappings for SVG strata drawing
@@ -156,6 +159,7 @@ export default function PortalClient({
   projectDashboard = null,
   teams = [],
   orgUsers = [],
+  pendingRequests = [],
 }: PortalClientProps) {
   const { activeTab, setActiveTab } = usePortalTab();
   const router = useRouter();
@@ -1044,6 +1048,209 @@ export default function PortalClient({
   const [verifyRowError, setVerifyRowError] = useState("");
   const [verifyRowLoading, setVerifyRowLoading] = useState(false);
 
+  // ── Settings tab states ──
+  const [editEmail, setEditEmail] = useState(u?.email || "");
+  const [editMobile, setEditMobile] = useState(u?.mobile || "");
+  
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailOtpCode, setEmailOtpCode] = useState("");
+  const [emailOtpVerified, setEmailOtpVerified] = useState(false);
+  
+  const [mobileOtpSent, setMobileOtpSent] = useState(false);
+  const [mobileOtpCode, setMobileOtpCode] = useState("");
+  const [mobileOtpVerified, setMobileOtpVerified] = useState(false);
+  
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsSuccess, setSettingsSuccess] = useState("");
+
+  useEffect(() => {
+    if (u) {
+      setEditEmail(u.email || "");
+      setEditMobile(u.mobile || "");
+      setEmailOtpSent(false);
+      setEmailOtpVerified(false);
+      setMobileOtpSent(false);
+      setMobileOtpVerified(false);
+      setSettingsError("");
+      setSettingsSuccess("");
+    }
+  }, [u]);
+
+  const handleSendEmailOtp = async () => {
+    if (!editEmail.trim()) {
+      setSettingsError("Please enter a valid email address.");
+      return;
+    }
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+    const res = await sendOtpAction({
+      type: "EMAIL",
+      target: editEmail.trim(),
+    });
+    setSettingsBusy(false);
+    if (res.success) {
+      setEmailOtpSent(true);
+      setSettingsSuccess("Email verification OTP sent (simulated code: 123456)");
+    } else {
+      setSettingsError(res.error || "Failed to send email OTP.");
+    }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (!emailOtpCode.trim()) {
+      setSettingsError("Please enter the verification code.");
+      return;
+    }
+    if (emailOtpCode.trim() !== "123456") {
+      setSettingsError("Invalid OTP code. Please enter 123456.");
+      return;
+    }
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+    const res = await verifyOtpAction({
+      type: "EMAIL",
+      target: editEmail.trim(),
+      code: emailOtpCode.trim(),
+    });
+    setSettingsBusy(false);
+    if (res.success) {
+      setEmailOtpVerified(true);
+      setSettingsSuccess("Email verified successfully.");
+    } else {
+      setSettingsError(res.error || "Failed to verify email OTP.");
+    }
+  };
+
+  const handleSendMobileOtp = async () => {
+    if (!editMobile.trim()) {
+      setSettingsError("Please enter a valid mobile number.");
+      return;
+    }
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+    const res = await sendOtpAction({
+      type: "MOBILE",
+      target: editMobile.trim(),
+    });
+    setSettingsBusy(false);
+    if (res.success) {
+      setMobileOtpSent(true);
+      setSettingsSuccess("Mobile verification OTP sent (simulated code: 123456)");
+    } else {
+      setSettingsError(res.error || "Failed to send mobile OTP.");
+    }
+  };
+
+  const handleVerifyMobileOtp = async () => {
+    if (!mobileOtpCode.trim()) {
+      setSettingsError("Please enter the verification code.");
+      return;
+    }
+    if (mobileOtpCode.trim() !== "123456") {
+      setSettingsError("Invalid OTP code. Please enter 123456.");
+      return;
+    }
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+    const res = await verifyOtpAction({
+      type: "MOBILE",
+      target: editMobile.trim(),
+      code: mobileOtpCode.trim(),
+    });
+    setSettingsBusy(false);
+    if (res.success) {
+      setMobileOtpVerified(true);
+      setSettingsSuccess("Mobile number verified successfully.");
+    } else {
+      setSettingsError(res.error || "Failed to verify mobile OTP.");
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!u?.id) return;
+    
+    const payload: { email?: string; mobile?: string } = {};
+    const emailChanged = editEmail.trim() !== (u.email || "");
+    const mobileChanged = editMobile.trim() !== (u.mobile || "");
+    
+    if (!emailChanged && !mobileChanged) {
+      setSettingsSuccess("No changes detected.");
+      return;
+    }
+    
+    if (emailChanged) {
+      if (!emailOtpVerified) {
+        setSettingsError("Please verify your new email using OTP first.");
+        return;
+      }
+      payload.email = editEmail.trim();
+    }
+    
+    if (mobileChanged) {
+      if (!mobileOtpVerified) {
+        setSettingsError("Please verify your new mobile number using OTP first.");
+        return;
+      }
+      payload.mobile = editMobile.trim();
+    }
+    
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+    const res = await updateUserProfileAction(u.id, payload);
+    setSettingsBusy(false);
+    
+    if (res.success) {
+      setSettingsSuccess("Profile updated successfully!");
+      setEmailOtpSent(false);
+      setEmailOtpVerified(false);
+      setMobileOtpSent(false);
+      setMobileOtpVerified(false);
+      router.refresh();
+    } else {
+      setSettingsError(res.error || "Failed to update profile.");
+    }
+  };
+
+  // ── Requests tab states & handlers ──
+  const [requestBusyId, setRequestBusyId] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState("");
+  const [requestSuccess, setRequestSuccess] = useState("");
+
+  const handleApproveRequest = async (requestId: string) => {
+    setRequestBusyId(requestId);
+    setRequestError("");
+    setRequestSuccess("");
+    const res = await approveProjectJoinRequestAction(requestId);
+    setRequestBusyId(null);
+    if (res.success) {
+      setRequestSuccess("Project join request approved successfully.");
+      router.refresh();
+    } else {
+      setRequestError(res.error || "Failed to approve request.");
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    setRequestBusyId(requestId);
+    setRequestError("");
+    setRequestSuccess("");
+    const res = await rejectProjectJoinRequestAction(requestId);
+    setRequestBusyId(null);
+    if (res.success) {
+      setRequestSuccess("Project join request rejected successfully.");
+      router.refresh();
+    } else {
+      setRequestError(res.error || "Failed to reject request.");
+    }
+  };
+
   const handleSendRowOtp = async () => {
     if (!verifyingUser || !verifyingUser.mobile) return;
     setVerifyRowLoading(true);
@@ -1299,6 +1506,25 @@ export default function PortalClient({
       alert(res.error || "Failed to add member to team.");
     }
   };
+
+  const handleDeleteTeam = async (teamId: string, teamName: string) => {
+    if (!confirm(`Are you sure you want to delete the team "${teamName}"? This will unassign any associated boreholes and remove all member assignments.`)) {
+      return;
+    }
+    const res = await deleteTeamAction(teamId);
+    if (res.success) {
+      const orgId = (u as any)?.organizationId;
+      if (orgId) {
+        const updatedTeams = await fetchOrgTeams(orgId);
+        setLocalTeams(updatedTeams);
+      }
+      router.refresh();
+      alert(`Team "${teamName}" deleted successfully.`);
+    } else {
+      alert(res.error || "Failed to delete team.");
+    }
+  };
+
 
   const openLogPanel = async (userId: string, name: string, code: string) => {
     setLogPanelUser({ id: userId, name, code });
@@ -1687,6 +1913,8 @@ export default function PortalClient({
           { key: "review", label: "Review", icon: <RiCheckDoubleLine /> },
           { key: "lab", label: "Lab", icon: <RiFlaskLine /> },
           { key: "report", label: "Report", icon: <RiFileTextLine /> },
+          { key: "settings", label: "Settings", icon: <RiSettings4Line /> },
+          { key: "requests", label: "Requests", icon: <RiFileTextLine /> },
         ].map((t) => (
           <button
             key={t.key}
@@ -1988,7 +2216,18 @@ export default function PortalClient({
                                 </span>
                                 <span className="text-[12px] font-bold text-text-pri">{team.name}</span>
                               </div>
-                              <span className="text-[8px] text-text-ter">ID: {team.id.substring(0, 8)}...</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[8px] text-text-ter font-mono">ID: {team.id.substring(0, 8)}...</span>
+                                {isGeotech && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-d btn-sm text-[8px] py-0.5 px-1.5"
+                                    onClick={() => handleDeleteTeam(team.id, team.name)}
+                                  >
+                                    Delete Team
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             
                             {team.description && (
@@ -2008,7 +2247,6 @@ export default function PortalClient({
                                         <th>GL ID</th>
                                         <th>Name</th>
                                         <th>Role</th>
-                                        <th>Qualification</th>
                                         <th>Status</th>
                                         <th></th>
                                       </tr>
@@ -2019,7 +2257,6 @@ export default function PortalClient({
                                         const tmName = `${tmu.firstName ?? ""} ${tmu.lastName ?? ""}`.trim() || "—";
                                         const glId = tmu.employeeCode || `GL-W-${tmu.id?.substring(0, 4) ?? "0000"}`;
                                         const role = tm.role || tmu.designation || tmu.role || "Worker";
-                                        const qual = tm.qualification || tmu.userType || tmu.qualification || "ITI";
                                         const status = tm.status || tmu.preferredLanguage || tmu.status || "On site";
 
                                         // pill coloring
@@ -2034,7 +2271,6 @@ export default function PortalClient({
                                             <td className="font-mono text-[9px] text-amber-d">{glId}</td>
                                             <td className="td-p">{tmName}</td>
                                             <td>{role}</td>
-                                            <td>{qual}</td>
                                             <td>
                                               <span className={`pill ${pillClass}`}>{status}</span>
                                             </td>
@@ -3874,6 +4110,308 @@ export default function PortalClient({
             )}
           </div>
         )}
+
+        {/* ⚙ SETTINGS TAB */}
+        {activeTab === "settings" && (
+          <div className="animate-fade-in space-y-4">
+            {settingsError && (
+              <div className="ib ib-r shadow-sm">
+                ❌ {settingsError}
+              </div>
+            )}
+            {settingsSuccess && (
+              <div className="ib ib-g shadow-sm">
+                ✓ {settingsSuccess}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Profile Card */}
+              <div className="card shadow-sm">
+                <div className="card-title">👤 Personal Profile</div>
+                <div className="space-y-2">
+                  <div className="dr">
+                    <span className="dr-l">Full Name</span>
+                    <span className="dr-v font-bold">{userName}</span>
+                  </div>
+                  <div className="dr">
+                    <span className="dr-l">Designation</span>
+                    <span className="dr-v">{u?.designation || "Geotechnical Engineer"}</span>
+                  </div>
+                  <div className="dr">
+                    <span className="dr-l">Email Address</span>
+                    <span className="dr-v">{u?.email || "—"}</span>
+                  </div>
+                  <div className="dr">
+                    <span className="dr-l">Mobile Number</span>
+                    <span className="dr-v flex items-center gap-1.5">
+                      {u?.mobile || "—"}
+                      {u?.mobileVerified ? (
+                        <span className="pill-green text-[8px]">Verified</span>
+                      ) : (
+                        <span className="pill-gray text-[8px]">Not Verified</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="dr">
+                    <span className="dr-l">Employee Code</span>
+                    <span className="dr-v font-mono">{u?.employeeCode || "—"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit Details Card */}
+              <div className="card shadow-sm">
+                <div className="card-title">✏️ Update Profile Details</div>
+                <form onSubmit={handleSaveProfile} className="space-y-4">
+                  {/* Email field */}
+                  <div className="fg">
+                    <span className="fl">Change Email Address</span>
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        className="fi flex-1"
+                        value={editEmail}
+                        onChange={(e) => {
+                          setEditEmail(e.target.value);
+                          setEmailOtpSent(false);
+                          setEmailOtpVerified(false);
+                        }}
+                        placeholder="new.email@example.com"
+                        disabled={settingsBusy}
+                      />
+                      {editEmail.trim() !== (u?.email || "") && !emailOtpVerified && (
+                        <button
+                          type="button"
+                          className="btn btn-b text-[10px]"
+                          onClick={handleSendEmailOtp}
+                          disabled={settingsBusy}
+                        >
+                          {emailOtpSent ? "Resend OTP" : "Send OTP"}
+                        </button>
+                      )}
+                    </div>
+                    {emailOtpSent && !emailOtpVerified && (
+                      <div className="flex gap-2 mt-1.5">
+                        <input
+                          type="text"
+                          className="fi w-28"
+                          value={emailOtpCode}
+                          onChange={(e) => setEmailOtpCode(e.target.value)}
+                          placeholder="Enter OTP"
+                          maxLength={6}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-s text-[10px]"
+                          onClick={handleVerifyEmailOtp}
+                          disabled={settingsBusy}
+                        >
+                          Verify OTP
+                        </button>
+                      </div>
+                    )}
+                    {emailOtpVerified && (
+                      <span className="text-[10px] font-semibold mt-1 inline-block" style={{ color: "#97C459" }}>✓ Email verified with OTP</span>
+                    )}
+                  </div>
+
+                  {/* Mobile field */}
+                  <div className="fg">
+                    <span className="fl">Change Mobile Number</span>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="fi flex-1"
+                        value={editMobile}
+                        onChange={(e) => {
+                          setEditMobile(e.target.value);
+                          setMobileOtpSent(false);
+                          setMobileOtpVerified(false);
+                        }}
+                        placeholder="9876543210"
+                        disabled={settingsBusy}
+                      />
+                      {editMobile.trim() !== (u?.mobile || "") && !mobileOtpVerified && (
+                        <button
+                          type="button"
+                          className="btn btn-b text-[10px]"
+                          onClick={handleSendMobileOtp}
+                          disabled={settingsBusy}
+                        >
+                          {mobileOtpSent ? "Resend OTP" : "Send OTP"}
+                        </button>
+                      )}
+                    </div>
+                    {mobileOtpSent && !mobileOtpVerified && (
+                      <div className="flex gap-2 mt-1.5">
+                        <input
+                          type="text"
+                          className="fi w-28"
+                          value={mobileOtpCode}
+                          onChange={(e) => setMobileOtpCode(e.target.value)}
+                          placeholder="Enter OTP"
+                          maxLength={6}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-s text-[10px]"
+                          onClick={handleVerifyMobileOtp}
+                          disabled={settingsBusy}
+                        >
+                          Verify OTP
+                        </button>
+                      </div>
+                    )}
+                    {mobileOtpVerified && (
+                      <span className="text-[10px] font-semibold mt-1 inline-block" style={{ color: "#97C459" }}>✓ Mobile verified with OTP</span>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn btn-p w-full text-[11px] py-2"
+                    disabled={
+                      settingsBusy ||
+                      (editEmail.trim() === (u?.email || "") && editMobile.trim() === (u?.mobile || "")) ||
+                      (editEmail.trim() !== (u?.email || "") && !emailOtpVerified) ||
+                      (editMobile.trim() !== (u?.mobile || "") && !mobileOtpVerified)
+                    }
+                  >
+                    {settingsBusy ? "Saving..." : "Save Profile Changes"}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* Organization Crew List */}
+            <div className="card shadow-sm">
+              <div className="card-title">👥 Organization Crew Members ({orgUsers.length})</div>
+              <div className="overflow-x-auto">
+                <table className="dt w-full">
+                  <thead>
+                    <tr>
+                      <th>Employee Code</th>
+                      <th>Name</th>
+                      <th>Role / Designation</th>
+                      <th>Email</th>
+                      <th>Mobile</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orgUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center text-text-ter py-4">No crew members found.</td>
+                      </tr>
+                    ) : (
+                      orgUsers.map((mUser: any) => {
+                        const name = `${mUser.firstName ?? ""} ${mUser.lastName ?? ""}`.trim() || mUser.email || "—";
+                        const role = mUser.roles?.[0]?.role?.name || mUser.designation || "Crew Member";
+                        const st = mUser.status || "ACTIVE";
+                        return (
+                          <tr key={mUser.id}>
+                            <td className="font-mono text-[9px] text-amber-d">{mUser.employeeCode || "—"}</td>
+                            <td className="td-p">{name}</td>
+                            <td>{role}</td>
+                            <td>{mUser.email || "—"}</td>
+                            <td>
+                              <span className="flex items-center gap-1.5">
+                                {mUser.mobile || "—"}
+                                {mUser.mobileVerified && (
+                                  <span className="pill-green text-[7px] px-1.5 py-0.5">Verified</span>
+                                )}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`pill ${st === "ACTIVE" ? "p-g" : "p-gray"}`}>
+                                {st}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 📋 REQUESTS TAB */}
+        {activeTab === "requests" && (
+          <div className="animate-fade-in space-y-4">
+            {requestError && (
+              <div className="ib ib-r shadow-sm">
+                ❌ {requestError}
+              </div>
+            )}
+            {requestSuccess && (
+              <div className="ib ib-g shadow-sm">
+                ✓ {requestSuccess}
+              </div>
+            )}
+
+            <div className="card shadow-sm">
+              <div className="card-title">📋 Pending Project Join Requests ({pendingRequests.length})</div>
+              <div className="overflow-x-auto">
+                <table className="dt w-full">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Email</th>
+                      <th>Organization</th>
+                      <th>Status</th>
+                      <th className="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingRequests.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="text-center text-text-ter py-6">
+                          No pending project join requests for this project.
+                        </td>
+                      </tr>
+                    ) : (
+                      pendingRequests.map((req: any) => {
+                        const name = `${req.user?.firstName ?? ""} ${req.user?.lastName ?? ""}`.trim() || req.user?.email || "—";
+                        return (
+                          <tr key={req.id}>
+                            <td className="td-p">{name}</td>
+                            <td>{req.user?.email || "—"}</td>
+                            <td>{req.organization?.name || "—"}</td>
+                            <td>
+                              <span className="pill p-b">{req.status}</span>
+                            </td>
+                            <td className="text-right">
+                              <div className="flex gap-2 justify-end">
+                                <button
+                                  className="btn btn-s btn-sm"
+                                  onClick={() => handleApproveRequest(req.id)}
+                                  disabled={requestBusyId === req.id}
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  className="btn btn-d btn-sm"
+                                  onClick={() => handleRejectRequest(req.id)}
+                                  disabled={requestBusyId === req.id}
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ACTIVITY LOG SLIDE-IN PANEL (Setup tab "View log") */}
@@ -3969,24 +4507,24 @@ export default function PortalClient({
               <div className="fg">
                 <span className="fl">Assign Boreholes</span>
                 <div className="border border-border-mid rounded-lg p-2 max-h-32 overflow-y-auto space-y-1.5" style={{ background: "var(--color-bg-card)" }}>
-                  {mappedBoreholes.length === 0 ? (
+                  {mappedBoreholes.filter(bh => !bh.teamId).length === 0 ? (
                     <div className="text-[10px] text-text-ter italic">No boreholes available to assign.</div>
                   ) : (
-                    mappedBoreholes.map((bh: any) => {
+                    mappedBoreholes.filter(bh => !bh.teamId).map((bh: any) => {
                       const isChecked = selectedBoreholeIds.includes(bh.id);
                       return (
                         <label key={bh.id} className="flex items-center gap-2 text-[10px] text-text-sec cursor-pointer hover:text-text-pri select-none">
                           <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => {
-                              if (isChecked) {
-                                setSelectedBoreholeIds(selectedBoreholeIds.filter(id => id !== bh.id));
-                              } else {
-                                setSelectedBoreholeIds([...selectedBoreholeIds, bh.id]);
-                              }
-                            }}
-                            className="accent-rust-mid w-3.5 h-3.5"
+                             type="checkbox"
+                             checked={isChecked}
+                             onChange={() => {
+                               if (isChecked) {
+                                 setSelectedBoreholeIds(selectedBoreholeIds.filter(id => id !== bh.id));
+                               } else {
+                                 setSelectedBoreholeIds([...selectedBoreholeIds, bh.id]);
+                               }
+                             }}
+                             className="accent-rust-mid w-3.5 h-3.5"
                           />
                           <span>{bh.boreholeCode} · {bh.name || "Unnamed"}</span>
                         </label>

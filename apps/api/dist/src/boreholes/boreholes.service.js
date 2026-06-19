@@ -33,6 +33,9 @@ let BoreholesService = class BoreholesService {
             where: {
                 projectId,
             },
+            include: {
+                team: true,
+            },
             orderBy: {
                 boreholeCode: 'asc',
             },

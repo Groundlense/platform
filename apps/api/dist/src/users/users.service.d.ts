@@ -1,5 +1,6 @@
 import { DatabaseService } from '../database/database.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserStatus } from '@prisma/client';
 export declare class UsersService {
     private readonly db;
@@ -177,6 +178,24 @@ export declare class UsersService {
         })[];
     } | null>;
     resetPin(userId: string, pin: string, actor: any): Promise<{
+        id: string;
+        organizationId: string;
+        employeeCode: string | null;
+        firstName: string;
+        lastName: string | null;
+        email: string | null;
+        mobile: string | null;
+        mobileVerified: boolean;
+        status: import("@prisma/client").$Enums.UserStatus;
+        lastLoginAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        userType: string | null;
+        designation: string | null;
+        profilePhotoUrl: string | null;
+        preferredLanguage: string | null;
+    }>;
+    updateProfile(userId: string, dto: UpdateProfileDto, actor: any): Promise<{
         id: string;
         organizationId: string;
         employeeCode: string | null;

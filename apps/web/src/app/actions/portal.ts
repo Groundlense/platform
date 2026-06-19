@@ -1,7 +1,8 @@
 "use server";
 
-import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { apiGet, apiPost, apiPatch, apiDelete, ApiError } from "@/lib/api";
 import { getToken } from "@/lib/session";
+
 
 export interface PortalActionResult<T = unknown> {
   success: boolean;
@@ -246,5 +247,31 @@ export async function verifyOtpAction(payload: {
     return { success: false, error: toErrorMessage(err, "Failed to verify OTP.") };
   }
 }
+
+export async function deleteTeamAction(teamId: string): Promise<PortalActionResult<any>> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const res = await apiDelete<any>(`/teams/${teamId}`, token);
+    return { success: true, data: res };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to delete team.") };
+  }
+}
+
+export async function updateUserProfileAction(
+  userId: string,
+  payload: { email?: string; mobile?: string }
+): Promise<PortalActionResult<any>> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const res = await apiPatch<any>(`/users/${userId}/profile`, payload, token);
+    return { success: true, data: res };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to update profile.") };
+  }
+}
+
 
 

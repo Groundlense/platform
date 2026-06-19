@@ -2,11 +2,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserStatus } from '@prisma/client';
 
 const SAFE_USER_SELECT = {
@@ -245,6 +247,60 @@ export class UsersService {
       data: {
         pinHash,
       },
+      select: SAFE_USER_SELECT,
+    });
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto, actor: any) {
+    if (actor.id !== userId && !this.isSuperAdmin(actor)) {
+      throw new ForbiddenException('Not authorized to update this profile');
+    }
+
+    const existing = await this.db.user.findUnique({ where: { id: userId } });
+    if (!existing) {
+      throw new NotFoundException('User not found');
+    }
+
+    const data: any = {};
+
+    if (dto.email && dto.email.trim() !== existing.email) {
+      const newEmail = dto.email.trim();
+      const taken = await this.db.user.findFirst({ where: { email: newEmail } });
+      if (taken) {
+        throw new BadRequestException('Email already in use by another account');
+      }
+
+      const otpRecord = await this.db.otp.findUnique({
+        where: { type_target: { type: 'EMAIL', target: newEmail } },
+      });
+      if (!otpRecord || !otpRecord.verified || otpRecord.expiresAt < new Date()) {
+        throw new BadRequestException('Email OTP verification required');
+      }
+
+      data.email = newEmail;
+    }
+
+    if (dto.mobile && dto.mobile.trim() !== existing.mobile) {
+      const newMobile = dto.mobile.trim();
+      const taken = await this.db.user.findFirst({ where: { mobile: newMobile } });
+      if (taken) {
+        throw new BadRequestException('Mobile number already in use by another account');
+      }
+
+      const otpRecord = await this.db.otp.findUnique({
+        where: { type_target: { type: 'MOBILE', target: newMobile } },
+      });
+      if (!otpRecord || !otpRecord.verified || otpRecord.expiresAt < new Date()) {
+        throw new BadRequestException('Mobile OTP verification required');
+      }
+
+      data.mobile = newMobile;
+      data.mobileVerified = true;
+    }
+
+    return this.db.user.update({
+      where: { id: userId },
+      data,
       select: SAFE_USER_SELECT,
     });
   }

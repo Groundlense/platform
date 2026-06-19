@@ -21,6 +21,7 @@ const create_user_dto_1 = require("./dto/create-user.dto");
 const common_3 = require("@nestjs/common");
 const update_user_status_dto_1 = require("./dto/update-user-status.dto");
 const reset_pin_dto_1 = require("./dto/reset-pin.dto");
+const update_profile_dto_1 = require("./dto/update-profile.dto");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 const permissions_guard_1 = require("../auth/guards/permissions.guard");
 const permissions_decorator_1 = require("../auth/decorators/permissions.decorator");
@@ -44,6 +45,9 @@ let UsersController = class UsersController {
     }
     resetPin(userId, dto, user) {
         return this.usersService.resetPin(userId, dto.pin, user);
+    }
+    updateProfile(userId, dto, user) {
+        return this.usersService.updateProfile(userId, dto, user);
     }
 };
 exports.UsersController = UsersController;
@@ -93,6 +97,15 @@ __decorate([
     __metadata("design:paramtypes", [String, reset_pin_dto_1.ResetPinDto, Object]),
     __metadata("design:returntype", void 0)
 ], UsersController.prototype, "resetPin", null);
+__decorate([
+    (0, common_3.Patch)(':id/profile'),
+    __param(0, (0, common_3.Param)('id')),
+    __param(1, (0, common_2.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_profile_dto_1.UpdateProfileDto, Object]),
+    __metadata("design:returntype", void 0)
+], UsersController.prototype, "updateProfile", null);
 exports.UsersController = UsersController = __decorate([
     (0, swagger_1.ApiTags)('Users'),
     (0, swagger_1.ApiBearerAuth)(),

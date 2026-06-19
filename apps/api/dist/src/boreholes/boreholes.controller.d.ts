@@ -34,7 +34,22 @@ export declare class BoreholesController {
         rigType: string | null;
         startDepth: import("@prisma/client/runtime/library").Decimal | null;
     }>;
-    findByProject(projectId: string, user: any): Promise<{
+    findByProject(projectId: string, user: any): Promise<({
+        team: {
+            id: string;
+            organizationId: string;
+            createdAt: Date;
+            updatedAt: Date;
+            name: string;
+            isActive: boolean;
+            code: string;
+            description: string | null;
+            projectId: string | null;
+            teamPrefix: string | null;
+            supervisorUserId: string | null;
+            notificationSent: boolean;
+        } | null;
+    } & {
         id: string;
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
@@ -57,7 +72,7 @@ export declare class BoreholesController {
         method: import("@prisma/client").$Enums.BoringMethod | null;
         rigType: string | null;
         startDepth: import("@prisma/client/runtime/library").Decimal | null;
-    }[]>;
+    })[]>;
     findOne(id: string, user: any): Promise<({
         project: {
             id: string;

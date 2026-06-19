@@ -1,6 +1,6 @@
 import { getToken } from "@/lib/session";
 import { getCurrentUser } from "@/app/actions/auth";
-import { getProjects, getDashboardSummary, getOrganizations } from "@/lib/api/endpoints";
+import { getProjects, getDashboardSummary, getOrganizations, getUsers } from "@/lib/api/endpoints";
 import DashboardClient from "@/components/dashboard/DashboardClient";
 import type { Metadata } from "next";
 
@@ -17,12 +17,14 @@ export default async function DashboardPage() {
   let summary = { projects: 0, boreholes: 0, intervals: 0, samples: 0, media: 0 };
   let geotechOrgs: any[] = [];
   let epcOrgs: any[] = [];
+  let orgUsers: any[] = [];
 
   if (token) {
     try {
-      [projects, summary] = await Promise.all([
+      [projects, summary, orgUsers] = await Promise.all([
         getProjects(token),
         getDashboardSummary(token),
+        getUsers(token).catch(() => []),
       ]);
     } catch (err) {
       console.error("Dashboard fetch error:", err);
@@ -49,6 +51,7 @@ export default async function DashboardPage() {
       orgType={orgType}
       geotechOrgs={geotechOrgs}
       epcOrgs={epcOrgs}
+      orgUsers={orgUsers}
     />
   );
 }

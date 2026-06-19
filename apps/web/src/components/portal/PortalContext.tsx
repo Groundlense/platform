@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, ReactNode } from "react";
 
-type PortalTab = "setup" | "monitor" | "review" | "lab" | "report";
+type PortalTab = "setup" | "monitor" | "review" | "lab" | "report" | "settings" | "requests";
 
 interface PortalContextType {
   activeTab: PortalTab;

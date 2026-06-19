@@ -124,6 +124,19 @@ let TeamsService = class TeamsService {
             abandoned: boreholes.filter((b) => b.status === 'ABANDONED').length,
         };
     }
+    async deleteTeam(teamId, actor) {
+        await this.assertTeamAccess(actor, teamId);
+        await this.db.borehole.updateMany({
+            where: { teamId },
+            data: { teamId: null },
+        });
+        await this.db.teamMember.deleteMany({
+            where: { teamId },
+        });
+        return this.db.team.delete({
+            where: { id: teamId },
+        });
+    }
 };
 exports.TeamsService = TeamsService;
 exports.TeamsService = TeamsService = __decorate([

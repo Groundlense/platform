@@ -106,4 +106,18 @@ export declare class TeamsService {
         completed: number;
         abandoned: number;
     }>;
+    deleteTeam(teamId: string, actor: any): Promise<{
+        id: string;
+        organizationId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        name: string;
+        isActive: boolean;
+        code: string;
+        description: string | null;
+        projectId: string | null;
+        teamPrefix: string | null;
+        supervisorUserId: string | null;
+        notificationSent: boolean;
+    }>;
 }

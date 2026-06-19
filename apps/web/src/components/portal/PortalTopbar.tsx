@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { getInitials } from "@/lib/utils";
 import NotificationBell from "../notifications/NotificationBell";
+import { usePortalTab } from "./PortalContext";
 
 interface PortalTopbarProps {
   project: any;
@@ -12,6 +13,7 @@ interface PortalTopbarProps {
 /* Matches portal .topbar: height 50px, gap 14px */
 export default function PortalTopbar({ project, user }: PortalTopbarProps) {
   const router = useRouter();
+  const { activeTab, setActiveTab } = usePortalTab();
   const firstName = (user?.firstName as string) || "";
   const lastName = (user?.lastName as string) || "";
   const initials = getInitials(firstName, lastName);
@@ -52,6 +54,19 @@ export default function PortalTopbar({ project, user }: PortalTopbarProps) {
         {/* Back button — matches .tb-back */}
         <button onClick={() => router.push("/dashboard")} className="text-[10px] bg-transparent border border-border rounded-[5px] text-text-ter cursor-pointer transition-all hover:border-rust-mid hover:text-rust-d" style={{ padding: "4px 9px" }}>
           ← Dashboard
+        </button>
+
+        {/* Settings button */}
+        <button
+          onClick={() => setActiveTab("settings")}
+          className={`text-[10px] bg-transparent border rounded-[5px] cursor-pointer transition-all hover:border-rust-mid hover:text-rust-d
+            ${activeTab === "settings"
+              ? "border-rust-mid text-rust-d font-semibold bg-[rgba(153,60,29,.1)]"
+              : "border-border text-text-ter hover:text-text-sec"
+            }`}
+          style={{ padding: "4px 9px" }}
+        >
+          ⚙ Settings
         </button>
       </div>
     </div>

@@ -7,10 +7,12 @@ import NotificationBell from "../notifications/NotificationBell";
 
 interface DashboardTopbarProps {
   user: Record<string, unknown> | null;
+  showSettings: boolean;
+  setShowSettings: (val: boolean) => void;
 }
 
 /* Matches .topbar: height 48px, bg-surface, border-bottom, padding 0 16px, gap 12px */
-export default function DashboardTopbar({ user }: DashboardTopbarProps) {
+export default function DashboardTopbar({ user, showSettings, setShowSettings }: DashboardTopbarProps) {
   const firstName = (user?.firstName as string) || "";
   const lastName = (user?.lastName as string) || "";
   const orgName = (user as any)?.organization?.name || (user?.organizationId as string) || "";
@@ -58,6 +60,32 @@ export default function DashboardTopbar({ user }: DashboardTopbarProps) {
           </div>
           <span className="text-[11px] text-text-sec">{displayName}</span>
         </div>
+
+        {/* Dashboard button */}
+        <button
+          onClick={() => setShowSettings(false)}
+          className={`text-[10px] bg-transparent border rounded-[5px] cursor-pointer transition-all hover:border-rust-mid hover:text-rust-d flex items-center gap-1
+            ${!showSettings
+              ? "border-rust-mid text-rust-d font-semibold bg-[rgba(153,60,29,.1)]"
+              : "border-border text-text-ter hover:text-text-sec"
+            }`}
+          style={{ padding: "4px 9px" }}
+        >
+          Dashboard
+        </button>
+
+        {/* Settings button */}
+        <button
+          onClick={() => setShowSettings(true)}
+          className={`text-[10px] bg-transparent border rounded-[5px] cursor-pointer transition-all hover:border-rust-mid hover:text-rust-d flex items-center gap-1
+            ${showSettings
+              ? "border-rust-mid text-rust-d font-semibold bg-[rgba(153,60,29,.1)]"
+              : "border-border text-text-ter hover:text-text-sec"
+            }`}
+          style={{ padding: "4px 9px" }}
+        >
+          ⚙ Settings
+        </button>
 
         {/* Sign out — matches .tb-signout */}
         <form action={logoutAction}>

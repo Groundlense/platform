@@ -104,4 +104,18 @@ export declare class TeamsController {
         completed: number;
         abandoned: number;
     }>;
+    deleteTeam(teamId: string, user: any): Promise<{
+        id: string;
+        organizationId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        name: string;
+        isActive: boolean;
+        code: string;
+        description: string | null;
+        projectId: string | null;
+        teamPrefix: string | null;
+        supervisorUserId: string | null;
+        notificationSent: boolean;
+    }>;
 }

@@ -2,6 +2,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { ResetPinDto } from './dto/reset-pin.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 export declare class UsersController {
     private readonly usersService;
     constructor(usersService: UsersService);
@@ -136,6 +137,24 @@ export declare class UsersController {
         })[];
     } | null>;
     resetPin(userId: string, dto: ResetPinDto, user: any): Promise<{
+        id: string;
+        organizationId: string;
+        employeeCode: string | null;
+        firstName: string;
+        lastName: string | null;
+        email: string | null;
+        mobile: string | null;
+        mobileVerified: boolean;
+        status: import("@prisma/client").$Enums.UserStatus;
+        lastLoginAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        userType: string | null;
+        designation: string | null;
+        profilePhotoUrl: string | null;
+        preferredLanguage: string | null;
+    }>;
+    updateProfile(userId: string, dto: UpdateProfileDto, user: any): Promise<{
         id: string;
         organizationId: string;
         employeeCode: string | null;

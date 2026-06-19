@@ -9,6 +9,8 @@ const SIDEBAR_ITEMS = [
   { key: "review" as const, icon: RiCheckDoubleLine, label: "Review" },
   { key: "lab" as const, icon: RiFlaskLine, label: "Lab" },
   { key: "report" as const, icon: RiFileTextLine, label: "Report" },
+  { key: "settings" as const, icon: RiSettingsLine, label: "Settings" },
+  { key: "requests" as const, icon: RiFileTextLine, label: "Requests" },
 ];
 
 /* Matches .sidebar: width 48px, bg-surface, border-right, padding 10px 0, gap 2px */
