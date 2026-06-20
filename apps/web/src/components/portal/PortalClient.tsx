@@ -1042,9 +1042,13 @@ export default function PortalClient({
   const [isVerificationSkipped, setIsVerificationSkipped] = useState(false);
   const [crewMemberAddError, setCrewMemberAddError] = useState("");
 
+  const [otpIsMock, setOtpIsMock] = useState(true);
+  const [otpLoading, setOtpLoading] = useState(false);
+
   const [verifyingUser, setVerifyingUser] = useState<any>(null);
   const [verifyRowOtpCode, setVerifyRowOtpCode] = useState("");
   const [verifyRowOtpSent, setVerifyRowOtpSent] = useState(false);
+  const [verifyRowOtpIsMock, setVerifyRowOtpIsMock] = useState(true);
   const [verifyRowError, setVerifyRowError] = useState("");
   const [verifyRowLoading, setVerifyRowLoading] = useState(false);
 
@@ -1055,10 +1059,12 @@ export default function PortalClient({
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [emailOtpCode, setEmailOtpCode] = useState("");
   const [emailOtpVerified, setEmailOtpVerified] = useState(false);
+  const [emailOtpIsMock, setEmailOtpIsMock] = useState(true);
   
   const [mobileOtpSent, setMobileOtpSent] = useState(false);
   const [mobileOtpCode, setMobileOtpCode] = useState("");
   const [mobileOtpVerified, setMobileOtpVerified] = useState(false);
+  const [mobileOtpIsMock, setMobileOtpIsMock] = useState(true);
   
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsError, setSettingsError] = useState("");
@@ -1092,7 +1098,13 @@ export default function PortalClient({
     setSettingsBusy(false);
     if (res.success) {
       setEmailOtpSent(true);
-      setSettingsSuccess("Email verification OTP sent (simulated code: 123456)");
+      const isMock = res.data?.isMock ?? true;
+      setEmailOtpIsMock(isMock);
+      setSettingsSuccess(
+        isMock
+          ? "Email verification OTP sent (simulated code: 123456)"
+          : "Email verification OTP sent successfully. Please check your inbox."
+      );
     } else {
       setSettingsError(res.error || "Failed to send email OTP.");
     }
@@ -1101,10 +1113,6 @@ export default function PortalClient({
   const handleVerifyEmailOtp = async () => {
     if (!emailOtpCode.trim()) {
       setSettingsError("Please enter the verification code.");
-      return;
-    }
-    if (emailOtpCode.trim() !== "123456") {
-      setSettingsError("Invalid OTP code. Please enter 123456.");
       return;
     }
     setSettingsBusy(true);
@@ -1139,7 +1147,13 @@ export default function PortalClient({
     setSettingsBusy(false);
     if (res.success) {
       setMobileOtpSent(true);
-      setSettingsSuccess("Mobile verification OTP sent (simulated code: 123456)");
+      const isMock = res.data?.isMock ?? true;
+      setMobileOtpIsMock(isMock);
+      setSettingsSuccess(
+        isMock
+          ? "Mobile verification OTP sent (simulated code: 123456)"
+          : "Mobile verification OTP sent successfully. Please check your device."
+      );
     } else {
       setSettingsError(res.error || "Failed to send mobile OTP.");
     }
@@ -1148,10 +1162,6 @@ export default function PortalClient({
   const handleVerifyMobileOtp = async () => {
     if (!mobileOtpCode.trim()) {
       setSettingsError("Please enter the verification code.");
-      return;
-    }
-    if (mobileOtpCode.trim() !== "123456") {
-      setSettingsError("Invalid OTP code. Please enter 123456.");
       return;
     }
     setSettingsBusy(true);
@@ -1262,7 +1272,13 @@ export default function PortalClient({
     setVerifyRowLoading(false);
     if (res.success) {
       setVerifyRowOtpSent(true);
-      alert("OTP sent to mobile number (simulated OTP: 123456)");
+      const isMock = res.data?.isMock ?? true;
+      setVerifyRowOtpIsMock(isMock);
+      alert(
+        isMock
+          ? "OTP sent to mobile number (simulated OTP: 123456)"
+          : "OTP sent successfully to mobile number. Please check your device."
+      );
     } else {
       setVerifyRowError(res.error || "Failed to send OTP.");
     }
@@ -1271,10 +1287,6 @@ export default function PortalClient({
   const handleVerifyRowOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!verifyingUser || !verifyingUser.mobile) return;
-    if (verifyRowOtpCode !== "123456") {
-      setVerifyRowError("Invalid OTP. Please type 123456.");
-      return;
-    }
     setVerifyRowLoading(true);
     setVerifyRowError("");
     const res = await verifyOtpAction({
@@ -1294,6 +1306,52 @@ export default function PortalClient({
       router.refresh();
     } else {
       setVerifyRowError(res.error || "Failed to verify OTP.");
+    }
+  };
+
+  const handleSendNewWorkerOtp = async () => {
+    if (!newWorkerMobile.trim()) return;
+    setOtpLoading(true);
+    setCrewMemberAddError("");
+    const res = await sendOtpAction({
+      type: "MOBILE",
+      target: newWorkerMobile.trim(),
+    });
+    setOtpLoading(false);
+    if (res.success) {
+      setOtpSent(true);
+      setOtpVerified(false);
+      const isMock = res.data?.isMock ?? true;
+      setOtpIsMock(isMock);
+      alert(
+        isMock
+          ? "OTP sent to mobile number (simulated OTP: 123456)"
+          : "OTP sent successfully to mobile number. Please check your device."
+      );
+    } else {
+      setCrewMemberAddError(res.error || "Failed to send OTP.");
+    }
+  };
+
+  const handleVerifyNewWorkerOtp = async () => {
+    if (!otpCode.trim()) {
+      setCrewMemberAddError("Please enter the verification code.");
+      return;
+    }
+    setOtpLoading(true);
+    setCrewMemberAddError("");
+    const res = await verifyOtpAction({
+      type: "MOBILE",
+      target: newWorkerMobile.trim(),
+      code: otpCode.trim(),
+    });
+    setOtpLoading(false);
+    if (res.success) {
+      setOtpVerified(true);
+      setCrewMemberAddError("");
+      alert("Mobile number verified successfully!");
+    } else {
+      setCrewMemberAddError(res.error || "Failed to verify OTP.");
     }
   };
 
@@ -4741,14 +4799,10 @@ export default function PortalClient({
                         <button
                           type="button"
                           className="btn btn-b text-[10px] py-1 px-3"
-                          onClick={() => {
-                            if (!newWorkerMobile.trim()) return;
-                            setOtpSent(true);
-                            setOtpVerified(false);
-                            alert("OTP sent to mobile number (simulated OTP: 123456)");
-                          }}
+                          onClick={handleSendNewWorkerOtp}
+                          disabled={otpLoading}
                         >
-                          {otpSent ? "Resend OTP" : "Send OTP"}
+                          {otpLoading ? "Sending..." : otpSent ? "Resend OTP" : "Send OTP"}
                         </button>
                         <button
                           type="button"
@@ -4778,23 +4832,17 @@ export default function PortalClient({
                         className="fi flex-1"
                         value={otpCode}
                         onChange={(e) => setOtpCode(e.target.value)}
-                        placeholder="Enter 123456"
+                        placeholder={otpIsMock ? "Enter 123456" : "Enter 6-digit OTP"}
                         maxLength={6}
                         required
                       />
                       <button
                         type="button"
                         className="btn btn-g text-[10px] py-1 px-3 self-center"
-                        onClick={() => {
-                          if (otpCode === "123456") {
-                            setOtpVerified(true);
-                            setCrewMemberAddError("");
-                          } else {
-                            setCrewMemberAddError("Invalid OTP. Please type 123456.");
-                          }
-                        }}
+                        onClick={handleVerifyNewWorkerOtp}
+                        disabled={otpLoading}
                       >
-                        Verify
+                        {otpLoading ? "Verifying..." : "Verify"}
                       </button>
                     </div>
                   </div>
@@ -4923,7 +4971,7 @@ export default function PortalClient({
                         className="fi flex-1"
                         value={verifyRowOtpCode}
                         onChange={(e) => setVerifyRowOtpCode(e.target.value)}
-                        placeholder="Enter 123456"
+                        placeholder={verifyRowOtpIsMock ? "Enter 123456" : "Enter 6-digit OTP"}
                         maxLength={6}
                         required
                         disabled={verifyRowLoading}

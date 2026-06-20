@@ -41,10 +41,12 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [emailOtpCode, setEmailOtpCode] = useState("");
   const [emailOtpVerified, setEmailOtpVerified] = useState(false);
+  const [emailOtpIsMock, setEmailOtpIsMock] = useState(true);
   
   const [mobileOtpSent, setMobileOtpSent] = useState(false);
   const [mobileOtpCode, setMobileOtpCode] = useState("");
   const [mobileOtpVerified, setMobileOtpVerified] = useState(false);
+  const [mobileOtpIsMock, setMobileOtpIsMock] = useState(true);
   
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsError, setSettingsError] = useState("");
@@ -78,7 +80,13 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
     setSettingsBusy(false);
     if (res.success) {
       setEmailOtpSent(true);
-      setSettingsSuccess("Email verification OTP sent (simulated code: 123456)");
+      const isMock = res.data?.isMock ?? true;
+      setEmailOtpIsMock(isMock);
+      setSettingsSuccess(
+        isMock
+          ? "Email verification OTP sent (simulated code: 123456)"
+          : "Email verification OTP sent successfully. Please check your inbox."
+      );
     } else {
       setSettingsError(res.error || "Failed to send email OTP.");
     }
@@ -87,10 +95,6 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
   const handleVerifyEmailOtp = async () => {
     if (!emailOtpCode.trim()) {
       setSettingsError("Please enter the verification code.");
-      return;
-    }
-    if (emailOtpCode.trim() !== "123456") {
-      setSettingsError("Invalid OTP code. Please enter 123456.");
       return;
     }
     setSettingsBusy(true);
@@ -125,7 +129,13 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
     setSettingsBusy(false);
     if (res.success) {
       setMobileOtpSent(true);
-      setSettingsSuccess("Mobile verification OTP sent (simulated code: 123456)");
+      const isMock = res.data?.isMock ?? true;
+      setMobileOtpIsMock(isMock);
+      setSettingsSuccess(
+        isMock
+          ? "Mobile verification OTP sent (simulated code: 123456)"
+          : "Mobile verification OTP sent successfully. Please check your device."
+      );
     } else {
       setSettingsError(res.error || "Failed to send mobile OTP.");
     }
@@ -134,10 +144,6 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
   const handleVerifyMobileOtp = async () => {
     if (!mobileOtpCode.trim()) {
       setSettingsError("Please enter the verification code.");
-      return;
-    }
-    if (mobileOtpCode.trim() !== "123456") {
-      setSettingsError("Invalid OTP code. Please enter 123456.");
       return;
     }
     setSettingsBusy(true);

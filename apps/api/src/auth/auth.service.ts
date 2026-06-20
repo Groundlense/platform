@@ -492,21 +492,33 @@ export class AuthService {
       },
     });
 
+    let isMock = true;
     if (type === 'EMAIL') {
+      isMock = !(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
       await this.sendEmailOtp(target, code);
     } else if (type === 'MOBILE') {
+      isMock = !(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
       await this.sendSmsOtp(target, code);
     }
 
     return {
       success: true,
       message: `OTP sent successfully to ${target}`,
+      isMock,
     };
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
     const { type, target, code } = dto;
-    if (code === '123456') {
+
+    let isMock = true;
+    if (type === 'MOBILE') {
+      isMock = !(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
+    } else if (type === 'EMAIL') {
+      isMock = !(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+    }
+
+    if (code === '123456' && isMock) {
       if (type === 'MOBILE') {
         await this.db.user.updateMany({
           where: { mobile: target },
@@ -515,9 +527,10 @@ export class AuthService {
       }
       return {
         success: true,
-        message: 'OTP verified successfully',
+        message: 'OTP verified successfully (mock bypass)',
       };
     }
+
     const record = await this.db.otp.findUnique({
       where: {
         type_target: { type, target },
