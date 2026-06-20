@@ -247,7 +247,12 @@ export default function LoginForm({
         setSignupError(res.error);
       } else {
         setEmailOtpSent(true);
-        alert("OTP sent successfully. Please check your email inbox.");
+        const isMock = res.isMock ?? true;
+        alert(
+          isMock
+            ? "OTP sent successfully (simulated code: 123456). Please check your email inbox."
+            : "OTP sent successfully. Please check your email inbox."
+        );
       }
     } catch {
       setSignupError("Failed to send email OTP.");
@@ -290,7 +295,12 @@ export default function LoginForm({
         setSignupError(res.error);
       } else {
         setMobileOtpSent(true);
-        alert("OTP sent successfully. Please check your mobile device.");
+        const isMock = res.isMock ?? true;
+        alert(
+          isMock
+            ? "OTP sent successfully (simulated code: 123456). Please check your mobile device."
+            : "OTP sent successfully. Please check your mobile device."
+        );
       }
     } catch {
       setSignupError("Failed to send mobile OTP.");
