@@ -23,6 +23,23 @@ export declare class SyncService {
     private applySampleCreate;
     private resolveInterval;
     private applyWaterLevelCreate;
-    getConflicts(deviceId: string, user: any): Promise<any>;
+    getConflicts(deviceId: string, user: any): Promise<({
+        resolvedBy: {
+            firstName: string;
+            lastName: string | null;
+            id: string;
+        } | null;
+    } & {
+        id: string;
+        entityType: import("@prisma/client").$Enums.SyncEntityType;
+        entityId: string;
+        deviceId: string;
+        localVersion: number;
+        serverVersion: number;
+        conflictDetails: import("@prisma/client/runtime/library").JsonValue;
+        resolution: string | null;
+        resolvedByUserId: string | null;
+        resolvedAt: Date | null;
+    })[]>;
     private applyPhotoCreate;
 }

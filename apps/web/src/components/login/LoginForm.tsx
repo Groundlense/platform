@@ -191,8 +191,8 @@ export default function LoginForm({
         if (res.exists) {
           setJoinMode(true);
           setJoinOrgDetails(res);
-          setOrgName(res.legalName);
-          setOrgCity(res.city || "");
+          setOrgName("");
+          setOrgCity("");
           setOrgState(res.state || "");
           setGstVerified(true);
           // Set default requested role based on org type
@@ -200,8 +200,8 @@ export default function LoginForm({
         } else {
           setJoinMode(false);
           setJoinOrgDetails(null);
-          setOrgName(res.legalName);
-          setOrgCity(res.city || "");
+          setOrgName("");
+          setOrgCity("");
           setOrgState(res.state || "");
           setGstVerified(true);
         }
@@ -609,10 +609,10 @@ export default function LoginForm({
             </div>
           )}
 
-          <FormField label="Company name" placeholder="Company legal name" value={orgName} onChange={setOrgName} disabled={gstVerified} />
+          <FormField label="Company name" placeholder="Company legal name" value={orgName} onChange={setOrgName} disabled={false} />
           <div className="grid grid-cols-2 gap-[9px]">
-            <FormField label="City" placeholder="City" value={orgCity} onChange={setOrgCity} disabled={gstVerified} />
-            <FormField label="State" placeholder="State" value={orgState} onChange={setOrgState} disabled={gstVerified} />
+            <FormField label="City" placeholder="City" value={orgCity} onChange={setOrgCity} disabled={false} />
+            <FormField label="State" placeholder="State" value={orgState} onChange={setOrgState} disabled={false} />
           </div>
 
           {signupError && (

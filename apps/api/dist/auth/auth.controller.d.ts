@@ -40,11 +40,11 @@ export declare class AuthController {
     verifyGst(gstin: string): Promise<{
         success: boolean;
         exists: boolean;
-        organizationId: any;
-        legalName: any;
-        state: any;
-        city: any;
-        type: any;
+        organizationId: string;
+        legalName: string;
+        state: string | null;
+        city: string | null;
+        type: import("@prisma/client").$Enums.OrganizationType;
         pan?: undefined;
     } | {
         success: boolean;
@@ -58,15 +58,15 @@ export declare class AuthController {
     }>;
     uploadLogo(file: Express.Multer.File): {
         success: boolean;
-        filename: any;
+        filename: string;
         url: string;
     };
-    getLogo(filename: string, res: Response): any;
+    getLogo(filename: string, res: Response): void;
     getInviteDetails(token: string): Promise<{
-        email: any;
-        organizationName: any;
-        roleCode: any;
-        roleName: any;
+        email: string | null;
+        organizationName: string;
+        roleCode: string;
+        roleName: string;
     }>;
     acceptInvite(dto: AcceptInviteDto): Promise<{
         accessToken: string;
@@ -75,7 +75,7 @@ export declare class AuthController {
     joinRequest(dto: JoinRequestDto): Promise<{
         success: boolean;
         message: string;
-        employeeCode: any;
+        employeeCode: string | null;
     }>;
     forgotPassword(dto: ForgotPasswordDto): Promise<{
         success: boolean;

@@ -39,8 +39,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
-  @Permissions('PROJECT_CREATE')
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @UseGuards(JwtAuthGuard)
   @Post()
   create(@Body() dto: CreateProjectDto, @CurrentUser() user: any) {
     return this.projectsService.create(dto, user.id, user.organizationId);

@@ -8,7 +8,34 @@ export declare class NotificationsService {
         title: string;
         message: string;
         type: string;
-    }): Promise<any>;
-    findAll(userId: string, organizationId?: string): Promise<any>;
-    markAsRead(id: string, userId: string, organizationId?: string): Promise<any>;
+    }): Promise<{
+        type: string;
+        title: string;
+        organizationId: string | null;
+        id: string;
+        createdAt: Date;
+        userId: string | null;
+        message: string;
+        read: boolean;
+    }>;
+    findAll(userId: string, organizationId?: string): Promise<{
+        type: string;
+        title: string;
+        organizationId: string | null;
+        id: string;
+        createdAt: Date;
+        userId: string | null;
+        message: string;
+        read: boolean;
+    }[]>;
+    markAsRead(id: string, userId: string, organizationId?: string): Promise<{
+        type: string;
+        title: string;
+        organizationId: string | null;
+        id: string;
+        createdAt: Date;
+        userId: string | null;
+        message: string;
+        read: boolean;
+    }>;
 }

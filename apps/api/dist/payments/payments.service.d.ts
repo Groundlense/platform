@@ -6,7 +6,55 @@ export declare class PaymentsService {
     private readonly db;
     private readonly access;
     constructor(db: DatabaseService, access: ProjectAccessService);
-    create(user: any, dto: CreatePaymentDto): Promise<any>;
-    verify(paymentId: string, dto: VerifyPaymentDto, user: any): Promise<any>;
-    findByProject(projectId: string, user: any): Promise<any>;
+    create(user: any, dto: CreatePaymentDto): Promise<{
+        id: string;
+        status: import("@prisma/client").$Enums.PaymentStatus;
+        createdAt: Date;
+        initiatedByUserId: string;
+        projectId: string;
+        companyId: string;
+        planType: string;
+        boringsPurchased: number;
+        amountPaid: import("@prisma/client/runtime/library").Decimal;
+        razorpayOrderId: string;
+        razorpayPaymentId: string | null;
+        invoiceUrl: string | null;
+        paidAt: Date | null;
+    }>;
+    verify(paymentId: string, dto: VerifyPaymentDto, user: any): Promise<{
+        id: string;
+        status: import("@prisma/client").$Enums.PaymentStatus;
+        createdAt: Date;
+        initiatedByUserId: string;
+        projectId: string;
+        companyId: string;
+        planType: string;
+        boringsPurchased: number;
+        amountPaid: import("@prisma/client/runtime/library").Decimal;
+        razorpayOrderId: string;
+        razorpayPaymentId: string | null;
+        invoiceUrl: string | null;
+        paidAt: Date | null;
+    }>;
+    findByProject(projectId: string, user: any): Promise<({
+        initiatedBy: {
+            firstName: string;
+            lastName: string | null;
+            id: string;
+        };
+    } & {
+        id: string;
+        status: import("@prisma/client").$Enums.PaymentStatus;
+        createdAt: Date;
+        initiatedByUserId: string;
+        projectId: string;
+        companyId: string;
+        planType: string;
+        boringsPurchased: number;
+        amountPaid: import("@prisma/client/runtime/library").Decimal;
+        razorpayOrderId: string;
+        razorpayPaymentId: string | null;
+        invoiceUrl: string | null;
+        paidAt: Date | null;
+    })[]>;
 }
