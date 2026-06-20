@@ -136,7 +136,7 @@ export default function LoginForm({
       const fd = new FormData();
       fd.set("email", forgotEmail.trim());
       fd.set("code", resetCode.trim());
-      fd.set("newPassword", newPassword);
+      fd.set("newPassword", btoa(newPassword));
 
       const res = await resetPasswordAction(fd);
       if (res?.error) {
@@ -335,7 +335,6 @@ export default function LoginForm({
       return;
     }
 
-    setSignupLoading(true);
     try {
       const fd = new FormData();
       fd.set("gstin", gstin.trim());
@@ -343,7 +342,7 @@ export default function LoginForm({
       if (lastName.trim()) fd.set("lastName", lastName.trim());
       fd.set("email", signupEmail.trim());
       if (signupMobile.trim()) fd.set("mobile", signupMobile.trim());
-      fd.set("password", signupPassword);
+      fd.set("password", btoa(signupPassword));
       fd.set("roleCode", requestedRole);
 
       const result = await joinRequestAction(fd);
@@ -388,11 +387,13 @@ export default function LoginForm({
       if (lastName.trim()) fd.set("lastName", lastName.trim());
       fd.set("email", signupEmail.trim());
       if (signupMobile.trim()) fd.set("mobile", signupMobile.trim());
-      fd.set("password", signupPassword);
+      fd.set("password", btoa(signupPassword));
 
       const result = await registerAction(fd);
       if (result?.error) {
         setSignupError(result.error);
+      } else if (result?.success) {
+        window.location.href = "/register/members";
       }
     } catch {
       setSignupError("Something went wrong while creating your account. Please try again.");
@@ -413,12 +414,14 @@ export default function LoginForm({
     try {
       const formData = new FormData();
       formData.set("identifier", email.trim());
-      formData.set("password", password);
+      formData.set("password", btoa(password));
       if (redirectTo) formData.set("redirect", redirectTo);
 
       const result = await loginAction(formData);
       if (result?.error) {
         setError(result.error);
+      } else if (result?.success) {
+        window.location.href = redirectTo || "/dashboard";
       }
     } catch {
       setError("Something went wrong while signing in. Please try again.");

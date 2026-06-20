@@ -70,7 +70,7 @@ function InvitePageContent() {
       fd.set("token", token || "");
       fd.set("firstName", firstName.trim());
       fd.set("lastName", lastName.trim());
-      fd.set("password", password);
+      fd.set("password", btoa(password));
 
       const res = await acceptInviteAction(fd);
       if (res.error) {

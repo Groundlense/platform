@@ -14,7 +14,8 @@ function safeRedirectTarget(raw: unknown): string {
 
 export async function loginAction(formData: FormData) {
   const identifier = (formData.get("identifier") as string | null)?.trim();
-  const password = formData.get("password") as string | null;
+  const passwordEncoded = formData.get("password") as string | null;
+  const password = passwordEncoded ? Buffer.from(passwordEncoded, "base64").toString("utf-8") : null;
   const redirectTo = safeRedirectTarget(formData.get("redirect"));
 
   if (!identifier || !password) {
@@ -32,6 +33,7 @@ export async function loginAction(formData: FormData) {
     const user = await apiGet<Record<string, unknown>>("/auth/me", result.accessToken);
 
     await setSession(result.accessToken, result.refreshToken, user);
+    return { success: true };
   } catch (err: unknown) {
     if (err instanceof ApiError) {
       return {
@@ -43,10 +45,6 @@ export async function loginAction(formData: FormData) {
     }
     return { error: "Unable to reach the server. Please try again." };
   }
-
-  // redirect() is called outside the try/catch so its control-flow error
-  // (NEXT_REDIRECT) is never swallowed.
-  redirect(redirectTo);
 }
 
 /**
@@ -63,7 +61,8 @@ export async function registerAction(formData: FormData) {
   const lastName = (formData.get("lastName") as string | null)?.trim();
   const email = (formData.get("email") as string | null)?.trim();
   const mobile = (formData.get("mobile") as string | null)?.trim();
-  const password = formData.get("password") as string | null;
+  const passwordEncoded = formData.get("password") as string | null;
+  const password = passwordEncoded ? Buffer.from(passwordEncoded, "base64").toString("utf-8") : null;
 
   if (!orgName) return { error: "Company name is required." };
   if (!orgType) return { error: "Organization type is required." };
@@ -97,6 +96,7 @@ export async function registerAction(formData: FormData) {
     // Same session bootstrap as loginAction
     const user = await apiGet<Record<string, unknown>>("/auth/me", result.accessToken);
     await setSession(result.accessToken, result.refreshToken, user);
+    return { success: true };
   } catch (err: unknown) {
     if (err instanceof ApiError) {
       // 409 carries the duplicate email / GSTIN message from the server
@@ -104,8 +104,6 @@ export async function registerAction(formData: FormData) {
     }
     return { error: "Unable to reach the server. Please try again." };
   }
-
-  redirect("/register/members");
 }
 
 export async function logoutAction() {
@@ -181,7 +179,8 @@ export async function joinRequestAction(fd: FormData) {
   const lastName = fd.get("lastName") as string;
   const email = fd.get("email") as string;
   const mobile = fd.get("mobile") as string;
-  const password = fd.get("password") as string;
+  const passwordEncoded = fd.get("password") as string;
+  const password = passwordEncoded ? Buffer.from(passwordEncoded, "base64").toString("utf-8") : "";
   const roleCode = fd.get("roleCode") as string;
 
   try {
@@ -211,7 +210,8 @@ export async function acceptInviteAction(fd: FormData) {
   const token = fd.get("token") as string;
   const firstName = fd.get("firstName") as string;
   const lastName = fd.get("lastName") as string;
-  const password = fd.get("password") as string;
+  const passwordEncoded = fd.get("password") as string;
+  const password = passwordEncoded ? Buffer.from(passwordEncoded, "base64").toString("utf-8") : "";
 
   try {
     const result = await apiPost<{ accessToken: string; refreshToken: string }>(
@@ -282,7 +282,8 @@ export async function forgotPasswordAction(email: string) {
 export async function resetPasswordAction(fd: FormData) {
   const email = fd.get("email") as string;
   const code = fd.get("code") as string;
-  const newPassword = fd.get("newPassword") as string;
+  const newPasswordEncoded = fd.get("newPassword") as string;
+  const newPassword = newPasswordEncoded ? Buffer.from(newPasswordEncoded, "base64").toString("utf-8") : "";
 
   try {
     return await apiPost<any>("/auth/reset-password", { email, code, newPassword });
