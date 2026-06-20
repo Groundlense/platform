@@ -13,6 +13,7 @@ const TEAM_MEMBER_USER_SELECT = {
   employeeCode: true,
   email: true,
   mobile: true,
+  mobileVerified: true,
   status: true,
   designation: true,
   userType: true,
@@ -143,4 +144,25 @@ export class TeamsService {
       abandoned: boreholes.filter((b) => b.status === 'ABANDONED').length,
     };
   }
+
+  async deleteTeam(teamId: string, actor: any) {
+    await this.assertTeamAccess(actor, teamId);
+
+    // Unassign all associated boreholes
+    await this.db.borehole.updateMany({
+      where: { teamId },
+      data: { teamId: null },
+    });
+
+    // Delete team memberships
+    await this.db.teamMember.deleteMany({
+      where: { teamId },
+    });
+
+    // Delete the team record itself
+    return this.db.team.delete({
+      where: { id: teamId },
+    });
+  }
 }
+

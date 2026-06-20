@@ -1,6 +1,6 @@
 import { getToken } from "@/lib/session";
 import { getCurrentUser } from "@/app/actions/auth";
-import { getProjects, getDashboardSummary, getOrganizations } from "@/lib/api/endpoints";
+import { getProjects, getDashboardSummary, getOrganizations, getUsers } from "@/lib/api/endpoints";
 import DashboardClient from "@/components/dashboard/DashboardClient";
 import type { Metadata } from "next";
 
@@ -16,20 +16,26 @@ export default async function DashboardPage() {
   let projects: any[] = [];
   let summary = { projects: 0, boreholes: 0, intervals: 0, samples: 0, media: 0 };
   let geotechOrgs: any[] = [];
+  let epcOrgs: any[] = [];
+  let orgUsers: any[] = [];
 
   if (token) {
     try {
-      [projects, summary] = await Promise.all([
+      [projects, summary, orgUsers] = await Promise.all([
         getProjects(token),
         getDashboardSummary(token),
+        getUsers(token).catch(() => []),
       ]);
     } catch (err) {
       console.error("Dashboard fetch error:", err);
     }
 
-    // Org directory for the new-project geotech partner picker — degrade to []
+    // Org directory for the new-project partner pickers — degrade to []
     try {
-      geotechOrgs = await getOrganizations(token, "GEOTECH_CONTRACTOR");
+      [geotechOrgs, epcOrgs] = await Promise.all([
+        getOrganizations(token, "GEOTECH_CONTRACTOR"),
+        getOrganizations(token, "EPC_CONTRACTOR"),
+      ]);
     } catch (err) {
       console.error("Organization directory fetch error:", err);
     }
@@ -44,6 +50,8 @@ export default async function DashboardPage() {
       user={user}
       orgType={orgType}
       geotechOrgs={geotechOrgs}
+      epcOrgs={epcOrgs}
+      orgUsers={orgUsers}
     />
   );
 }

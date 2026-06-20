@@ -254,3 +254,37 @@ export async function createUser(data: Record<string, unknown>, token: string) {
 export async function getNablLabs(token: string) {
   return apiGet<any[]>("/nabl-labs", token);
 }
+
+// ═══════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════
+export async function getNotifications(token: string) {
+  return apiGet<any[]>("/notifications", token);
+}
+
+export async function markNotificationAsRead(id: string, token: string) {
+  return apiPatch<any>(`/notifications/${id}/read`, {}, token);
+}
+
+// ═══════════════════════════════════════
+// GLOBAL SEARCH & PROJECT JOIN REQUESTS
+// ═══════════════════════════════════════
+export async function globalSearchProjects(query: string, token: string) {
+  return apiGet<any[]>(`/projects/global-search?query=${encodeURIComponent(query)}`, token);
+}
+
+export async function requestJoinProject(projectId: string, token: string) {
+  return apiPost<any>(`/projects/${projectId}/join-request`, {}, token);
+}
+
+export async function getPendingProjectJoinRequests(token: string) {
+  return apiGet<any[]>("/projects/join-requests/pending", token);
+}
+
+export async function approveProjectJoinRequest(requestId: string, token: string) {
+  return apiPost<any>(`/projects/join-requests/${requestId}/approve`, {}, token);
+}
+
+export async function rejectProjectJoinRequest(requestId: string, token: string) {
+  return apiPost<any>(`/projects/join-requests/${requestId}/reject`, {}, token);
+}

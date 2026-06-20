@@ -73,4 +73,12 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   preferredLanguage?: string;
+
+  @ApiPropertyOptional({
+    description: 'Mobile number of the user',
+    example: '9876543210',
+  })
+  @IsOptional()
+  @IsString()
+  mobile?: string;
 }

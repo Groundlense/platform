@@ -19,6 +19,7 @@ interface NewProjectModalProps {
   open: boolean;
   onClose: () => void;
   geotechOrgs: GeotechOrg[];
+  epcOrgs: GeotechOrg[];
   user: Record<string, unknown> | null;
   orgType: string | null;
 }
@@ -33,7 +34,7 @@ const INDIAN_STATES = [
 const STEP_LABELS = ["Project details", "Boring setup", "Link parties", "Payment"];
 
 /* Matches .modal-overlay + .modal: 500px wide, rounded-xl, max-h 85vh */
-export default function NewProjectModal({ open, onClose, geotechOrgs, user, orgType }: NewProjectModalProps) {
+export default function NewProjectModal({ open, onClose, geotechOrgs, epcOrgs, user, orgType }: NewProjectModalProps) {
   const router = useRouter();
   const [step, setStep] = useState(1);
 
@@ -41,7 +42,10 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, user, orgT
   const [name, setName] = useState("");
   const [stateVal, setStateVal] = useState("");
   const [geotechOrgId, setGeotechOrgId] = useState("");
+  const [epcOrgId, setEpcOrgId] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [tenderId, setTenderId] = useState("");
+  const [startDate, setStartDate] = useState("");
 
   // Step 2
   const [bhCount, setBhCount] = useState(3);
@@ -49,6 +53,9 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, user, orgT
   // Created project + payment status
   const [project, setProject] = useState<any>(null);
   const [paymentRecorded, setPaymentRecorded] = useState(false);
+  const [projectCode, setProjectCode] = useState("");
+  const [useSearchQuery, setUseSearchQuery] = useState(true);
+  const [partnerSearchQuery, setPartnerSearchQuery] = useState("");
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -57,7 +64,13 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, user, orgT
     if (open && orgType === "GEOTECH_CONTRACTOR" && user?.organizationId) {
       setGeotechOrgId(user.organizationId as string);
     }
-  }, [open, user, orgType]);
+    if (open && orgType === "EPC_CONTRACTOR" && user?.organizationId) {
+      setEpcOrgId(user.organizationId as string);
+    }
+    if (open && !projectCode) {
+      setProjectCode(`GL-PRJ-${Date.now().toString(36).toUpperCase()}`);
+    }
+  }, [open, user, orgType, projectCode]);
 
   if (!open) return null;
 
@@ -68,35 +81,81 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, user, orgT
     setName("");
     setStateVal("");
     setGeotechOrgId("");
+    setEpcOrgId("");
     setEndDate("");
+    setTenderId("");
+    setStartDate("");
     setBhCount(3);
     setProject(null);
     setPaymentRecorded(false);
     setError(null);
+    setProjectCode("");
+    setUseSearchQuery(false);
+    setPartnerSearchQuery("");
     onClose();
+  };
+
+  const validateStep1 = () => {
+    if (!name.trim()) {
+      setError("Project name is required.");
+      return false;
+    }
+    const todayStr = new Date().toLocaleDateString('en-CA'); // e.g. "2026-06-17"
+    if (startDate && startDate < todayStr) {
+      setError("Project start date cannot be in the past.");
+      return false;
+    }
+    if (startDate && endDate && endDate < startDate) {
+      setError("Target completion date cannot be before the start date.");
+      return false;
+    }
+    setError(null);
+    return true;
   };
 
   const handleCreate = () => {
     if (isPending) return;
     if (!name.trim()) { setError("Project name is required."); setStep(1); return; }
+
+    // Validation: Start date cannot be in the past
+    const todayStr = new Date().toLocaleDateString('en-CA'); // e.g. "2026-06-17"
+    if (startDate && startDate < todayStr) {
+      setError("Project start date cannot be in the past.");
+      setStep(1);
+      return;
+    }
+
+    // Validation: Target completion date cannot be before start date
+    if (startDate && endDate && endDate < startDate) {
+      setError("Target completion date cannot be before the start date.");
+      setStep(1);
+      return;
+    }
     
     let targetGeotechOrgId = geotechOrgId.trim();
     if (orgType === "GEOTECH_CONTRACTOR" && user?.organizationId) {
       targetGeotechOrgId = user.organizationId as string;
     }
     
-    if (!targetGeotechOrgId) {
-      setError("Select a geotech partner organization.");
-      setStep(1);
-      return;
+    let targetEpcOrgId = epcOrgId.trim();
+    if (orgType === "EPC_CONTRACTOR" && user?.organizationId) {
+      targetEpcOrgId = user.organizationId as string;
     }
     
     setError(null);
     const fd = new FormData();
     fd.set("name", name.trim());
+    fd.set("projectCode", projectCode);
     if (stateVal) fd.set("state", stateVal);
-    fd.set("geotechOrganizationId", targetGeotechOrgId);
-    if (endDate) fd.set("endDate", endDate);
+    if (targetGeotechOrgId) fd.set("geotechOrganizationId", targetGeotechOrgId);
+    if (targetEpcOrgId) fd.set("epcOrganizationId", targetEpcOrgId);
+    if (partnerSearchQuery.trim()) {
+      fd.set("partnerSearchQuery", partnerSearchQuery.trim());
+    }
+    if (startDate) fd.set("startDate", startDate);
+    if (endDate) fd.set("targetCompletionDate", endDate);
+    if (tenderId) fd.set("tenderId", tenderId.trim());
+
     startTransition(async () => {
       const res = await createProjectAction(fd);
       if ("error" in res && res.error) {
@@ -134,7 +193,7 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, user, orgT
         {/* Header — matches .modal-hdr: padding 16px 20px, sticky top */}
         <div className="flex items-center justify-between shrink-0 sticky top-0 z-[1] bg-bg-surface" style={{ padding: "16px 20px", borderBottom: "1px solid var(--color-border)" }}>
           <div className="font-display text-[18px] text-text-pri">New project</div>
-          <button onClick={resetAndClose} className="text-[20px] text-text-ter cursor-pointer hover:text-rust-d transition-colors bg-transparent border-none p-0 leading-none">✕</button>
+          <button onClick={resetAndClose} className="text-[20px] text-text-sec cursor-pointer hover:text-rust-d transition-colors bg-transparent border-none p-0 leading-none">✕</button>
         </div>
 
         {/* Steps — matches .modal-steps: flex, border-bottom */}
@@ -166,14 +225,31 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, user, orgT
             <Step1
               name={name} setName={setName}
               stateVal={stateVal} setStateVal={setStateVal}
-              geotechOrgId={geotechOrgId} setGeotechOrgId={setGeotechOrgId}
               endDate={endDate} setEndDate={setEndDate}
-              geotechOrgs={geotechOrgs}
-              orgType={orgType}
+              tenderId={tenderId} setTenderId={setTenderId}
+              startDate={startDate} setStartDate={setStartDate}
             />
           )}
           {step === 2 && <Step2 bhCount={bhCount} setBhCount={setBhCount} />}
-          {step === 3 && <Step3 project={project} />}
+          {step === 3 && (
+            <Step3
+              projectCode={projectCode}
+              project={project}
+              geotechOrgId={geotechOrgId}
+              setGeotechOrgId={setGeotechOrgId}
+              epcOrgId={epcOrgId}
+              setEpcOrgId={setEpcOrgId}
+              geotechOrgs={geotechOrgs}
+              epcOrgs={epcOrgs}
+              orgType={orgType}
+              user={user}
+              useSearchQuery={useSearchQuery}
+              setUseSearchQuery={setUseSearchQuery}
+              partnerSearchQuery={partnerSearchQuery}
+              setPartnerSearchQuery={setPartnerSearchQuery}
+              setError={setError}
+            />
+          )}
           {step === 4 && (
             <Step4
               bhCount={bhCount}
@@ -194,20 +270,36 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, user, orgT
 
         {/* Footer — matches .modal-ftr: padding 12px 20px, sticky bottom */}
         <div className="flex gap-2 shrink-0 sticky bottom-0 bg-bg-surface" style={{ padding: "12px 20px", borderTop: "1px solid var(--color-border)" }}>
-          {step === 2 ? (
+          {step === 2 && (
             <button onClick={() => setStep(1)} className="bg-transparent border border-border-mid rounded-[7px] text-[12px] text-text-sec cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all" style={{ padding: "10px 16px" }}>← Back</button>
-          ) : <div />}
+          )}
+          {step === 3 && !project && (
+            <button onClick={() => setStep(2)} className="bg-transparent border border-border-mid rounded-[7px] text-[12px] text-text-sec cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all" style={{ padding: "10px 16px" }}>← Back</button>
+          )}
           {step === 1 && (
-            <button onClick={() => setStep(2)} className="flex-1 bg-rust-mid border-none rounded-[7px] text-[12px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-colors" style={{ padding: "10px" }}>
+            <button
+              onClick={() => {
+                if (validateStep1()) {
+                  setStep(2);
+                }
+              }}
+              className="flex-1 bg-rust-mid border-none rounded-[7px] text-[12px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-colors"
+              style={{ padding: "10px" }}
+            >
               Next — Boring setup →
             </button>
           )}
           {step === 2 && (
-            <button onClick={handleCreate} disabled={isPending} className="flex-1 bg-rust-mid border-none rounded-[7px] text-[12px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-colors disabled:opacity-60 disabled:cursor-default" style={{ padding: "10px" }}>
-              {isPending ? "Creating project…" : "Create project →"}
+            <button onClick={() => setStep(3)} className="flex-1 bg-rust-mid border-none rounded-[7px] text-[12px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-colors" style={{ padding: "10px" }}>
+              Next — Link parties →
             </button>
           )}
-          {step === 3 && (
+          {step === 3 && !project && (
+            <button onClick={handleCreate} disabled={isPending} className="flex-1 bg-rust-mid border-none rounded-[7px] text-[12px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-colors disabled:opacity-60 disabled:cursor-default" style={{ padding: "10px" }}>
+              {isPending ? "Creating project…" : "Create project & Link →"}
+            </button>
+          )}
+          {step === 3 && project && (
             <button onClick={() => setStep(4)} className="flex-1 bg-rust-mid border-none rounded-[7px] text-[12px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-colors" style={{ padding: "10px" }}>
               Next — Payment →
             </button>
@@ -273,47 +365,26 @@ function ModalSelect({ label, options, value, onChange, placeholder }: {
 }
 
 /* Step 1 — Project details (only fields the API actually persists) */
-function Step1({ name, setName, stateVal, setStateVal, geotechOrgId, setGeotechOrgId, endDate, setEndDate, geotechOrgs, orgType }: {
+function Step1({
+  name, setName,
+  stateVal, setStateVal,
+  endDate, setEndDate,
+  tenderId, setTenderId,
+  startDate, setStartDate,
+}: {
   name: string; setName: (v: string) => void;
   stateVal: string; setStateVal: (v: string) => void;
-  geotechOrgId: string; setGeotechOrgId: (v: string) => void;
   endDate: string; setEndDate: (v: string) => void;
-  geotechOrgs: GeotechOrg[];
-  orgType: string | null;
+  tenderId: string; setTenderId: (v: string) => void;
+  startDate: string; setStartDate: (v: string) => void;
 }) {
   return (
     <div className="animate-fade-in">
       <div className="section-lbl">Project details</div>
       <ModalField label="Project name" placeholder="NH-48 Delhi–Vadodara · Package 14" value={name} onChange={setName} />
+      <ModalField label="Tender ID" placeholder="TND-2026-902" value={tenderId} onChange={setTenderId} />
       <ModalSelect label="State" options={INDIAN_STATES} value={stateVal} onChange={setStateVal} placeholder="Select state" />
-
-      {/* Geotech partner — real org directory (GET /organizations?type=GEOTECH_CONTRACTOR) */}
-      {orgType !== "GEOTECH_CONTRACTOR" && (
-        <div className="flex flex-col gap-1 mb-3">
-          <label className="text-[9px] font-semibold text-text-ter uppercase tracking-[0.4px]">Geotech partner organization</label>
-          {geotechOrgs.length === 0 ? (
-            <div className="text-[10px] text-text-ter bg-bg-raised border border-border-mid rounded-[5px] leading-relaxed" style={{ padding: "7px 9px" }}>
-              No geotech contractor organizations are registered yet — ask your geotech partner to register on GroundLense first.
-            </div>
-          ) : (
-            <select
-              className="bg-bg-raised border border-border-mid rounded-[5px] text-[11px] text-text-pri outline-none focus:border-rust-mid cursor-pointer"
-              style={{ padding: "7px 9px" }}
-              value={geotechOrgId}
-              onChange={(e) => setGeotechOrgId(e.target.value)}
-            >
-              <option value="">— Select geotech contractor —</option>
-              {geotechOrgs.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}{o.city || o.state ? ` — ${[o.city, o.state].filter(Boolean).join(", ")}` : ""}
-                </option>
-              ))}
-            </select>
-          )}
-          <div className="text-[9px] text-text-ter leading-relaxed">The selected organization is linked to this project and its field teams sync boring data.</div>
-        </div>
-      )}
-
+      <ModalField label="Project start date" placeholder="2026-07-01" type="date" value={startDate} onChange={setStartDate} />
       <ModalField label="Target completion date" placeholder="2026-12-31" type="date" value={endDate} onChange={setEndDate} />
     </div>
   );
@@ -343,30 +414,69 @@ function Step2({ bhCount, setBhCount }: { bhCount: number; setBhCount: (n: numbe
 }
 
 /* Step 3 — Link parties (shows the real, persisted project code) */
-function Step3({ project }: { project: any }) {
+function Step3({
+  projectCode,
+  project,
+  geotechOrgId,
+  setGeotechOrgId,
+  epcOrgId,
+  setEpcOrgId,
+  geotechOrgs,
+  epcOrgs,
+  orgType,
+  user,
+  useSearchQuery,
+  setUseSearchQuery,
+  partnerSearchQuery,
+  setPartnerSearchQuery,
+  setError,
+}: {
+  projectCode: string;
+  project: any;
+  geotechOrgId: string;
+  setGeotechOrgId: (v: string) => void;
+  epcOrgId: string;
+  setEpcOrgId: (v: string) => void;
+  geotechOrgs: GeotechOrg[];
+  epcOrgs: GeotechOrg[];
+  orgType: string | null;
+  user: Record<string, unknown> | null;
+  useSearchQuery: boolean;
+  setUseSearchQuery: (v: boolean) => void;
+  partnerSearchQuery: string;
+  setPartnerSearchQuery: (v: string) => void;
+  setError: (v: string | null) => void;
+}) {
   const [copied, setCopied] = useState(false);
 
+  const activeProjectCode = project?.projectCode || projectCode;
+
   const copyCode = async () => {
-    if (!project?.projectCode) return;
+    if (!activeProjectCode) return;
     try {
-      await navigator.clipboard.writeText(project.projectCode);
+      await navigator.clipboard.writeText(activeProjectCode);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch { /* clipboard unavailable */ }
   };
 
+  const isSuperAdmin = user ? (user as any).roles?.includes("SUPER_ADMIN") : false;
+  const showEpcSelect = orgType === "GEOTECH_CONTRACTOR" || isSuperAdmin;
+  const showGeotechSelect = orgType === "EPC_CONTRACTOR" || isSuperAdmin;
+
   return (
     <div className="animate-fade-in">
       <div className="section-lbl">Link parties</div>
+
       <div className="info-banner info-banner-blue mb-3">
         <span>ℹ</span> Share your Project ID with IE firms and GT contractors so they can be linked to this project.
       </div>
 
-      {/* Share box — real persisted project code */}
+      {/* Share box — real persisted or pre-generated project code */}
       <div className="bg-bg-card border border-border rounded-lg mb-3 flex items-center justify-between gap-3" style={{ padding: "14px" }}>
         <div>
           <div className="text-[9px] text-text-ter uppercase tracking-[0.4px] mb-1">Your project ID</div>
-          <div className="font-mono text-[16px] text-amber-d">{project?.projectCode || "—"}</div>
+          <div className="font-mono text-[16px] text-amber-d">{activeProjectCode || "—"}</div>
         </div>
         <button
           onClick={copyCode}
@@ -376,6 +486,25 @@ function Step3({ project }: { project: any }) {
           {copied ? "✓ Copied" : "Copy"}
         </button>
       </div>
+
+      {!project && (
+        <div className="mb-3">
+          <div className="flex flex-col gap-1 mb-3">
+            <label className="text-[9px] font-semibold text-text-ter uppercase tracking-[0.4px]">Partner email or employee ID/code (Optional)</label>
+            <input
+              className="bg-bg-raised border border-border-mid rounded-[5px] text-[11px] text-text-pri outline-none transition-colors focus:border-rust-mid placeholder:text-text-ter"
+              style={{ padding: "7px 9px", width: "100%", boxSizing: "border-box" }}
+              type="text"
+              placeholder="e.g. contractor@geotech.com or GL-GEO-1002"
+              value={partnerSearchQuery}
+              onChange={(e) => setPartnerSearchQuery(e.target.value)}
+            />
+            <div className="text-[9px] text-text-ter leading-relaxed">
+              Optional. Enter the email address or employee code of the partner to link them to this project. If they do not exist, we will invite them to sign up.
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="text-[10px] text-text-sec uppercase tracking-wider mb-2">Pending approval requests</div>
       <div className="bg-bg-card border border-border rounded-[7px] text-center text-[11px] text-text-ter" style={{ padding: "14px 12px" }}>

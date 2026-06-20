@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Delete, UseGuards } from '@nestjs/common';
 
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
@@ -73,4 +73,15 @@ export class TeamsController {
   ) {
     return this.teamsService.getDashboard(teamId, user);
   }
+
+  @Delete('teams/:teamId')
+  deleteTeam(
+    @Param('teamId')
+    teamId: string,
+
+    @CurrentUser() user: any,
+  ) {
+    return this.teamsService.deleteTeam(teamId, user);
+  }
 }
+

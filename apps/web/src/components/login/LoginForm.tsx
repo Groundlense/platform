@@ -35,10 +35,18 @@ const ROLE_TO_ORG_TYPE: Record<RoleType, string> = {
   gt: "GEOTECH_CONTRACTOR",
 };
 
-export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
-  const [screen, setScreen] = useState<Screen>(0);
+export default function LoginForm({
+  redirectTo,
+  initialEmail = "",
+  initialRegister = false,
+}: {
+  redirectTo?: string;
+  initialEmail?: string;
+  initialRegister?: boolean;
+}) {
+  const [screen, setScreen] = useState<Screen>(initialRegister ? 2 : 0);
   const [role, setRole] = useState<RoleType>("contractor");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -65,7 +73,7 @@ export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
   // Signup — Step 2 (Login details)
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [signupEmail, setSignupEmail] = useState("");
+  const [signupEmail, setSignupEmail] = useState(initialEmail);
   const [signupMobile, setSignupMobile] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupLoading, setSignupLoading] = useState(false);
@@ -128,7 +136,7 @@ export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
       const fd = new FormData();
       fd.set("email", forgotEmail.trim());
       fd.set("code", resetCode.trim());
-      fd.set("newPassword", newPassword);
+      fd.set("newPassword", btoa(newPassword));
 
       const res = await resetPasswordAction(fd);
       if (res?.error) {
@@ -327,7 +335,6 @@ export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
       return;
     }
 
-    setSignupLoading(true);
     try {
       const fd = new FormData();
       fd.set("gstin", gstin.trim());
@@ -335,7 +342,7 @@ export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
       if (lastName.trim()) fd.set("lastName", lastName.trim());
       fd.set("email", signupEmail.trim());
       if (signupMobile.trim()) fd.set("mobile", signupMobile.trim());
-      fd.set("password", signupPassword);
+      fd.set("password", btoa(signupPassword));
       fd.set("roleCode", requestedRole);
 
       const result = await joinRequestAction(fd);
@@ -380,11 +387,13 @@ export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
       if (lastName.trim()) fd.set("lastName", lastName.trim());
       fd.set("email", signupEmail.trim());
       if (signupMobile.trim()) fd.set("mobile", signupMobile.trim());
-      fd.set("password", signupPassword);
+      fd.set("password", btoa(signupPassword));
 
       const result = await registerAction(fd);
       if (result?.error) {
         setSignupError(result.error);
+      } else if (result?.success) {
+        window.location.href = "/register/members";
       }
     } catch {
       setSignupError("Something went wrong while creating your account. Please try again.");
@@ -405,12 +414,14 @@ export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
     try {
       const formData = new FormData();
       formData.set("identifier", email.trim());
-      formData.set("password", password);
+      formData.set("password", btoa(password));
       if (redirectTo) formData.set("redirect", redirectTo);
 
       const result = await loginAction(formData);
       if (result?.error) {
         setError(result.error);
+      } else if (result?.success) {
+        window.location.href = redirectTo || "/dashboard";
       }
     } catch {
       setError("Something went wrong while signing in. Please try again.");

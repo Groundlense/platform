@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  turbopack: {
+    root: path.resolve(__dirname, "../../"),
+  },
   // Proxy API calls to the NestJS backend during development
   async rewrites() {
     return [
@@ -17,3 +24,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+

@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  RiNotification3Line,
   RiAlertLine,
   RiEdit2Line,
   RiCameraLine,
@@ -12,6 +11,7 @@ import {
   RiImageLine,
 } from "react-icons/ri";
 import { getInitials } from "@/lib/utils";
+import NotificationBell from "../notifications/NotificationBell";
 
 interface ContractorClientProps {
   project: any;
@@ -702,10 +702,7 @@ export default function ContractorClient({
           <span className="text-[11px] text-text-pri font-medium truncate">{project.name}</span>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <div className="rounded-[5px] bg-bg-card flex items-center justify-center cursor-pointer text-[13px] relative border border-border" style={{ width: "30px", height: "30px" }}>
-            <RiNotification3Line className="text-text-sec" />
-            <div className="absolute rounded-full bg-rust-mid" style={{ top: "3px", right: "3px", width: "6px", height: "6px", border: "1.5px solid var(--color-bg-surface)" }} />
-          </div>
+          <NotificationBell />
           <div className="flex items-center gap-[7px] bg-bg-card rounded-[5px] border border-border" style={{ padding: "4px 9px" }}>
             <div className="rounded-full flex items-center justify-center text-[9px] font-bold text-rust-d" style={{ width: "22px", height: "22px", background: "rgba(153,60,29,.3)" }}>{initials}</div>
             <span className="text-[11px] text-text-sec">{displayName}</span>

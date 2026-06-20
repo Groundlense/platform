@@ -26,8 +26,13 @@ import {
   fetchOrgTeams,
   addProjectMemberAction,
   createUserAction,
+  sendOtpAction,
+  verifyOtpAction,
+  deleteTeamAction,
+  updateUserProfileAction,
   type BoreholeIntegrity,
 } from "@/app/actions/portal";
+import { createBoreholeAction, assignBoreholeTeamAction, approveProjectJoinRequestAction, rejectProjectJoinRequestAction } from "@/app/actions/projects";
 
 interface PortalClientProps {
   project: any;
@@ -41,6 +46,7 @@ interface PortalClientProps {
   projectDashboard: any; // { boreholes, intervals, completedIntervals, completionPercentage, samples, media }
   teams?: any[];
   orgUsers?: any[];
+  pendingRequests?: any[];
 }
 
 // Soil color mappings for SVG strata drawing
@@ -153,6 +159,7 @@ export default function PortalClient({
   projectDashboard = null,
   teams = [],
   orgUsers = [],
+  pendingRequests = [],
 }: PortalClientProps) {
   const { activeTab, setActiveTab } = usePortalTab();
   const router = useRouter();
@@ -892,11 +899,92 @@ export default function PortalClient({
     link.click();
     document.body.removeChild(link);
   };
-  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      alert(`Successfully uploaded "${file.name}". Template verified. Note: Locations are locked after boring start.`);
+    if (!file) return;
+    if (!proj?.id) {
+      alert("Project ID not found.");
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const text = evt.target?.result as string;
+      if (!text) return;
+
+      const lines = text.split(/\r?\n/);
+      if (lines.length < 2) {
+        alert("Invalid CSV format or empty file.");
+        return;
+      }
+
+      const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+      const bhNoIdx = headers.findIndex(h => ["bh_no", "bh no", "bhno", "bh-no", "borehole_no", "borehole"].includes(h));
+      const subStructIdx = headers.findIndex(h => ["sub_structure", "sub structure", "location", "name"].includes(h));
+      const eastingIdx = headers.findIndex(h => ["easting", "longitude", "lng", "lon"].includes(h));
+      const northingIdx = headers.findIndex(h => ["northing", "latitude", "lat"].includes(h));
+      const rlIdx = headers.findIndex(h => ["rl_mamsl", "rl", "rl(m)"].includes(h));
+      const plannedDepthIdx = headers.findIndex(h => ["planned_depth_m", "planned depth", "depth"].includes(h));
+
+      if (bhNoIdx === -1) {
+        alert("Missing BH_No/Borehole column in CSV.");
+        return;
+      }
+
+      let createdCount = 0;
+      let errorCount = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // Simple CSV splitter handling quoted values
+        const cells: string[] = [];
+        let cur = "";
+        let inQuotes = false;
+        for (let j = 0; j < line.length; j++) {
+          const char = line[j];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            cells.push(cur.trim());
+            cur = "";
+          } else {
+            cur += char;
+          }
+        }
+        cells.push(cur.trim());
+
+        const bhNo = cells[bhNoIdx];
+        if (!bhNo) continue;
+
+        const nameVal = subStructIdx !== -1 ? cells[subStructIdx] : "";
+        const eastingVal = eastingIdx !== -1 ? cells[eastingIdx] : "";
+        const northingVal = northingIdx !== -1 ? cells[northingIdx] : "";
+        const rlVal = rlIdx !== -1 ? cells[rlIdx] : "";
+        const depthVal = plannedDepthIdx !== -1 ? cells[plannedDepthIdx] : "";
+
+        const formData = new FormData();
+        formData.append("projectId", proj.id);
+        formData.append("boreholeCode", bhNo);
+        if (nameVal) formData.append("name", nameVal);
+        if (northingVal) formData.append("latitude", northingVal);
+        if (eastingVal) formData.append("longitude", eastingVal);
+        if (rlVal) formData.append("groundLevelRL", rlVal);
+        if (depthVal) formData.append("plannedDepth", depthVal);
+
+        const res = await createBoreholeAction(formData);
+        if (res.success) {
+          createdCount++;
+        } else {
+          errorCount++;
+        }
+      }
+
+      alert(`Successfully processed file. Imported ${createdCount} boreholes.${errorCount > 0 ? ` Failed to import ${errorCount} boreholes.` : ""}`);
+      router.refresh();
+    };
+    reader.readAsText(file);
   };
 
   // ── Setup tab: Project Details state & handlers ──
@@ -941,18 +1029,279 @@ export default function PortalClient({
 
   // ── Setup tab: Drilling Crew member states & handlers ──
   const [showAddCrewMemberModal, setShowAddCrewMemberModal] = useState<any>(null); // holds team or null
-  const [crewMemberType, setCrewMemberType] = useState<"existing" | "new">("existing");
+  const [crewMemberType, setCrewMemberType] = useState<"existing" | "new">("new");
   const [selectedProjectMemberId, setSelectedProjectMemberId] = useState("");
   const [newWorkerName, setNewWorkerName] = useState("");
   const [newWorkerRole, setNewWorkerRole] = useState("Field Supervisor");
   const [newWorkerQual, setNewWorkerQual] = useState("");
   const [newWorkerStatus, setNewWorkerStatus] = useState("On site");
+  const [newWorkerMobile, setNewWorkerMobile] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [isVerificationSkipped, setIsVerificationSkipped] = useState(false);
   const [crewMemberAddError, setCrewMemberAddError] = useState("");
+
+  const [verifyingUser, setVerifyingUser] = useState<any>(null);
+  const [verifyRowOtpCode, setVerifyRowOtpCode] = useState("");
+  const [verifyRowOtpSent, setVerifyRowOtpSent] = useState(false);
+  const [verifyRowError, setVerifyRowError] = useState("");
+  const [verifyRowLoading, setVerifyRowLoading] = useState(false);
+
+  // ── Settings tab states ──
+  const [editEmail, setEditEmail] = useState(u?.email || "");
+  const [editMobile, setEditMobile] = useState(u?.mobile || "");
+  
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailOtpCode, setEmailOtpCode] = useState("");
+  const [emailOtpVerified, setEmailOtpVerified] = useState(false);
+  
+  const [mobileOtpSent, setMobileOtpSent] = useState(false);
+  const [mobileOtpCode, setMobileOtpCode] = useState("");
+  const [mobileOtpVerified, setMobileOtpVerified] = useState(false);
+  
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsSuccess, setSettingsSuccess] = useState("");
+
+  useEffect(() => {
+    if (u) {
+      setEditEmail(u.email || "");
+      setEditMobile(u.mobile || "");
+      setEmailOtpSent(false);
+      setEmailOtpVerified(false);
+      setMobileOtpSent(false);
+      setMobileOtpVerified(false);
+      setSettingsError("");
+      setSettingsSuccess("");
+    }
+  }, [u]);
+
+  const handleSendEmailOtp = async () => {
+    if (!editEmail.trim()) {
+      setSettingsError("Please enter a valid email address.");
+      return;
+    }
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+    const res = await sendOtpAction({
+      type: "EMAIL",
+      target: editEmail.trim(),
+    });
+    setSettingsBusy(false);
+    if (res.success) {
+      setEmailOtpSent(true);
+      setSettingsSuccess("Email verification OTP sent (simulated code: 123456)");
+    } else {
+      setSettingsError(res.error || "Failed to send email OTP.");
+    }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (!emailOtpCode.trim()) {
+      setSettingsError("Please enter the verification code.");
+      return;
+    }
+    if (emailOtpCode.trim() !== "123456") {
+      setSettingsError("Invalid OTP code. Please enter 123456.");
+      return;
+    }
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+    const res = await verifyOtpAction({
+      type: "EMAIL",
+      target: editEmail.trim(),
+      code: emailOtpCode.trim(),
+    });
+    setSettingsBusy(false);
+    if (res.success) {
+      setEmailOtpVerified(true);
+      setSettingsSuccess("Email verified successfully.");
+    } else {
+      setSettingsError(res.error || "Failed to verify email OTP.");
+    }
+  };
+
+  const handleSendMobileOtp = async () => {
+    if (!editMobile.trim()) {
+      setSettingsError("Please enter a valid mobile number.");
+      return;
+    }
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+    const res = await sendOtpAction({
+      type: "MOBILE",
+      target: editMobile.trim(),
+    });
+    setSettingsBusy(false);
+    if (res.success) {
+      setMobileOtpSent(true);
+      setSettingsSuccess("Mobile verification OTP sent (simulated code: 123456)");
+    } else {
+      setSettingsError(res.error || "Failed to send mobile OTP.");
+    }
+  };
+
+  const handleVerifyMobileOtp = async () => {
+    if (!mobileOtpCode.trim()) {
+      setSettingsError("Please enter the verification code.");
+      return;
+    }
+    if (mobileOtpCode.trim() !== "123456") {
+      setSettingsError("Invalid OTP code. Please enter 123456.");
+      return;
+    }
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+    const res = await verifyOtpAction({
+      type: "MOBILE",
+      target: editMobile.trim(),
+      code: mobileOtpCode.trim(),
+    });
+    setSettingsBusy(false);
+    if (res.success) {
+      setMobileOtpVerified(true);
+      setSettingsSuccess("Mobile number verified successfully.");
+    } else {
+      setSettingsError(res.error || "Failed to verify mobile OTP.");
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!u?.id) return;
+    
+    const payload: { email?: string; mobile?: string } = {};
+    const emailChanged = editEmail.trim() !== (u.email || "");
+    const mobileChanged = editMobile.trim() !== (u.mobile || "");
+    
+    if (!emailChanged && !mobileChanged) {
+      setSettingsSuccess("No changes detected.");
+      return;
+    }
+    
+    if (emailChanged) {
+      if (!emailOtpVerified) {
+        setSettingsError("Please verify your new email using OTP first.");
+        return;
+      }
+      payload.email = editEmail.trim();
+    }
+    
+    if (mobileChanged) {
+      if (!mobileOtpVerified) {
+        setSettingsError("Please verify your new mobile number using OTP first.");
+        return;
+      }
+      payload.mobile = editMobile.trim();
+    }
+    
+    setSettingsBusy(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+    const res = await updateUserProfileAction(u.id, payload);
+    setSettingsBusy(false);
+    
+    if (res.success) {
+      setSettingsSuccess("Profile updated successfully!");
+      setEmailOtpSent(false);
+      setEmailOtpVerified(false);
+      setMobileOtpSent(false);
+      setMobileOtpVerified(false);
+      router.refresh();
+    } else {
+      setSettingsError(res.error || "Failed to update profile.");
+    }
+  };
+
+  // ── Requests tab states & handlers ──
+  const [requestBusyId, setRequestBusyId] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState("");
+  const [requestSuccess, setRequestSuccess] = useState("");
+
+  const handleApproveRequest = async (requestId: string) => {
+    setRequestBusyId(requestId);
+    setRequestError("");
+    setRequestSuccess("");
+    const res = await approveProjectJoinRequestAction(requestId);
+    setRequestBusyId(null);
+    if (res.success) {
+      setRequestSuccess("Project join request approved successfully.");
+      router.refresh();
+    } else {
+      setRequestError(res.error || "Failed to approve request.");
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    setRequestBusyId(requestId);
+    setRequestError("");
+    setRequestSuccess("");
+    const res = await rejectProjectJoinRequestAction(requestId);
+    setRequestBusyId(null);
+    if (res.success) {
+      setRequestSuccess("Project join request rejected successfully.");
+      router.refresh();
+    } else {
+      setRequestError(res.error || "Failed to reject request.");
+    }
+  };
+
+  const handleSendRowOtp = async () => {
+    if (!verifyingUser || !verifyingUser.mobile) return;
+    setVerifyRowLoading(true);
+    setVerifyRowError("");
+    const res = await sendOtpAction({
+      type: "MOBILE",
+      target: verifyingUser.mobile,
+    });
+    setVerifyRowLoading(false);
+    if (res.success) {
+      setVerifyRowOtpSent(true);
+      alert("OTP sent to mobile number (simulated OTP: 123456)");
+    } else {
+      setVerifyRowError(res.error || "Failed to send OTP.");
+    }
+  };
+
+  const handleVerifyRowOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verifyingUser || !verifyingUser.mobile) return;
+    if (verifyRowOtpCode !== "123456") {
+      setVerifyRowError("Invalid OTP. Please type 123456.");
+      return;
+    }
+    setVerifyRowLoading(true);
+    setVerifyRowError("");
+    const res = await verifyOtpAction({
+      type: "MOBILE",
+      target: verifyingUser.mobile,
+      code: verifyRowOtpCode,
+    });
+    setVerifyRowLoading(false);
+    if (res.success) {
+      alert("Mobile number verified successfully!");
+      const orgId = (u as any)?.organizationId;
+      if (orgId) {
+        const updatedTeams = await fetchOrgTeams(orgId);
+        setLocalTeams(updatedTeams);
+      }
+      setVerifyingUser(null);
+      router.refresh();
+    } else {
+      setVerifyRowError(res.error || "Failed to verify OTP.");
+    }
+  };
 
   const handleAddCrewMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!showAddCrewMemberModal) return;
     const teamId = showAddCrewMemberModal.id;
+    const orgId = (u as any)?.organizationId;
     
     if (crewMemberType === "existing") {
       if (!selectedProjectMemberId) {
@@ -963,7 +1312,6 @@ export default function PortalClient({
       const res = await addTeamMemberAction(teamId, selectedProjectMemberId);
       setMemberAddLoading(null);
       if (res.success) {
-        const orgId = proj?.organizationId || proj?.geotechOrganizationId || (u as any)?.organizationId;
         if (orgId) {
           const updatedTeams = await fetchOrgTeams(orgId);
           setLocalTeams(updatedTeams);
@@ -978,10 +1326,14 @@ export default function PortalClient({
         return;
       }
 
+      if (newWorkerMobile.trim() && !otpVerified && !isVerificationSkipped) {
+        setCrewMemberAddError("Please verify the mobile number with OTP first or select Verify Later.");
+        return;
+      }
+
       setMemberAddLoading(teamId);
       setCrewMemberAddError("");
       
-      const orgId = proj?.geotechOrganizationId || proj?.organizationId || (u as any)?.organizationId;
       if (!orgId) {
         setCrewMemberAddError("Organization ID could not be determined.");
         setMemberAddLoading(null);
@@ -1007,6 +1359,7 @@ export default function PortalClient({
         designation: newWorkerRole,
         userType: newWorkerQual.trim() || "ITI",
         preferredLanguage: newWorkerStatus,
+        mobile: newWorkerMobile.trim() || undefined,
       });
 
       if (!createRes.success) {
@@ -1039,8 +1392,19 @@ export default function PortalClient({
       }
 
       // Success: refresh data
+      if (orgId) {
+        const updatedTeams = await fetchOrgTeams(orgId);
+        setLocalTeams(updatedTeams);
+      }
       router.refresh();
       setShowAddCrewMemberModal(null);
+      setNewWorkerMobile("");
+      setOtpSent(false);
+      setOtpCode("");
+      setOtpVerified(false);
+      setIsVerificationSkipped(false);
+      setNewWorkerName("");
+      setNewWorkerQual("");
     }
   };
 
@@ -1054,6 +1418,7 @@ export default function PortalClient({
   const [newTeamCode, setNewTeamCode] = useState("");
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamDesc, setNewTeamDesc] = useState("");
+  const [selectedBoreholeIds, setSelectedBoreholeIds] = useState<string[]>([]);
   const [teamCreateLoading, setTeamCreateLoading] = useState(false);
   const [teamCreateError, setTeamCreateError] = useState("");
   const [memberAddLoading, setMemberAddLoading] = useState<string | null>(null);
@@ -1090,30 +1455,37 @@ export default function PortalClient({
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTeamCode.trim() || !newTeamName.trim()) {
-      setTeamCreateError("Team code and name are required.");
+    if (!newTeamName.trim()) {
+      setTeamCreateError("Team name is required.");
       return;
     }
-    const orgId = proj?.organizationId || proj?.geotechOrganizationId || (u as any)?.organizationId;
+    const orgId = (u as any)?.organizationId;
     if (!orgId) {
       setTeamCreateError("Organization ID could not be identified.");
       return;
     }
     setTeamCreateLoading(true);
     setTeamCreateError("");
+    const generatedCode = "T-" + Math.floor(1000 + Math.random() * 9000);
     const res = await createTeamAction(orgId, {
-      code: newTeamCode.trim().toUpperCase(),
+      code: generatedCode,
       name: newTeamName.trim(),
-      description: newTeamDesc.trim() || undefined,
     });
     setTeamCreateLoading(false);
     if (res.success) {
+      const newTeamId = res.data?.id;
+      if (newTeamId && selectedBoreholeIds.length > 0) {
+        for (const bhId of selectedBoreholeIds) {
+          await assignBoreholeTeamAction(bhId, newTeamId);
+        }
+      }
+
       const updatedTeams = await fetchOrgTeams(orgId);
       setLocalTeams(updatedTeams);
-      setNewTeamCode("");
       setNewTeamName("");
-      setNewTeamDesc("");
+      setSelectedBoreholeIds([]);
       setShowAddTeamModal(false);
+      router.refresh();
     } else {
       setTeamCreateError(res.error || "Failed to create team.");
     }
@@ -1125,7 +1497,7 @@ export default function PortalClient({
     const res = await addTeamMemberAction(teamId, userId);
     setMemberAddLoading(null);
     if (res.success) {
-      const orgId = proj?.organizationId || proj?.geotechOrganizationId || (u as any)?.organizationId;
+      const orgId = (u as any)?.organizationId;
       if (orgId) {
         const updatedTeams = await fetchOrgTeams(orgId);
         setLocalTeams(updatedTeams);
@@ -1134,6 +1506,25 @@ export default function PortalClient({
       alert(res.error || "Failed to add member to team.");
     }
   };
+
+  const handleDeleteTeam = async (teamId: string, teamName: string) => {
+    if (!confirm(`Are you sure you want to delete the team "${teamName}"? This will unassign any associated boreholes and remove all member assignments.`)) {
+      return;
+    }
+    const res = await deleteTeamAction(teamId);
+    if (res.success) {
+      const orgId = (u as any)?.organizationId;
+      if (orgId) {
+        const updatedTeams = await fetchOrgTeams(orgId);
+        setLocalTeams(updatedTeams);
+      }
+      router.refresh();
+      alert(`Team "${teamName}" deleted successfully.`);
+    } else {
+      alert(res.error || "Failed to delete team.");
+    }
+  };
+
 
   const openLogPanel = async (userId: string, name: string, code: string) => {
     setLogPanelUser({ id: userId, name, code });
@@ -1272,6 +1663,34 @@ export default function PortalClient({
       const top = latSpan > 0 ? 20 + (1 - (lat - minLat) / latSpan) * 55 : 48;
       return { bh: b, left: `${left.toFixed(1)}%`, top: `${top.toFixed(1)}%` };
     });
+  }, [mappedBoreholes]);
+
+  // Yandex Static Maps URL from GPS decimal coordinates
+  const yandexMapUrl = useMemo(() => {
+    const withCoords = mappedBoreholes.filter(
+      (b: any) => parseNum(b.latitude) != null && parseNum(b.longitude) != null
+    );
+    if (withCoords.length === 0) return null;
+
+    const allGPS = withCoords.every((b: any) => {
+      const lat = parseNum(b.latitude) as number;
+      const lng = parseNum(b.longitude) as number;
+      return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat !== 0 || lng !== 0);
+    });
+
+    if (!allGPS) return null;
+
+    const pts = withCoords.map((b: any, idx: number) => {
+      const lat = parseNum(b.latitude) as number;
+      const lng = parseNum(b.longitude) as number;
+      const color = b.status === "COMPLETED" ? "gn" : b.status === "IN_PROGRESS" ? "bl" : "gr";
+      const markerText = b.boreholeCode?.split("-").pop() || String(idx + 1);
+      const parsedNum = parseInt(markerText, 10);
+      const cleanMarkerText = isNaN(parsedNum) ? (b.boreholeCode?.slice(-1) || "1") : String(parsedNum);
+      return `${lng},${lat},pm2${color}m${cleanMarkerText}`;
+    });
+
+    return `https://static-maps.yandex.ru/1.x/?l=map&pt=${pts.join("~")}&size=650,160`;
   }, [mappedBoreholes]);
 
   const modSuccessFor = (ivId: string) => appliedMods[ivId];
@@ -1494,6 +1913,8 @@ export default function PortalClient({
           { key: "review", label: "Review", icon: <RiCheckDoubleLine /> },
           { key: "lab", label: "Lab", icon: <RiFlaskLine /> },
           { key: "report", label: "Report", icon: <RiFileTextLine /> },
+          { key: "settings", label: "Settings", icon: <RiSettings4Line /> },
+          { key: "requests", label: "Requests", icon: <RiFileTextLine /> },
         ].map((t) => (
           <button
             key={t.key}
@@ -1780,7 +2201,7 @@ export default function PortalClient({
                     Click "+ Add Team" to register a crew.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  <div className="grid grid-cols-1 gap-3 mb-3">
                     {localTeams.map((team: any) => {
                       const teamMemberIds = new Set((team.members || []).map((tm: any) => tm.userId));
                       const assignableMembers = members.filter((m: any) => !teamMemberIds.has(m.userId));
@@ -1795,7 +2216,18 @@ export default function PortalClient({
                                 </span>
                                 <span className="text-[12px] font-bold text-text-pri">{team.name}</span>
                               </div>
-                              <span className="text-[8px] text-text-ter">ID: {team.id.substring(0, 8)}...</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[8px] text-text-ter font-mono">ID: {team.id.substring(0, 8)}...</span>
+                                {isGeotech && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-d btn-sm text-[8px] py-0.5 px-1.5"
+                                    onClick={() => handleDeleteTeam(team.id, team.name)}
+                                  >
+                                    Delete Team
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             
                             {team.description && (
@@ -1815,7 +2247,6 @@ export default function PortalClient({
                                         <th>GL ID</th>
                                         <th>Name</th>
                                         <th>Role</th>
-                                        <th>Qualification</th>
                                         <th>Status</th>
                                         <th></th>
                                       </tr>
@@ -1826,7 +2257,6 @@ export default function PortalClient({
                                         const tmName = `${tmu.firstName ?? ""} ${tmu.lastName ?? ""}`.trim() || "—";
                                         const glId = tmu.employeeCode || `GL-W-${tmu.id?.substring(0, 4) ?? "0000"}`;
                                         const role = tm.role || tmu.designation || tmu.role || "Worker";
-                                        const qual = tm.qualification || tmu.userType || tmu.qualification || "ITI";
                                         const status = tm.status || tmu.preferredLanguage || tmu.status || "On site";
 
                                         // pill coloring
@@ -1841,17 +2271,29 @@ export default function PortalClient({
                                             <td className="font-mono text-[9px] text-amber-d">{glId}</td>
                                             <td className="td-p">{tmName}</td>
                                             <td>{role}</td>
-                                            <td>{qual}</td>
                                             <td>
                                               <span className={`pill ${pillClass}`}>{status}</span>
                                             </td>
-                                            <td>
+                                            <td className="flex gap-1 items-center">
                                               <button 
                                                 className="btn btn-g btn-sm text-[8px] py-0.5 px-1.5"
                                                 onClick={() => openLogPanel(tmu.id ?? tm.userId, tmName, glId)}
                                               >
                                                 View log
                                               </button>
+                                              {tmu.mobile && !tmu.mobileVerified && (
+                                                <button
+                                                  className="btn btn-b btn-sm text-[8px] py-0.5 px-1.5"
+                                                  onClick={() => {
+                                                    setVerifyingUser(tmu);
+                                                    setVerifyRowOtpCode("");
+                                                    setVerifyRowOtpSent(false);
+                                                    setVerifyRowError("");
+                                                  }}
+                                                >
+                                                  Verify
+                                                </button>
+                                              )}
                                             </td>
                                           </tr>
                                         );
@@ -1870,13 +2312,18 @@ export default function PortalClient({
                                 className="btn btn-p btn-sm text-[9px] py-0.5 px-2"
                                 onClick={() => {
                                   setShowAddCrewMemberModal(team);
-                                  setCrewMemberType("existing");
+                                  setCrewMemberType("new");
                                   setSelectedProjectMemberId("");
                                   setNewWorkerName("");
                                   setNewWorkerRole("Field Supervisor");
                                   setNewWorkerQual("");
                                   setNewWorkerStatus("On site");
                                   setCrewMemberAddError("");
+                                  setNewWorkerMobile("");
+                                  setOtpSent(false);
+                                  setOtpCode("");
+                                  setOtpVerified(false);
+                                  setIsVerificationSkipped(false);
                                 }}
                               >
                                 + Add Crew Member
@@ -2019,25 +2466,40 @@ export default function PortalClient({
 
               {/* Schematic map from real GPS coordinates */}
               <div className="map-wrap">
-                <div className="map-bg2" />
-                <div className="map-grid2" />
-                {mapPoints.length === 0 ? (
-                  <div className="relative z-10 text-[10px] text-text-ter">No GPS coordinates recorded yet — locations appear when boreholes are geo-tagged</div>
+                {yandexMapUrl ? (
+                  <>
+                    <img 
+                      src={yandexMapUrl} 
+                      alt="Borehole Locations Map" 
+                      className="w-full h-full object-cover" 
+                    />
+                    <div className="absolute bottom-1 right-2 z-10 text-[8px] text-text-ter bg-bg-base/70 px-1 rounded">
+                      © Yandex · OpenStreetMap
+                    </div>
+                  </>
                 ) : (
-                  mapPoints.map(({ bh, left, top }: any) => {
-                    const icon = bh.status === "COMPLETED" ? "📍" : bh.status === "IN_PROGRESS" ? "🔵" : "⭕";
-                    const color = bh.status === "COMPLETED" ? "#97C459" : bh.status === "IN_PROGRESS" ? "#85B7EB" : "#6B6966";
-                    const label = bh.status === "COMPLETED" ? "✓" : bh.status === "IN_PROGRESS" ? "active" : "pending";
-                    return (
-                      <div key={bh.id} className="mp" style={{ left, top }} title={`${bh.boreholeCode} · ${bh.name}`}>
-                        <span>{icon}</span>
-                        <div className="mp-lbl" style={{ color }}>{bh.boreholeCode?.split("-").pop()} {label}</div>
-                      </div>
-                    );
-                  })
-                )}
-                {mapPoints.length > 0 && (
-                  <div className="absolute bottom-1 right-2 z-10 text-[8px] text-text-ter">Relative layout from recorded GPS — not to scale</div>
+                  <>
+                    <div className="map-bg2" />
+                    <div className="map-grid2" />
+                    {mapPoints.length === 0 ? (
+                      <div className="relative z-10 text-[10px] text-text-ter">No GPS coordinates recorded yet — locations appear when boreholes are geo-tagged</div>
+                    ) : (
+                      mapPoints.map(({ bh, left, top }: any) => {
+                        const icon = bh.status === "COMPLETED" ? "📍" : bh.status === "IN_PROGRESS" ? "🔵" : "⭕";
+                        const color = bh.status === "COMPLETED" ? "#97C459" : bh.status === "IN_PROGRESS" ? "#85B7EB" : "#6B6966";
+                        const label = bh.status === "COMPLETED" ? "✓" : bh.status === "IN_PROGRESS" ? "active" : "pending";
+                        return (
+                          <div key={bh.id} className="mp" style={{ left, top }} title={`${bh.boreholeCode} · ${bh.name}`}>
+                            <span>{icon}</span>
+                            <div className="mp-lbl" style={{ color }}>{bh.boreholeCode?.split("-").pop()} {label}</div>
+                          </div>
+                        );
+                      })
+                    )}
+                    {mapPoints.length > 0 && (
+                      <div className="absolute bottom-1 right-2 z-10 text-[8px] text-text-ter">Relative layout from recorded GPS — not to scale</div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -3648,6 +4110,308 @@ export default function PortalClient({
             )}
           </div>
         )}
+
+        {/* ⚙ SETTINGS TAB */}
+        {activeTab === "settings" && (
+          <div className="animate-fade-in space-y-4">
+            {settingsError && (
+              <div className="ib ib-r shadow-sm">
+                ❌ {settingsError}
+              </div>
+            )}
+            {settingsSuccess && (
+              <div className="ib ib-g shadow-sm">
+                ✓ {settingsSuccess}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Profile Card */}
+              <div className="card shadow-sm">
+                <div className="card-title">👤 Personal Profile</div>
+                <div className="space-y-2">
+                  <div className="dr">
+                    <span className="dr-l">Full Name</span>
+                    <span className="dr-v font-bold">{userName}</span>
+                  </div>
+                  <div className="dr">
+                    <span className="dr-l">Designation</span>
+                    <span className="dr-v">{u?.designation || "Geotechnical Engineer"}</span>
+                  </div>
+                  <div className="dr">
+                    <span className="dr-l">Email Address</span>
+                    <span className="dr-v">{u?.email || "—"}</span>
+                  </div>
+                  <div className="dr">
+                    <span className="dr-l">Mobile Number</span>
+                    <span className="dr-v flex items-center gap-1.5">
+                      {u?.mobile || "—"}
+                      {u?.mobileVerified ? (
+                        <span className="pill-green text-[8px]">Verified</span>
+                      ) : (
+                        <span className="pill-gray text-[8px]">Not Verified</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="dr">
+                    <span className="dr-l">Employee Code</span>
+                    <span className="dr-v font-mono">{u?.employeeCode || "—"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit Details Card */}
+              <div className="card shadow-sm">
+                <div className="card-title">✏️ Update Profile Details</div>
+                <form onSubmit={handleSaveProfile} className="space-y-4">
+                  {/* Email field */}
+                  <div className="fg">
+                    <span className="fl">Change Email Address</span>
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        className="fi flex-1"
+                        value={editEmail}
+                        onChange={(e) => {
+                          setEditEmail(e.target.value);
+                          setEmailOtpSent(false);
+                          setEmailOtpVerified(false);
+                        }}
+                        placeholder="new.email@example.com"
+                        disabled={settingsBusy}
+                      />
+                      {editEmail.trim() !== (u?.email || "") && !emailOtpVerified && (
+                        <button
+                          type="button"
+                          className="btn btn-b text-[10px]"
+                          onClick={handleSendEmailOtp}
+                          disabled={settingsBusy}
+                        >
+                          {emailOtpSent ? "Resend OTP" : "Send OTP"}
+                        </button>
+                      )}
+                    </div>
+                    {emailOtpSent && !emailOtpVerified && (
+                      <div className="flex gap-2 mt-1.5">
+                        <input
+                          type="text"
+                          className="fi w-28"
+                          value={emailOtpCode}
+                          onChange={(e) => setEmailOtpCode(e.target.value)}
+                          placeholder="Enter OTP"
+                          maxLength={6}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-s text-[10px]"
+                          onClick={handleVerifyEmailOtp}
+                          disabled={settingsBusy}
+                        >
+                          Verify OTP
+                        </button>
+                      </div>
+                    )}
+                    {emailOtpVerified && (
+                      <span className="text-[10px] font-semibold mt-1 inline-block" style={{ color: "#97C459" }}>✓ Email verified with OTP</span>
+                    )}
+                  </div>
+
+                  {/* Mobile field */}
+                  <div className="fg">
+                    <span className="fl">Change Mobile Number</span>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="fi flex-1"
+                        value={editMobile}
+                        onChange={(e) => {
+                          setEditMobile(e.target.value);
+                          setMobileOtpSent(false);
+                          setMobileOtpVerified(false);
+                        }}
+                        placeholder="9876543210"
+                        disabled={settingsBusy}
+                      />
+                      {editMobile.trim() !== (u?.mobile || "") && !mobileOtpVerified && (
+                        <button
+                          type="button"
+                          className="btn btn-b text-[10px]"
+                          onClick={handleSendMobileOtp}
+                          disabled={settingsBusy}
+                        >
+                          {mobileOtpSent ? "Resend OTP" : "Send OTP"}
+                        </button>
+                      )}
+                    </div>
+                    {mobileOtpSent && !mobileOtpVerified && (
+                      <div className="flex gap-2 mt-1.5">
+                        <input
+                          type="text"
+                          className="fi w-28"
+                          value={mobileOtpCode}
+                          onChange={(e) => setMobileOtpCode(e.target.value)}
+                          placeholder="Enter OTP"
+                          maxLength={6}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-s text-[10px]"
+                          onClick={handleVerifyMobileOtp}
+                          disabled={settingsBusy}
+                        >
+                          Verify OTP
+                        </button>
+                      </div>
+                    )}
+                    {mobileOtpVerified && (
+                      <span className="text-[10px] font-semibold mt-1 inline-block" style={{ color: "#97C459" }}>✓ Mobile verified with OTP</span>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn btn-p w-full text-[11px] py-2"
+                    disabled={
+                      settingsBusy ||
+                      (editEmail.trim() === (u?.email || "") && editMobile.trim() === (u?.mobile || "")) ||
+                      (editEmail.trim() !== (u?.email || "") && !emailOtpVerified) ||
+                      (editMobile.trim() !== (u?.mobile || "") && !mobileOtpVerified)
+                    }
+                  >
+                    {settingsBusy ? "Saving..." : "Save Profile Changes"}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* Organization Crew List */}
+            <div className="card shadow-sm">
+              <div className="card-title">👥 Organization Crew Members ({orgUsers.length})</div>
+              <div className="overflow-x-auto">
+                <table className="dt w-full">
+                  <thead>
+                    <tr>
+                      <th>Employee Code</th>
+                      <th>Name</th>
+                      <th>Role / Designation</th>
+                      <th>Email</th>
+                      <th>Mobile</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orgUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center text-text-ter py-4">No crew members found.</td>
+                      </tr>
+                    ) : (
+                      orgUsers.map((mUser: any) => {
+                        const name = `${mUser.firstName ?? ""} ${mUser.lastName ?? ""}`.trim() || mUser.email || "—";
+                        const role = mUser.roles?.[0]?.role?.name || mUser.designation || "Crew Member";
+                        const st = mUser.status || "ACTIVE";
+                        return (
+                          <tr key={mUser.id}>
+                            <td className="font-mono text-[9px] text-amber-d">{mUser.employeeCode || "—"}</td>
+                            <td className="td-p">{name}</td>
+                            <td>{role}</td>
+                            <td>{mUser.email || "—"}</td>
+                            <td>
+                              <span className="flex items-center gap-1.5">
+                                {mUser.mobile || "—"}
+                                {mUser.mobileVerified && (
+                                  <span className="pill-green text-[7px] px-1.5 py-0.5">Verified</span>
+                                )}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`pill ${st === "ACTIVE" ? "p-g" : "p-gray"}`}>
+                                {st}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 📋 REQUESTS TAB */}
+        {activeTab === "requests" && (
+          <div className="animate-fade-in space-y-4">
+            {requestError && (
+              <div className="ib ib-r shadow-sm">
+                ❌ {requestError}
+              </div>
+            )}
+            {requestSuccess && (
+              <div className="ib ib-g shadow-sm">
+                ✓ {requestSuccess}
+              </div>
+            )}
+
+            <div className="card shadow-sm">
+              <div className="card-title">📋 Pending Project Join Requests ({pendingRequests.length})</div>
+              <div className="overflow-x-auto">
+                <table className="dt w-full">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Email</th>
+                      <th>Organization</th>
+                      <th>Status</th>
+                      <th className="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingRequests.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="text-center text-text-ter py-6">
+                          No pending project join requests for this project.
+                        </td>
+                      </tr>
+                    ) : (
+                      pendingRequests.map((req: any) => {
+                        const name = `${req.user?.firstName ?? ""} ${req.user?.lastName ?? ""}`.trim() || req.user?.email || "—";
+                        return (
+                          <tr key={req.id}>
+                            <td className="td-p">{name}</td>
+                            <td>{req.user?.email || "—"}</td>
+                            <td>{req.organization?.name || "—"}</td>
+                            <td>
+                              <span className="pill p-b">{req.status}</span>
+                            </td>
+                            <td className="text-right">
+                              <div className="flex gap-2 justify-end">
+                                <button
+                                  className="btn btn-s btn-sm"
+                                  onClick={() => handleApproveRequest(req.id)}
+                                  disabled={requestBusyId === req.id}
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  className="btn btn-d btn-sm"
+                                  onClick={() => handleRejectRequest(req.id)}
+                                  disabled={requestBusyId === req.id}
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ACTIVITY LOG SLIDE-IN PANEL (Setup tab "View log") */}
@@ -3729,18 +4493,6 @@ export default function PortalClient({
               )}
               
               <div className="fg">
-                <span className="fl">Team Code (Unique crew identifier, e.g. RIG-03)</span>
-                <input
-                  className="fi"
-                  value={newTeamCode}
-                  onChange={(e) => setNewTeamCode(e.target.value)}
-                  placeholder="RIG-03"
-                  maxLength={10}
-                  required
-                />
-              </div>
-
-              <div className="fg">
                 <span className="fl">Team Name (e.g. Drilling Crew C)</span>
                 <input
                   className="fi"
@@ -3753,14 +4505,33 @@ export default function PortalClient({
               </div>
 
               <div className="fg">
-                <span className="fl">Description (Optional)</span>
-                <textarea
-                  className="fi h-16 resize-none"
-                  value={newTeamDesc}
-                  onChange={(e) => setNewTeamDesc(e.target.value)}
-                  placeholder="Crew handling boring rig operations..."
-                  maxLength={150}
-                />
+                <span className="fl">Assign Boreholes</span>
+                <div className="border border-border-mid rounded-lg p-2 max-h-32 overflow-y-auto space-y-1.5" style={{ background: "var(--color-bg-card)" }}>
+                  {mappedBoreholes.filter(bh => !bh.teamId).length === 0 ? (
+                    <div className="text-[10px] text-text-ter italic">No boreholes available to assign.</div>
+                  ) : (
+                    mappedBoreholes.filter(bh => !bh.teamId).map((bh: any) => {
+                      const isChecked = selectedBoreholeIds.includes(bh.id);
+                      return (
+                        <label key={bh.id} className="flex items-center gap-2 text-[10px] text-text-sec cursor-pointer hover:text-text-pri select-none">
+                          <input
+                             type="checkbox"
+                             checked={isChecked}
+                             onChange={() => {
+                               if (isChecked) {
+                                 setSelectedBoreholeIds(selectedBoreholeIds.filter(id => id !== bh.id));
+                               } else {
+                                 setSelectedBoreholeIds([...selectedBoreholeIds, bh.id]);
+                               }
+                             }}
+                             className="accent-rust-mid w-3.5 h-3.5"
+                          />
+                          <span>{bh.boreholeCode} · {bh.name || "Unnamed"}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
 
@@ -3878,6 +4649,10 @@ export default function PortalClient({
                 onClick={() => {
                   setShowAddCrewMemberModal(null);
                   setCrewMemberAddError("");
+                  setNewWorkerMobile("");
+                  setOtpSent(false);
+                  setOtpCode("");
+                  setOtpVerified(false);
                 }}
                 aria-label="Close"
               >
@@ -3892,128 +4667,152 @@ export default function PortalClient({
                 </div>
               )}
 
-              <div className="flex gap-4 mb-3 border-b border-border pb-2">
-                <label className="flex items-center gap-1 text-[11px] font-medium cursor-pointer text-text-pri">
-                  <input
-                    type="radio"
-                    name="crewMemberType"
-                    checked={crewMemberType === "existing"}
-                    onChange={() => {
-                      setCrewMemberType("existing");
-                      setCrewMemberAddError("");
-                    }}
-                    className="accent-rust-mid"
-                  />
-                  Assign Existing Project Member
-                </label>
-                <label className="flex items-center gap-1 text-[11px] font-medium cursor-pointer text-text-pri">
-                  <input
-                    type="radio"
-                    name="crewMemberType"
-                    checked={crewMemberType === "new"}
-                    onChange={() => {
-                      setCrewMemberType("new");
-                      setCrewMemberAddError("");
-                    }}
-                    className="accent-rust-mid"
-                  />
-                  Add New Fieldworker (not in DB)
-                </label>
-              </div>
-
-              {crewMemberType === "existing" ? (
-                <div className="fg">
-                  <span className="fl">Select Project Member</span>
-                  <select
-                    className="fs"
-                    value={selectedProjectMemberId}
-                    onChange={(e) => setSelectedProjectMemberId(e.target.value)}
-                    required
-                  >
-                    <option value="" disabled>Select member...</option>
-                    {(() => {
-                      const teamMemberIds = new Set((showAddCrewMemberModal.members || []).map((tm: any) => tm.userId));
-                      const assignableMembers = members.filter((m: any) => !teamMemberIds.has(m.userId));
-                      return assignableMembers.map((m: any) => {
-                        const mu = m.user || {};
-                        const name = `${mu.firstName ?? ""} ${mu.lastName ?? ""}`.trim() || mu.email || "—";
-                        return (
-                          <option key={m.id} value={mu.id}>
-                            {name} ({mu.employeeCode || "Worker"})
-                          </option>
-                        );
-                      });
-                    })()}
-                  </select>
-                  {(() => {
-                    const teamMemberIds = new Set((showAddCrewMemberModal.members || []).map((tm: any) => tm.userId));
-                    const assignableMembers = members.filter((m: any) => !teamMemberIds.has(m.userId));
-                    return assignableMembers.length === 0 && (
-                      <div className="text-[10px] text-text-ter mt-1 italic">
-                        No assignable project members found.
-                      </div>
-                    );
-                  })()}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="fg">
-                    <span className="fl">Fieldworker Name</span>
-                    <input
-                      type="text"
-                      className="fi"
-                      value={newWorkerName}
-                      onChange={(e) => setNewWorkerName(e.target.value)}
-                      placeholder="e.g. Ramesh Chandra"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="grid2">
-                    <div className="fg">
-                      <span className="fl">Role</span>
-                      <select
-                        className="fs"
-                        value={newWorkerRole}
-                        onChange={(e) => setNewWorkerRole(e.target.value)}
-                        required
-                      >
-                        <option value="Field Supervisor">Field Supervisor</option>
-                        <option value="Driller">Driller</option>
-                        <option value="Helper">Helper</option>
-                        <option value="Geotech Engineer">Geotech Engineer</option>
-                        <option value="Lab Technician">Lab Technician</option>
-                      </select>
-                    </div>
-                    <div className="fg">
-                      <span className="fl">Status</span>
-                      <select
-                        className="fs"
-                        value={newWorkerStatus}
-                        onChange={(e) => setNewWorkerStatus(e.target.value)}
-                        required
-                      >
-                        <option value="On site">On site</option>
-                        <option value="Standby">Standby</option>
-                        <option value="Active">Active</option>
-                        <option value="Lab">Lab</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="fg">
-                    <span className="fl">Qualification</span>
-                    <input
-                      type="text"
-                      className="fi"
-                      value={newWorkerQual}
-                      onChange={(e) => setNewWorkerQual(e.target.value)}
-                      placeholder="e.g. Diploma Civil, ITI, 8 yrs exp"
-                      required
-                    />
-                  </div>
+            <div className="modal-body">
+              {crewMemberAddError && (
+                <div className="ib ib-r p-2 text-[10px] font-medium mb-2">
+                  ❌ {crewMemberAddError}
                 </div>
               )}
+
+              <div className="space-y-3">
+                <div className="fg">
+                  <span className="fl">Fieldworker Name</span>
+                  <input
+                    type="text"
+                    className="fi"
+                    value={newWorkerName}
+                    onChange={(e) => setNewWorkerName(e.target.value)}
+                    placeholder="e.g. Ramesh Chandra"
+                    required
+                  />
+                </div>
+                
+                <div className="grid2">
+                  <div className="fg">
+                    <span className="fl">Role</span>
+                    <select
+                      className="fs"
+                      value={newWorkerRole}
+                      onChange={(e) => setNewWorkerRole(e.target.value)}
+                      required
+                    >
+                      <option value="Field Supervisor">Field Supervisor</option>
+                      <option value="Driller">Driller</option>
+                      <option value="Helper">Helper</option>
+                      <option value="Geotech Engineer">Geotech Engineer</option>
+                      <option value="Lab Technician">Lab Technician</option>
+                    </select>
+                  </div>
+                  <div className="fg">
+                    <span className="fl">Status</span>
+                    <select
+                      className="fs"
+                      value={newWorkerStatus}
+                      onChange={(e) => setNewWorkerStatus(e.target.value)}
+                      required
+                    >
+                      <option value="On site">On site</option>
+                      <option value="Standby">Standby</option>
+                      <option value="Active">Active</option>
+                      <option value="Lab">Lab</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="fg">
+                  <span className="fl">Mobile Number</span>
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      className="fi flex-1"
+                      value={newWorkerMobile}
+                      onChange={(e) => {
+                        setNewWorkerMobile(e.target.value);
+                        setOtpSent(false);
+                        setOtpVerified(false);
+                        setIsVerificationSkipped(false);
+                      }}
+                      placeholder="e.g. 9876543210"
+                      disabled={otpVerified || isVerificationSkipped}
+                      required
+                    />
+                    {!otpVerified && !isVerificationSkipped && newWorkerMobile.trim() && (
+                      <div className="flex gap-2 self-center">
+                        <button
+                          type="button"
+                          className="btn btn-b text-[10px] py-1 px-3"
+                          onClick={() => {
+                            if (!newWorkerMobile.trim()) return;
+                            setOtpSent(true);
+                            setOtpVerified(false);
+                            alert("OTP sent to mobile number (simulated OTP: 123456)");
+                          }}
+                        >
+                          {otpSent ? "Resend OTP" : "Send OTP"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-w text-[10px] py-1 px-3 border border-border"
+                          style={{ borderColor: "var(--color-border)" }}
+                          onClick={() => {
+                            setIsVerificationSkipped(true);
+                            setOtpVerified(false);
+                            setOtpSent(false);
+                            setCrewMemberAddError("");
+                            alert("Verification skipped. You can verify this number later.");
+                          }}
+                        >
+                          Verify Later
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {otpSent && !otpVerified && !isVerificationSkipped && (
+                  <div className="fg">
+                    <span className="fl">Enter 6-Digit OTP</span>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="fi flex-1"
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value)}
+                        placeholder="Enter 123456"
+                        maxLength={6}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-g text-[10px] py-1 px-3 self-center"
+                        onClick={() => {
+                          if (otpCode === "123456") {
+                            setOtpVerified(true);
+                            setCrewMemberAddError("");
+                          } else {
+                            setCrewMemberAddError("Invalid OTP. Please type 123456.");
+                          }
+                        }}
+                      >
+                        Verify
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {otpVerified && !isVerificationSkipped && (
+                  <div className="text-[10px] text-green-d font-semibold flex items-center gap-1 mt-1" style={{ color: "var(--color-green-d)" }}>
+                    <span>✓ Mobile Number Verified</span>
+                  </div>
+                )}
+
+                {isVerificationSkipped && (
+                  <div className="text-[10px] text-amber-d font-semibold flex items-center gap-1 mt-1">
+                    <span>⚠️ Verification deferred. You can verify later.</span>
+                  </div>
+                )}
+              </div>
+            </div>
             </div>
 
             <div className="modal-footer">
@@ -4023,6 +4822,11 @@ export default function PortalClient({
                 onClick={() => {
                   setShowAddCrewMemberModal(null);
                   setCrewMemberAddError("");
+                  setNewWorkerMobile("");
+                  setOtpSent(false);
+                  setOtpCode("");
+                  setOtpVerified(false);
+                  setIsVerificationSkipped(false);
                 }}
                 disabled={memberAddLoading === showAddCrewMemberModal.id}
               >
@@ -4037,11 +4841,122 @@ export default function PortalClient({
                     const teamMemberIds = new Set((showAddCrewMemberModal.members || []).map((tm: any) => tm.userId));
                     const assignableMembers = members.filter((m: any) => !teamMemberIds.has(m.userId));
                     return assignableMembers.length === 0;
-                  })())
+                  })()) ||
+                  (crewMemberType === "new" && newWorkerMobile.trim() !== "" && !otpVerified && !isVerificationSkipped)
                 }
               >
                 {memberAddLoading === showAddCrewMemberModal.id ? "Adding..." : "Add Member"}
               </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {/* ROW-LEVEL OTP VERIFICATION MODAL */}
+      {verifyingUser && (
+        <div className="modal-overlay">
+          <form className="modal-content" onSubmit={handleVerifyRowOtp}>
+            <div className="modal-header">
+              <span className="modal-title">📱 Verify Mobile Number</span>
+              <button
+                type="button"
+                className="logp-close"
+                onClick={() => {
+                  setVerifyingUser(null);
+                  setVerifyRowError("");
+                  setVerifyRowOtpCode("");
+                  setVerifyRowOtpSent(false);
+                }}
+                aria-label="Close"
+              >
+                <RiCloseLine />
+              </button>
+            </div>
+            
+            <div className="modal-body bg-bg-raised">
+              {verifyRowError && (
+                <div className="ib ib-r p-2 text-[10px] font-medium mb-2">
+                  ❌ {verifyRowError}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div className="fg">
+                  <span className="fl">Fieldworker Name</span>
+                  <input
+                    type="text"
+                    className="fi bg-gray-100 cursor-not-allowed text-text-ter font-medium"
+                    style={{ backgroundColor: "var(--color-bg)", opacity: 0.6 }}
+                    value={`${verifyingUser.firstName ?? ""} ${verifyingUser.lastName ?? ""}`.trim()}
+                    disabled
+                  />
+                </div>
+
+                <div className="fg">
+                  <span className="fl">Mobile Number</span>
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      className="fi flex-1 bg-gray-100 cursor-not-allowed text-text-ter font-medium"
+                      style={{ backgroundColor: "var(--color-bg)", opacity: 0.6 }}
+                      value={verifyingUser.mobile}
+                      disabled
+                    />
+                    {!verifyRowOtpSent && (
+                      <button
+                        type="button"
+                        className="btn btn-b text-[10px] py-1 px-3 self-center"
+                        disabled={verifyRowLoading}
+                        onClick={handleSendRowOtp}
+                      >
+                        Send OTP
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {verifyRowOtpSent && (
+                  <div className="fg">
+                    <span className="fl">Enter 6-Digit OTP</span>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="fi flex-1"
+                        value={verifyRowOtpCode}
+                        onChange={(e) => setVerifyRowOtpCode(e.target.value)}
+                        placeholder="Enter 123456"
+                        maxLength={6}
+                        required
+                        disabled={verifyRowLoading}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-w"
+                onClick={() => {
+                  setVerifyingUser(null);
+                  setVerifyRowError("");
+                  setVerifyRowOtpCode("");
+                  setVerifyRowOtpSent(false);
+                }}
+                disabled={verifyRowLoading}
+              >
+                Cancel
+              </button>
+              {verifyRowOtpSent && (
+                <button
+                  type="submit"
+                  className="btn btn-g"
+                  disabled={verifyRowLoading}
+                >
+                  {verifyRowLoading ? "Verifying..." : "Verify"}
+                </button>
+              )}
             </div>
           </form>
         </div>

@@ -1,8 +1,9 @@
 "use client";
 
-import { RiNotification3Line } from "react-icons/ri";
 import { useRouter } from "next/navigation";
 import { getInitials } from "@/lib/utils";
+import NotificationBell from "../notifications/NotificationBell";
+import { usePortalTab } from "./PortalContext";
 
 interface PortalTopbarProps {
   project: any;
@@ -12,6 +13,7 @@ interface PortalTopbarProps {
 /* Matches portal .topbar: height 50px, gap 14px */
 export default function PortalTopbar({ project, user }: PortalTopbarProps) {
   const router = useRouter();
+  const { activeTab, setActiveTab } = usePortalTab();
   const firstName = (user?.firstName as string) || "";
   const lastName = (user?.lastName as string) || "";
   const initials = getInitials(firstName, lastName);
@@ -41,10 +43,7 @@ export default function PortalTopbar({ project, user }: PortalTopbarProps) {
       {/* Right — matches .topbar-right */}
       <div className="ml-auto flex items-center gap-2">
         {/* Notif — matches .notif */}
-        <div className="rounded-[5px] bg-bg-card flex items-center justify-center cursor-pointer text-[13px] relative" style={{ width: "30px", height: "30px", border: "0.5px solid var(--color-border)" }}>
-          <RiNotification3Line className="text-text-sec" />
-          <div className="absolute rounded-full bg-rust-mid" style={{ top: "3px", right: "3px", width: "6px", height: "6px", border: "1.5px solid var(--color-bg-surface)" }} />
-        </div>
+        <NotificationBell />
 
         {/* User pill — matches .user-pill */}
         <div className="flex items-center gap-[7px] bg-bg-card rounded-[5px]" style={{ border: "0.5px solid var(--color-border)", padding: "4px 9px" }}>
@@ -55,6 +54,19 @@ export default function PortalTopbar({ project, user }: PortalTopbarProps) {
         {/* Back button — matches .tb-back */}
         <button onClick={() => router.push("/dashboard")} className="text-[10px] bg-transparent border border-border rounded-[5px] text-text-ter cursor-pointer transition-all hover:border-rust-mid hover:text-rust-d" style={{ padding: "4px 9px" }}>
           ← Dashboard
+        </button>
+
+        {/* Settings button */}
+        <button
+          onClick={() => setActiveTab("settings")}
+          className={`text-[10px] bg-transparent border rounded-[5px] cursor-pointer transition-all hover:border-rust-mid hover:text-rust-d
+            ${activeTab === "settings"
+              ? "border-rust-mid text-rust-d font-semibold bg-[rgba(153,60,29,.1)]"
+              : "border-border text-text-ter hover:text-text-sec"
+            }`}
+          style={{ padding: "4px 9px" }}
+        >
+          ⚙ Settings
         </button>
       </div>
     </div>

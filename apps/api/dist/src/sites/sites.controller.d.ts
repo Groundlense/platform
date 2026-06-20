@@ -1,0 +1,102 @@
+import { SitesService } from './sites.service';
+import { CreateSiteDto } from './dto/create-site.dto';
+export declare class SitesController {
+    private readonly sitesService;
+    constructor(sitesService: SitesService);
+    create(projectId: string, dto: CreateSiteDto): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        name: string;
+        isActive: boolean;
+        code: string;
+        description: string | null;
+        projectId: string;
+        latitude: import("@prisma/client/runtime/library").Decimal | null;
+        longitude: import("@prisma/client/runtime/library").Decimal | null;
+    }>;
+    findByProject(projectId: string): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        name: string;
+        isActive: boolean;
+        code: string;
+        description: string | null;
+        projectId: string;
+        latitude: import("@prisma/client/runtime/library").Decimal | null;
+        longitude: import("@prisma/client/runtime/library").Decimal | null;
+    }[]>;
+    findOne(id: string): Promise<({
+        project: {
+            id: string;
+            status: import("@prisma/client").$Enums.ProjectStatus;
+            createdAt: Date;
+            updatedAt: Date;
+            name: string;
+            state: string | null;
+            description: string | null;
+            geotechOrganizationId: string | null;
+            epcOrganizationId: string | null;
+            projectCode: string;
+            tenderId: string | null;
+            createdByUserId: string;
+            startDate: Date | null;
+            endDate: Date | null;
+            projectType: string | null;
+            district: string | null;
+            chainageFrom: import("@prisma/client/runtime/library").Decimal | null;
+            chainageTo: import("@prisma/client/runtime/library").Decimal | null;
+            initiatedByCompanyId: string | null;
+            initiatedByUserId: string | null;
+            billingCompanyId: string | null;
+            totalBoringsPlanned: number | null;
+            targetCompletionDate: Date | null;
+            lockedAt: Date | null;
+        };
+        boreholes: {
+            id: string;
+            status: import("@prisma/client").$Enums.BoreholeStatus;
+            createdAt: Date;
+            updatedAt: Date;
+            name: string | null;
+            createdByUserId: string;
+            lockedAt: Date | null;
+            projectId: string;
+            siteId: string | null;
+            boreholeCode: string;
+            teamId: string | null;
+            latitude: import("@prisma/client/runtime/library").Decimal | null;
+            longitude: import("@prisma/client/runtime/library").Decimal | null;
+            groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
+            plannedDepth: import("@prisma/client/runtime/library").Decimal | null;
+            finalDepth: import("@prisma/client/runtime/library").Decimal | null;
+            startedAt: Date | null;
+            completedAt: Date | null;
+            assignedWorkerId: string | null;
+            method: import("@prisma/client").$Enums.BoringMethod | null;
+            rigType: string | null;
+            startDepth: import("@prisma/client/runtime/library").Decimal | null;
+        }[];
+    } & {
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        name: string;
+        isActive: boolean;
+        code: string;
+        description: string | null;
+        projectId: string;
+        latitude: import("@prisma/client/runtime/library").Decimal | null;
+        longitude: import("@prisma/client/runtime/library").Decimal | null;
+    }) | null>;
+    getDashboard(siteId: string): Promise<{
+        siteId: string | undefined;
+        siteName: string | undefined;
+        boreholes: number;
+        planned: number;
+        inProgress: number;
+        completed: number;
+        abandoned: number;
+    }>;
+}

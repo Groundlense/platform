@@ -7,16 +7,13 @@ import {
 } from '@nestjs/common';
 
 import { DatabaseService } from '../database/database.service';
-
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
-
 import { ProjectAccessService } from '../common/access/project-access.service';
-
 import { CreateProjectDto } from './dto/create-project.dto';
-
 import { InviteProjectCompanyDto } from './dto/invite-project-company.dto';
-
 import { AssignProjectRoleDto } from './dto/assign-project-role.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class ProjectsService {
@@ -24,28 +21,138 @@ export class ProjectsService {
     private readonly db: DatabaseService,
     private readonly activityLogsService: ActivityLogsService,
     private readonly access: ProjectAccessService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(dto: CreateProjectDto, userId: string, organizationId: string) {
+    let epcOrgId: string | null = null;
+    let geotechOrgId: string | null = null;
+    
+    const callerOrg = await this.db.organization.findUnique({
+      where: { id: organizationId },
+    });
+    if (callerOrg) {
+      if (callerOrg.type === 'EPC_CONTRACTOR') {
+        epcOrgId = organizationId;
+      } else if (callerOrg.type === 'GEOTECH_CONTRACTOR') {
+        geotechOrgId = organizationId;
+      }
+    }
+
+    let partnerUser: any = null;
+    let partnerEmail: string | null = null;
+    if (dto.partnerSearchQuery) {
+      const query = dto.partnerSearchQuery.trim();
+      partnerUser = await this.db.user.findFirst({
+        where: {
+          OR: [
+            { email: query },
+            { employeeCode: query },
+          ],
+        },
+      });
+
+      if (!partnerUser && query.includes('@')) {
+        partnerEmail = query;
+      }
+    }
+
     const project = await this.db.project.create({
       data: {
         projectCode: dto.projectCode,
-
         name: dto.name,
-
         description: dto.description,
-
         startDate: dto.startDate ? new Date(dto.startDate) : null,
-
         endDate: dto.endDate ? new Date(dto.endDate) : null,
-
         createdByUserId: userId,
-
-        epcOrganizationId: organizationId,
-
-        geotechOrganizationId: dto.geotechOrganizationId,
+        epcOrganizationId: epcOrgId,
+        geotechOrganizationId: geotechOrgId,
       },
     });
+
+    // Add creator to project members
+    await this.db.projectMember.create({
+      data: {
+        projectId: project.id,
+        userId: userId,
+      },
+    }).catch(() => {});
+
+    // Notify/email partner or handle invitation
+    const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+    
+    if (partnerUser) {
+      // Instead of directly mapping partner organization or adding to project members,
+      // create a PENDING ProjectJoinRequest (invitation)
+      await this.db.projectJoinRequest.create({
+        data: {
+          projectId: project.id,
+          organizationId: partnerUser.organizationId,
+          userId: partnerUser.id,
+          status: 'PENDING',
+          isInvitation: true,
+        },
+      }).catch(() => {});
+
+      try {
+        await this.notificationsService.create({
+          userId: partnerUser.id,
+          title: 'Project Link Invitation',
+          message: `Project '${project.name}' wants to link with your organization. Please approve to link.`,
+          type: 'JOIN_REQUEST',
+        });
+      } catch (err) {
+        console.error('Failed to create notification:', err);
+      }
+
+      if (partnerUser.email) {
+        const subject = `Invitation to link to project ${project.name} on GroundLense`;
+        const text = `You have been invited to link your organization to project ${project.name} on GroundLense. View and approve it here: ${webUrl}/dashboard`;
+        const html = `
+          <div style="font-family: sans-serif; padding: 20px; color: #333;">
+            <h2 style="color: #4f46e5;">Project Link Invitation</h2>
+            <p>You have been invited to link your organization to project <strong>${project.name}</strong> on GroundLense.</p>
+            <p>Please log in and approve the request from your dashboard to link the project:</p>
+            <div style="margin: 30px 0;">
+              <a href="${webUrl}/dashboard" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block;">
+                View & Approve Request
+              </a>
+            </div>
+          </div>
+        `;
+        void this.sendMail(partnerUser.email, subject, text, html);
+      }
+    } else if (partnerEmail) {
+      await this.db.projectInvitation.upsert({
+        where: {
+          projectId_email: {
+            projectId: project.id,
+            email: partnerEmail,
+          },
+        },
+        create: {
+          projectId: project.id,
+          email: partnerEmail,
+        },
+        update: {},
+      });
+
+      const subject = `Invitation to join project ${project.name} on GroundLense`;
+      const text = `You have been invited to join project ${project.name} on GroundLense. Create an account here: ${webUrl}/login?register=true&email=${encodeURIComponent(partnerEmail)}&projectId=${project.id}`;
+      const html = `
+        <div style="font-family: sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #4f46e5;">Invitation to join project on GroundLense</h2>
+          <p>You have been invited to join the project <strong>${project.name}</strong> on GroundLense.</p>
+          <p>Please click the button below to create an account, register your company, and access the project:</p>
+          <div style="margin: 30px 0;">
+            <a href="${webUrl}/login?register=true&email=${encodeURIComponent(partnerEmail)}&projectId=${project.id}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block;">
+              Create Account & Join Project
+            </a>
+          </div>
+        </div>
+      `;
+      void this.sendMail(partnerEmail, subject, text, html);
+    }
 
     await this.activityLogsService.log(
       userId,
@@ -599,5 +706,345 @@ export class ProjectsService {
       },
       orderBy: { assignedAt: 'desc' },
     });
+  }
+
+  async globalSearch(query: string, user: any) {
+    const trimmed = query.trim();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed);
+
+    const projects = await this.db.project.findMany({
+      where: {
+        OR: [
+          ...(isUuid ? [{ id: trimmed }] : []),
+          { projectCode: { equals: trimmed, mode: 'insensitive' as const } },
+          { epcOrganization: { gstin: { equals: trimmed, mode: 'insensitive' as const } } },
+          { geotechOrganization: { gstin: { equals: trimmed, mode: 'insensitive' as const } } },
+        ],
+      },
+      include: {
+        epcOrganization: true,
+        geotechOrganization: true,
+      },
+    });
+
+    const result: any[] = [];
+    for (const project of projects) {
+      const hasAccess = await this.access.canAccessProject(user, project.id);
+      result.push({
+        ...project,
+        hasAccess,
+      });
+    }
+    return result;
+  }
+
+  async createJoinRequest(projectId: string, user: any) {
+    const project = await this.db.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    const existing = await this.db.projectJoinRequest.findUnique({
+      where: {
+        projectId_organizationId: {
+          projectId,
+          organizationId: user.organizationId,
+        },
+      },
+    });
+    if (existing) {
+      if (existing.status === 'PENDING') {
+        throw new ConflictException('A join request is already pending for this project');
+      } else if (existing.status === 'APPROVED') {
+        throw new ConflictException('Your organization is already joined to this project');
+      }
+    }
+
+    const request = await this.db.projectJoinRequest.upsert({
+      where: {
+        projectId_organizationId: {
+          projectId,
+          organizationId: user.organizationId,
+        },
+      },
+      create: {
+        projectId,
+        organizationId: user.organizationId,
+        userId: user.id,
+        status: 'PENDING',
+        isInvitation: false,
+      },
+      update: {
+        status: 'PENDING',
+        userId: user.id,
+        isInvitation: false,
+      },
+    });
+
+    try {
+      const requesterOrg = await this.db.organization.findUnique({
+        where: { id: user.organizationId },
+      });
+      const message = `Organization '${requesterOrg?.name || 'Partner'}' is requesting to join project '${project.name}'.`;
+      
+      await this.notificationsService.create({
+        userId: project.createdByUserId,
+        title: 'Project Join Request',
+        message,
+        type: 'JOIN_REQUEST',
+      });
+    } catch (err) {
+      console.error('Failed to notify project owner of join request:', err);
+    }
+
+    return request;
+  }
+
+  async getPendingProjectJoinRequests(user: any) {
+    const organizationId = user.organizationId;
+    
+    const requests = await this.db.projectJoinRequest.findMany({
+      where: {
+        status: 'PENDING',
+        OR: [
+          {
+            project: {
+              OR: [
+                { createdBy: { organizationId } },
+                { epcOrganizationId: organizationId },
+                { geotechOrganizationId: organizationId },
+              ],
+            },
+          },
+          {
+            organizationId,
+          },
+        ],
+      },
+      include: {
+        project: {
+          include: {
+            createdBy: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                organizationId: true,
+              }
+            }
+          }
+        },
+        organization: true,
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            organizationId: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return requests.filter((req) => {
+      if (req.isInvitation) {
+        // Invitation -> only show to the target organization (me)
+        return req.organizationId === organizationId;
+      } else {
+        // Join Request -> only show to project owner (me)
+        const projectCreatorOrgId = req.project.createdBy?.organizationId;
+        const isMyOrgOwner =
+          req.project.epcOrganizationId === organizationId ||
+          req.project.geotechOrganizationId === organizationId ||
+          projectCreatorOrgId === organizationId;
+        
+        return isMyOrgOwner && req.organizationId !== organizationId;
+      }
+    });
+  }
+
+  async approveProjectJoinRequest(requestId: string, user: any) {
+    const request = await this.db.projectJoinRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        project: true,
+        organization: true,
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Join request not found');
+    }
+
+    const callerOrgId = user.organizationId;
+    const project = request.project;
+    
+    let isAllowed = false;
+    if (request.isInvitation) {
+      isAllowed = request.organizationId === callerOrgId;
+    } else {
+      const projectCreator = await this.db.user.findUnique({ where: { id: project.createdByUserId } });
+      const isOwner =
+        project.epcOrganizationId === callerOrgId ||
+        project.geotechOrganizationId === callerOrgId ||
+        projectCreator?.organizationId === callerOrgId;
+      isAllowed = isOwner;
+    }
+
+    if (!isAllowed && !this.access.isSuperAdmin(user)) {
+      throw new ForbiddenException('You do not have permission to approve this request');
+    }
+
+    const partnerType = request.organization.type;
+
+    const updateData: any = {};
+    if (partnerType === 'GEOTECH_CONTRACTOR') {
+      updateData.geotechOrganizationId = request.organizationId;
+    } else if (partnerType === 'EPC_CONTRACTOR') {
+      updateData.epcOrganizationId = request.organizationId;
+    }
+
+    await this.db.$transaction([
+      this.db.project.update({
+        where: { id: project.id },
+        data: updateData,
+      }),
+      this.db.projectJoinRequest.update({
+        where: { id: requestId },
+        data: { status: 'APPROVED' },
+      }),
+      this.db.projectMember.upsert({
+        where: {
+          projectId_userId: {
+            projectId: project.id,
+            userId: request.userId,
+          },
+        },
+        create: {
+          projectId: project.id,
+          userId: request.userId,
+        },
+        update: {},
+      }),
+    ]);
+
+    await this.activityLogsService.log(
+      user.id,
+      'PROJECT_JOIN_REQUEST_APPROVED',
+      'PROJECT',
+      project.id,
+      { requestId, organizationId: request.organizationId },
+    );
+
+    return { success: true, message: 'Project join request approved successfully.' };
+  }
+
+  async rejectProjectJoinRequest(requestId: string, user: any) {
+    const request = await this.db.projectJoinRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        project: true,
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Join request not found');
+    }
+
+    const callerOrgId = user.organizationId;
+    const project = request.project;
+    
+    let isAllowed = false;
+    if (request.isInvitation) {
+      isAllowed = request.organizationId === callerOrgId;
+    } else {
+      const projectCreator = await this.db.user.findUnique({ where: { id: project.createdByUserId } });
+      const isOwner =
+        project.epcOrganizationId === callerOrgId ||
+        project.geotechOrganizationId === callerOrgId ||
+        projectCreator?.organizationId === callerOrgId;
+      isAllowed = isOwner;
+    }
+
+    if (!isAllowed && !this.access.isSuperAdmin(user)) {
+      throw new ForbiddenException('You do not have permission to reject this request');
+    }
+
+    await this.db.projectJoinRequest.update({
+      where: { id: requestId },
+      data: { status: 'REJECTED' },
+    });
+
+    return { success: true, message: 'Project join request rejected successfully.' };
+  }
+
+  private async getTransporter() {
+    const host = process.env.SMTP_HOST;
+    const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+
+    if (host && user && pass) {
+      return nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465,
+        auth: {
+          user,
+          pass,
+        },
+      });
+    } else {
+      console.log(
+        '[Email] SMTP credentials not configured. Creating Ethereal test account...',
+      );
+      try {
+        const testAccount = await nodemailer.createTestAccount();
+        return nodemailer.createTransport({
+          host: 'smtp.ethereal.email',
+          port: 587,
+          secure: false,
+          auth: {
+            user: testAccount.user,
+            pass: testAccount.pass,
+          },
+        });
+      } catch (err) {
+        console.error('Failed to create Ethereal test account:', err);
+        return null;
+      }
+    }
+  }
+
+  private async sendMail(email: string, subject: string, text: string, html: string): Promise<void> {
+    const transporter = await this.getTransporter();
+    if (!transporter) return;
+
+    const from = process.env.SMTP_FROM || `"GroundLense" <no-reply@groundlense.com>`;
+    const mailOptions = {
+      from,
+      to: email,
+      subject,
+      text,
+      html,
+    };
+
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`[Email] Email sent to ${email}. Message ID: ${info.messageId}`);
+      const previewUrl = nodemailer.getTestMessageUrl(info);
+      if (previewUrl) {
+        console.log(`[Email] Email Preview URL (Ethereal): ${previewUrl}`);
+      }
+    } catch (err) {
+      console.error(`Failed to send email to ${email}:`, err);
+    }
   }
 }

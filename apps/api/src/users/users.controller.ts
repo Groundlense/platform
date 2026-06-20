@@ -12,6 +12,7 @@ import { Patch, Param } from '@nestjs/common';
 
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { ResetPinDto } from './dto/reset-pin.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -84,4 +85,19 @@ export class UsersController {
   ) {
     return this.usersService.resetPin(userId, dto.pin, user);
   }
+
+  @Patch(':id/profile')
+  updateProfile(
+    @Param('id')
+    userId: string,
+
+    @Body()
+    dto: UpdateProfileDto,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.usersService.updateProfile(userId, dto, user);
+  }
 }
+

@@ -10,14 +10,14 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ redirect?: string }>;
+  searchParams: Promise<{ redirect?: string; email?: string; register?: string }>;
 }) {
-  const { redirect } = await searchParams;
+  const { redirect, email, register } = await searchParams;
 
   return (
     <div className="flex flex-row !min-h-screen">
       <LoginLeftPanel />
-      <LoginForm redirectTo={redirect} />
+      <LoginForm redirectTo={redirect} initialEmail={email} initialRegister={register === "true"} />
     </div>
   );
 }
