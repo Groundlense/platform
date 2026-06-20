@@ -169,6 +169,14 @@ export default function PortalClient({
   const isGeotech = useMemo(() => {
     return u ? (u.organizationId === proj?.geotechOrganizationId || u.roles?.includes("SUPER_ADMIN")) : false;
   }, [u, proj]);
+  const canEditProject = useMemo(() => {
+    if (!u) return false;
+    if (u.roles?.includes("SUPER_ADMIN")) return true;
+    return u.organizationId === proj?.epcOrganizationId || u.organizationId === proj?.geotechOrganizationId;
+  }, [u, proj]);
+  const isBoringStarted = useMemo(() => {
+    return (boreholes || []).some((bh: any) => bh.status !== "PLANNED");
+  }, [boreholes]);
   const userName = u
     ? `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || (u.email as string) || "Engineer"
     : "Engineer";
@@ -992,16 +1000,27 @@ export default function PortalClient({
   const [projectName, setProjectName] = useState(proj?.name ?? "");
   const [clientName, setClientName] = useState(proj?.initiatedByCompany?.name ?? "");
   const [contractorName, setContractorName] = useState(proj?.epcOrganization?.name ?? "");
+  const [agencyName, setAgencyName] = useState(proj?.geotechOrganization?.name ?? "");
   const [ieFirmName, setIeFirmName] = useState(proj?.billingCompany?.name ?? "");
   const [projectState, setProjectState] = useState(proj?.state ?? "");
   const [investigationStart, setInvestigationStart] = useState(proj?.startDate ? new Date(proj.startDate).toISOString().split('T')[0] : "");
   const [expectedCompletion, setExpectedCompletion] = useState(proj?.endDate ? new Date(proj.endDate).toISOString().split('T')[0] : "");
+
+  // ── Setup tab: Investigation Parameters state ──
+  const [isEditingInvestigationParameters, setIsEditingInvestigationParameters] = useState(false);
+  const [boringMethod, setBoringMethod] = useState("rotary");
+  const [drillingFluid, setDrillingFluid] = useState("bentonite");
+  const [casingUsed, setCasingUsed] = useState("yes");
+  const [sptHammerType, setSptHammerType] = useState("is2131");
+  const [isCodeApplicable, setIsCodeApplicable] = useState("is1892");
+  const [investigationLabId, setInvestigationLabId] = useState(nablLabs[0]?.id ?? "");
 
   useEffect(() => {
     if (proj) {
       setProjectName(proj.name ?? "");
       setClientName(proj.initiatedByCompany?.name ?? "");
       setContractorName(proj.epcOrganization?.name ?? "");
+      setAgencyName(proj.geotechOrganization?.name ?? "");
       setIeFirmName(proj.billingCompany?.name ?? "");
       setProjectState(proj.state ?? "");
       setInvestigationStart(proj.startDate ? new Date(proj.startDate).toISOString().split('T')[0] : "");
@@ -2031,7 +2050,7 @@ export default function PortalClient({
             <div className="card shadow-sm">
               <div className="card-title">
                 <span>📋 Project Details</span>
-                {isGeotech && (
+                {canEditProject && (
                   <div className="flex gap-2">
                     {isEditingProjectDetails ? (
                       <>
@@ -2072,11 +2091,20 @@ export default function PortalClient({
                       />
                     </div>
                     <div className="fg">
-                      <div className="fl">Contractor</div>
+                      <div className="fl">Contractor (EPC Company)</div>
                       <input 
                         className="fi text-amber-d" 
                         value={contractorName} 
                         onChange={(e) => setContractorName(e.target.value)} 
+                        readOnly={!isEditingProjectDetails} 
+                      />
+                    </div>
+                    <div className="fg">
+                      <div className="fl">Agency (Geotech Company)</div>
+                      <input 
+                        className="fi text-amber-d" 
+                        value={agencyName} 
+                        onChange={(e) => setAgencyName(e.target.value)} 
                         readOnly={!isEditingProjectDetails} 
                       />
                     </div>
@@ -2156,10 +2184,25 @@ export default function PortalClient({
               )}
             </div>
 
-            {/* Investigation Parameters Card — form defaults only */}
+            {/* Investigation Parameters Card */}
             <div className="card shadow-sm">
               <div className="card-title">
                 <span>⚙ Investigation Parameters</span>
+                {canEditProject && !isBoringStarted && (
+                  <div className="flex gap-2">
+                    {isEditingInvestigationParameters ? (
+                      <>
+                        <span className="ct-action cursor-pointer text-green-d bg-green-light border-green-d" onClick={() => {
+                          setIsEditingInvestigationParameters(false);
+                          alert("Investigation parameters saved successfully!");
+                        }}>Save</span>
+                        <span className="ct-action cursor-pointer text-text-sec bg-bg-card border-border" onClick={() => setIsEditingInvestigationParameters(false)}>Cancel</span>
+                      </>
+                    ) : (
+                      <span className="ct-action cursor-pointer" onClick={() => setIsEditingInvestigationParameters(true)}>Edit</span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="ib ib-a">
                 ⚠ These parameters apply to ALL borings in this project. Cannot be changed once any boring is started by a field worker.
@@ -2167,31 +2210,51 @@ export default function PortalClient({
               <div className="grid2">
                 <div className="fg">
                   <div className="fl">Boring Method</div>
-                  <select className="fs text-amber-d" disabled defaultValue="rotary">
+                  <select 
+                    className="fs text-amber-d" 
+                    disabled={!isEditingInvestigationParameters} 
+                    value={boringMethod}
+                    onChange={(e) => setBoringMethod(e.target.value)}
+                  >
                     <option value="rotary">Rotary boring — NX size bit</option>
-                    <option>Percussion boring</option>
-                    <option>Wash boring</option>
-                    <option>Auger boring</option>
+                    <option value="percussion">Percussion boring</option>
+                    <option value="wash">Wash boring</option>
+                    <option value="auger">Auger boring</option>
                   </select>
                 </div>
                 <div className="fg">
                   <div className="fl">Drilling Fluid</div>
-                  <select className="fs text-amber-d" disabled defaultValue="bentonite">
-                    <option>Water</option>
+                  <select 
+                    className="fs text-amber-d" 
+                    disabled={!isEditingInvestigationParameters} 
+                    value={drillingFluid}
+                    onChange={(e) => setDrillingFluid(e.target.value)}
+                  >
+                    <option value="water">Water</option>
                     <option value="bentonite">Bentonite slurry</option>
-                    <option>Mud</option>
+                    <option value="mud">Mud</option>
                   </select>
                 </div>
                 <div className="fg">
                   <div className="fl">Casing Used</div>
-                  <select className="fs text-amber-d" disabled defaultValue="yes">
+                  <select 
+                    className="fs text-amber-d" 
+                    disabled={!isEditingInvestigationParameters} 
+                    value={casingUsed}
+                    onChange={(e) => setCasingUsed(e.target.value)}
+                  >
                     <option value="yes">Yes — 150mm dia NW casing</option>
-                    <option>No casing</option>
+                    <option value="no">No casing</option>
                   </select>
                 </div>
                 <div className="fg">
                   <div className="fl">SPT Hammer Type</div>
-                  <select className="fs text-amber-d" disabled defaultValue="is2131">
+                  <select 
+                    className="fs text-amber-d" 
+                    disabled={!isEditingInvestigationParameters} 
+                    value={sptHammerType}
+                    onChange={(e) => setSptHammerType(e.target.value)}
+                  >
                     <option value="is2131">63.5 kg — 75cm free fall (IS 2131 Standard)</option>
                     <option value="donut">Donut Hammer — 63.5 kg</option>
                     <option value="safety">Safety Hammer — 63.5 kg</option>
@@ -2200,16 +2263,27 @@ export default function PortalClient({
                 </div>
                 <div className="fg">
                   <div className="fl">IS Code Applicable</div>
-                  <select className="fs text-amber-d" disabled defaultValue="is1892">
+                  <select 
+                    className="fs text-amber-d" 
+                    disabled={!isEditingInvestigationParameters} 
+                    value={isCodeApplicable}
+                    onChange={(e) => setIsCodeApplicable(e.target.value)}
+                  >
                     <option value="is1892">IS 1892 + IRC 78 + IS 2131</option>
-                    <option>RDSO + IRS Bridge Code</option>
+                    <option value="rdso">RDSO + IRS Bridge Code</option>
                   </select>
                 </div>
                 <div className="fg">
                   <div className="fl">NABL Lab Assigned</div>
-                  <select className="fs text-amber-d" disabled title={nablLabs.length === 0 ? "No NABL lab registered yet" : undefined}>
+                  <select 
+                    className="fs text-amber-d" 
+                    disabled={!isEditingInvestigationParameters} 
+                    value={investigationLabId}
+                    onChange={(e) => setInvestigationLabId(e.target.value)}
+                    title={nablLabs.length === 0 ? "No NABL lab registered yet" : undefined}
+                  >
                     {nablLabs.length === 0 ? (
-                      <option>No NABL lab registered yet</option>
+                      <option value="">No NABL lab registered yet</option>
                     ) : (
                       nablLabs.map((lab: any) => (
                         <option key={lab.id} value={lab.id}>{lab.labName} — NABL {lab.nablCertNumber}</option>
@@ -2232,11 +2306,11 @@ export default function PortalClient({
             <div className="card shadow-sm">
               <div className="card-title">
                 <span>👥 Team Assignment</span>
-                {isGeotech && (
+                {canEditProject && (
                   <span className="ct-action flex items-center gap-1 cursor-pointer" onClick={() => setShowAddMemberModal(true)}><RiUserAddLine /> Add member</span>
                 )}
               </div>
-              {isGeotech && (
+              {canEditProject && (
                 <div className="flex gap-2 mb-3">
                   <button
                     className="btn btn-p btn-sm"
@@ -2276,7 +2350,7 @@ export default function PortalClient({
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-[8px] text-text-ter font-mono">ID: {team.id.substring(0, 8)}...</span>
-                                {isGeotech && (
+                                {canEditProject && (
                                   <button
                                     type="button"
                                     className="btn btn-d btn-sm text-[8px] py-0.5 px-1.5"
@@ -2364,7 +2438,7 @@ export default function PortalClient({
                           </div>
 
                           {/* Add Crew Member Action */}
-                          {isGeotech && (
+                          {canEditProject && (
                             <div className="border-t border-dashed border-border pt-2 mt-2 flex justify-end">
                               <button
                                 className="btn btn-p btn-sm text-[9px] py-0.5 px-2"
@@ -2448,7 +2522,7 @@ export default function PortalClient({
               <div className="grid3 mb-2">
                 <div className="fg">
                   <div className="fl">Seismic zone (IS 1893)</div>
-                  <select className="fs" value={seismicZone} disabled={!isGeotech} onChange={(e) => {
+                  <select className="fs" value={seismicZone} disabled={!canEditProject} onChange={(e) => {
                     setSeismicZone(e.target.value);
                     if (e.target.value === "Zone I") setPga(0.06);
                     else if (e.target.value === "Zone II") setPga(0.10);
@@ -2465,11 +2539,11 @@ export default function PortalClient({
                 </div>
                 <div className="fg">
                   <div className="fl">PGA (amax/g)</div>
-                  <input className="fi font-mono" type="number" step="0.01" value={pga} disabled={!isGeotech} onChange={(e) => setPga(parseFloat(e.target.value) || 0)} />
+                  <input className="fi font-mono" type="number" step="0.01" value={pga} disabled={!canEditProject} onChange={(e) => setPga(parseFloat(e.target.value) || 0)} />
                 </div>
                 <div className="fg">
                   <div className="fl">Geological formation</div>
-                  <select className="fs" disabled={!isGeotech}>
+                  <select className="fs" disabled={!canEditProject}>
                     <option>Alluvial plain</option>
                     <option>Lateritic</option>
                     <option>Hard rock</option>

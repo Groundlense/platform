@@ -47,11 +47,11 @@ export declare class AuthService {
     verifyGst(gstin: string): Promise<{
         success: boolean;
         exists: boolean;
-        organizationId: any;
-        legalName: any;
-        state: any;
-        city: any;
-        type: any;
+        organizationId: string;
+        legalName: string;
+        state: string | null;
+        city: string | null;
+        type: import("@prisma/client").$Enums.OrganizationType;
         pan?: undefined;
     } | {
         success: boolean;
@@ -64,10 +64,10 @@ export declare class AuthService {
         type?: undefined;
     }>;
     getInviteDetails(token: string): Promise<{
-        email: any;
-        organizationName: any;
-        roleCode: any;
-        roleName: any;
+        email: string | null;
+        organizationName: string;
+        roleCode: string;
+        roleName: string;
     }>;
     acceptInvite(dto: AcceptInviteDto): Promise<{
         accessToken: string;
@@ -76,7 +76,7 @@ export declare class AuthService {
     createJoinRequest(dto: JoinRequestDto): Promise<{
         success: boolean;
         message: string;
-        employeeCode: any;
+        employeeCode: string | null;
     }>;
     forgotPassword(email: string): Promise<{
         success: boolean;

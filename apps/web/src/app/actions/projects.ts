@@ -12,33 +12,35 @@ export async function createProjectAction(formData: FormData) {
   const state = (formData.get("state") as string | null)?.trim();
   const description = (formData.get("description") as string | null)?.trim();
   const geotechOrganizationId = (formData.get("geotechOrganizationId") as string | null)?.trim();
+  const epcOrganizationId = (formData.get("epcOrganizationId") as string | null)?.trim();
+  const partnerSearchQuery = (formData.get("partnerSearchQuery") as string | null)?.trim();
   const startDate = formData.get("startDate") as string | null;
   const endDate = formData.get("endDate") as string | null;
+  const targetCompletionDate = formData.get("targetCompletionDate") as string | null;
+  const tenderId = (formData.get("tenderId") as string | null)?.trim();
 
-  if (!name || !geotechOrganizationId) {
-    return { error: "Project name and geotech organization are required." };
+  if (!name) {
+    return { error: "Project name is required." };
   }
 
-  // The backend has no auto-generation for projectCode (it is a required,
-  // unique column) — generate a real, persisted code here.
   const projectCode =
     (formData.get("projectCode") as string | null)?.trim() ||
     `GL-PRJ-${Date.now().toString(36).toUpperCase()}`;
-
-  // NOTE: CreateProjectDto does not accept `state` (ValidationPipe runs with
-  // forbidNonWhitelisted), so the selected state is preserved in description.
-  const fullDescription =
-    [description, state ? `State: ${state}` : null].filter(Boolean).join(" · ") || undefined;
 
   try {
     const project = await createProject(
       {
         projectCode,
         name,
-        description: fullDescription,
-        geotechOrganizationId,
+        description: description || undefined,
+        state: state || undefined,
+        geotechOrganizationId: geotechOrganizationId || undefined,
+        epcOrganizationId: epcOrganizationId || undefined,
+        partnerSearchQuery: partnerSearchQuery || undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
+        targetCompletionDate: targetCompletionDate || undefined,
+        tenderId: tenderId || undefined,
       },
       token
     );

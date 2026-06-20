@@ -5,20 +5,20 @@ export declare class DashboardService {
     private readonly access;
     constructor(db: DatabaseService, access: ProjectAccessService);
     getSummary(user: any): Promise<{
-        projects: any;
-        boreholes: any;
-        intervals: any;
-        samples: any;
-        media: any;
+        projects: number;
+        boreholes: number;
+        intervals: number;
+        samples: number;
+        media: number;
     }>;
     getProjectDashboard(projectId: string, user: any): Promise<{
         projectId: string;
-        projectName: any;
-        boreholes: any;
-        intervals: any;
-        completedIntervals: any;
+        projectName: string;
+        boreholes: number;
+        intervals: number;
+        completedIntervals: number;
         completionPercentage: number;
-        samples: any;
-        media: any;
+        samples: number;
+        media: number;
     }>;
 }

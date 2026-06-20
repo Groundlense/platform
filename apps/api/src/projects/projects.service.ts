@@ -62,11 +62,14 @@ export class ProjectsService {
         projectCode: dto.projectCode,
         name: dto.name,
         description: dto.description,
+        state: dto.state || null,
+        tenderId: dto.tenderId || null,
+        targetCompletionDate: dto.targetCompletionDate ? new Date(dto.targetCompletionDate) : null,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         endDate: dto.endDate ? new Date(dto.endDate) : null,
         createdByUserId: userId,
-        epcOrganizationId: epcOrgId,
-        geotechOrganizationId: geotechOrgId,
+        epcOrganizationId: dto.epcOrganizationId || epcOrgId,
+        geotechOrganizationId: dto.geotechOrganizationId || geotechOrgId,
       },
     });
 
@@ -174,6 +177,8 @@ export class ProjectsService {
       include: {
         epcOrganization: true,
         geotechOrganization: true,
+        initiatedByCompany: true,
+        billingCompany: true,
       },
     });
 

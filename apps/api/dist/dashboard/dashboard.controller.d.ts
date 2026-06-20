@@ -3,21 +3,21 @@ export declare class DashboardController {
     private readonly dashboardService;
     constructor(dashboardService: DashboardService);
     getSummary(user: any): Promise<{
-        projects: any;
-        boreholes: any;
-        intervals: any;
-        samples: any;
-        media: any;
+        projects: number;
+        boreholes: number;
+        intervals: number;
+        samples: number;
+        media: number;
     }>;
     getProjectDashboard(projectId: string, user: any): Promise<{
         projectId: string;
-        projectName: any;
-        boreholes: any;
-        intervals: any;
-        completedIntervals: any;
+        projectName: string;
+        boreholes: number;
+        intervals: number;
+        completedIntervals: number;
         completionPercentage: number;
-        samples: any;
-        media: any;
+        samples: number;
+        media: number;
     }>;
     getMe(req: any): any;
 }

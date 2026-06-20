@@ -10,8 +10,77 @@ export declare class ActivityLogsService {
         newValue?: any;
         actorCompanyId?: string;
         isCodeReason?: string;
-    }): Promise<any>;
-    findAll(actor: any): Promise<any>;
-    findRecent(actor: any): Promise<any>;
-    findByUser(userId: string, actor: any): Promise<any>;
+    }): Promise<{
+        id: string;
+        createdAt: Date;
+        userId: string;
+        action: string;
+        entityType: string;
+        entityId: string;
+        metadata: import("@prisma/client/runtime/library").JsonValue | null;
+        ipAddress: string | null;
+        userAgent: string | null;
+        isCodeReason: string | null;
+        oldValue: import("@prisma/client/runtime/library").JsonValue | null;
+        newValue: import("@prisma/client/runtime/library").JsonValue | null;
+        actorCompanyId: string | null;
+    }>;
+    findAll(actor: any): Promise<({
+        user: {
+            firstName: string;
+            lastName: string | null;
+            email: string | null;
+            employeeCode: string | null;
+            id: string;
+        };
+    } & {
+        id: string;
+        createdAt: Date;
+        userId: string;
+        action: string;
+        entityType: string;
+        entityId: string;
+        metadata: import("@prisma/client/runtime/library").JsonValue | null;
+        ipAddress: string | null;
+        userAgent: string | null;
+        isCodeReason: string | null;
+        oldValue: import("@prisma/client/runtime/library").JsonValue | null;
+        newValue: import("@prisma/client/runtime/library").JsonValue | null;
+        actorCompanyId: string | null;
+    })[]>;
+    findRecent(actor: any): Promise<({
+        user: {
+            firstName: string;
+            lastName: string | null;
+        };
+    } & {
+        id: string;
+        createdAt: Date;
+        userId: string;
+        action: string;
+        entityType: string;
+        entityId: string;
+        metadata: import("@prisma/client/runtime/library").JsonValue | null;
+        ipAddress: string | null;
+        userAgent: string | null;
+        isCodeReason: string | null;
+        oldValue: import("@prisma/client/runtime/library").JsonValue | null;
+        newValue: import("@prisma/client/runtime/library").JsonValue | null;
+        actorCompanyId: string | null;
+    })[]>;
+    findByUser(userId: string, actor: any): Promise<{
+        id: string;
+        createdAt: Date;
+        userId: string;
+        action: string;
+        entityType: string;
+        entityId: string;
+        metadata: import("@prisma/client/runtime/library").JsonValue | null;
+        ipAddress: string | null;
+        userAgent: string | null;
+        isCodeReason: string | null;
+        oldValue: import("@prisma/client/runtime/library").JsonValue | null;
+        newValue: import("@prisma/client/runtime/library").JsonValue | null;
+        actorCompanyId: string | null;
+    }[]>;
 }
