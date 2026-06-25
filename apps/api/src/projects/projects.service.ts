@@ -13,7 +13,7 @@ import { CreateProjectDto } from './dto/create-project.dto';
 import { InviteProjectCompanyDto } from './dto/invite-project-company.dto';
 import { AssignProjectRoleDto } from './dto/assign-project-role.dto';
 import { NotificationsService } from '../notifications/notifications.service';
-import * as nodemailer from 'nodemailer';
+import { sendEmail } from '../common/email.helper';
 
 @Injectable()
 export class ProjectsService {
@@ -990,66 +990,12 @@ export class ProjectsService {
     return { success: true, message: 'Project join request rejected successfully.' };
   }
 
-  private async getTransporter() {
-    const host = process.env.SMTP_HOST;
-    const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-
-    if (host && user && pass) {
-      return nodemailer.createTransport({
-        host,
-        port,
-        secure: port === 465,
-        auth: {
-          user,
-          pass,
-        },
-      });
-    } else {
-      console.log(
-        '[Email] SMTP credentials not configured. Creating Ethereal test account...',
-      );
-      try {
-        const testAccount = await nodemailer.createTestAccount();
-        return nodemailer.createTransport({
-          host: 'smtp.ethereal.email',
-          port: 587,
-          secure: false,
-          auth: {
-            user: testAccount.user,
-            pass: testAccount.pass,
-          },
-        });
-      } catch (err) {
-        console.error('Failed to create Ethereal test account:', err);
-        return null;
-      }
-    }
-  }
-
   private async sendMail(email: string, subject: string, text: string, html: string): Promise<void> {
-    const transporter = await this.getTransporter();
-    if (!transporter) return;
-
-    const from = process.env.SMTP_FROM || `"GroundLense" <no-reply@groundlense.com>`;
-    const mailOptions = {
-      from,
+    await sendEmail({
       to: email,
       subject,
       text,
       html,
-    };
-
-    try {
-      const info = await transporter.sendMail(mailOptions);
-      console.log(`[Email] Email sent to ${email}. Message ID: ${info.messageId}`);
-      const previewUrl = nodemailer.getTestMessageUrl(info);
-      if (previewUrl) {
-        console.log(`[Email] Email Preview URL (Ethereal): ${previewUrl}`);
-      }
-    } catch (err) {
-      console.error(`Failed to send email to ${email}:`, err);
-    }
+    });
   }
 }

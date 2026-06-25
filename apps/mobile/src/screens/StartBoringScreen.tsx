@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 14,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.white,
   },
@@ -406,12 +406,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: 14,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorTitle: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.grayDark,
     textAlign: 'center',
@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   resumeTitle: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.amber,
     marginBottom: 6,
@@ -455,11 +455,11 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   resumeLbl: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
   },
   resumeVal: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.grayDark,
     flexShrink: 1,
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     color: colors.rust,
   },
   resumeAuto: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayMid,
     marginTop: 4,
   },
@@ -482,18 +482,18 @@ const styles = StyleSheet.create({
     borderColor: '#85B7EB',
   },
   locationTitle: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.blueDark,
   },
   locationCoords: {
     fontFamily: typography.fontFamilyMono,
-    fontSize: 10,
+    fontSize: 14,
     color: colors.blueDark,
     marginTop: 4,
   },
   locationMissing: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginTop: 4,
   },
@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.grayBorder,
   },
   mapBtnText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.white,
     fontWeight: '700',
   },
@@ -522,17 +522,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   infoBoxAmberTitle: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.amber,
   },
   infoBoxAmberSub: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginTop: 2,
   },
   fieldLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginBottom: 4,
     marginTop: 8,
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
     borderColor: colors.greenMid,
   },
   cameraBtnText: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayDark,
     fontWeight: '700',
   },
@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   tileQuarterText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayDark,
     fontWeight: '600',
   },
@@ -599,7 +599,7 @@ const styles = StyleSheet.create({
   },
   startBtnText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
   },
 });

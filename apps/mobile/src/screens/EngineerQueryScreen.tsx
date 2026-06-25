@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 14,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.white,
   },
@@ -383,12 +383,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.white,
     opacity: 0.8,
     marginTop: 2,
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   backLinkText: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.rust,
   },
@@ -426,24 +426,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   threadEngineer: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.grayDark,
   },
   threadBorehole: {
-    fontSize: 8,
+    fontSize: 11,
     fontFamily: typography.fontFamilyMono,
     color: colors.amber,
     marginTop: 2,
   },
   threadPreview: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.grayMid,
     marginTop: 4,
     lineHeight: 14,
   },
   threadDate: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayMid,
     marginTop: 4,
   },
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greenLight,
   },
   chipOpenText: {
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: '700',
     color: colors.greenDark,
   },
@@ -466,7 +466,7 @@ const styles = StyleSheet.create({
     borderColor: colors.grayBorder,
   },
   chipClosedText: {
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: '700',
     color: colors.grayMid,
   },
@@ -479,12 +479,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   queryHeader: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.amber,
   },
   queryText: {
-    fontSize: 10,
+    fontSize: 14,
     color: '#633806',
     marginTop: 4,
     lineHeight: 14,
@@ -499,12 +499,12 @@ const styles = StyleSheet.create({
     marginLeft: 24,
   },
   msgHeaderMine: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.greenDark,
   },
   msgTextMine: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.greenDark,
     marginTop: 4,
     lineHeight: 14,
@@ -517,12 +517,12 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   closedNoticeText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     textAlign: 'center',
   },
   sectionTitle: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.grayDark,
     marginBottom: 6,
@@ -547,16 +547,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   refLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
   },
   refVal: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.grayDark,
   },
   fieldLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginBottom: 4,
   },
@@ -567,7 +567,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 10,
+    fontSize: 14,
     color: colors.grayDark,
     minHeight: 60,
     textAlignVertical: 'top',
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   voiceBtnText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.blueDark,
     fontWeight: '700',
   },
@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
   },
   sendBtnText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
   },
   emptyCard: {
@@ -610,13 +610,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyTitle: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.grayDark,
     textAlign: 'center',
   },
   emptySub: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     textAlign: 'center',
     marginBottom: 6,

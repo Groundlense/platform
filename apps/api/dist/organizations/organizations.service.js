@@ -49,7 +49,7 @@ const project_access_service_1 = require("../common/access/project-access.servic
 const activity_logs_service_1 = require("../activity-logs/activity-logs.service");
 const crypto = __importStar(require("crypto"));
 const bcrypt = __importStar(require("bcrypt"));
-const nodemailer = __importStar(require("nodemailer"));
+const email_helper_1 = require("../common/email.helper");
 const DIRECTORY_SELECT = {
     id: true,
     name: true,
@@ -262,7 +262,8 @@ let OrganizationsService = class OrganizationsService {
                             },
                         });
                     }
-                    const inviteLink = `http://localhost:3000/register/invite?token=${token}`;
+                    const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+                    const inviteLink = `${webUrl}/register/invite?token=${token}`;
                     console.log(`[INVITE] Member invite link for ${emailOrCode}: ${inviteLink}`);
                     await this.activityLogsService.log(user.id, 'MEMBER_INVITED', 'USER', newUser.id, {
                         email: emailOrCode,
@@ -328,116 +329,53 @@ let OrganizationsService = class OrganizationsService {
         }
         return results;
     }
-    async getTransporter() {
-        const host = process.env.SMTP_HOST;
-        const port = process.env.SMTP_PORT
-            ? parseInt(process.env.SMTP_PORT, 10)
-            : 587;
-        const user = process.env.SMTP_USER;
-        const pass = process.env.SMTP_PASS;
-        if (host && user && pass) {
-            return nodemailer.createTransport({
-                host,
-                port,
-                secure: port === 465,
-                auth: {
-                    user,
-                    pass,
-                },
-            });
-        }
-        else {
-            console.log('[Email] SMTP credentials not configured. Creating Ethereal test account...');
-            try {
-                const testAccount = await nodemailer.createTestAccount();
-                return nodemailer.createTransport({
-                    host: 'smtp.ethereal.email',
-                    port: 587,
-                    secure: false,
-                    auth: {
-                        user: testAccount.user,
-                        pass: testAccount.pass,
-                    },
-                });
-            }
-            catch (err) {
-                console.error('Failed to create Ethereal test account:', err);
-                return null;
-            }
-        }
-    }
     async sendInviteEmail(email, inviteLink, orgName) {
-        const transporter = await this.getTransporter();
-        if (!transporter)
-            return;
-        const from = process.env.SMTP_FROM || `"GroundLense" <no-reply@groundlense.com>`;
-        const mailOptions = {
-            from,
-            to: email,
-            subject: `Invitation to join ${orgName} on GroundLense`,
-            text: `You have been invited to join ${orgName} on GroundLense. Click the following link to set up your account: ${inviteLink}`,
-            html: `
-        <div style="font-family: sans-serif; padding: 20px; color: #333;">
-          <h2 style="color: #4f46e5;">Welcome to GroundLense!</h2>
-          <p>You have been invited to join <strong>${orgName}</strong> on GroundLense.</p>
-          <p>Please click the button below to set up your account, choose a password, and join the organization:</p>
-          <div style="margin: 30px 0;">
-            <a href="${inviteLink}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block;">
-              Set Up Your Account
-            </a>
-          </div>
-          <p style="font-size: 14px; color: #6b7280;">If the button doesn't work, copy and paste this URL into your browser:</p>
-          <p style="font-size: 14px; color: #4f46e5; word-break: break-all;">${inviteLink}</p>
+        const subject = `Invitation to join ${orgName} on GroundLense`;
+        const text = `You have been invited to join ${orgName} on GroundLense. Click the following link to set up your account: ${inviteLink}`;
+        const html = `
+      <div style="font-family: sans-serif; padding: 20px; color: #333;">
+        <h2 style="color: #4f46e5;">Welcome to GroundLense!</h2>
+        <p>You have been invited to join <strong>${orgName}</strong> on GroundLense.</p>
+        <p>Please click the button below to set up your account, choose a password, and join the organization:</p>
+        <div style="margin: 30px 0;">
+          <a href="${inviteLink}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block;">
+            Set Up Your Account
+          </a>
         </div>
-      `,
-        };
-        try {
-            const info = await transporter.sendMail(mailOptions);
-            console.log(`[Email] Invitation sent to ${email}. Message ID: ${info.messageId}`);
-            const previewUrl = nodemailer.getTestMessageUrl(info);
-            if (previewUrl) {
-                console.log(`[Email] Invitation Preview URL (Ethereal): ${previewUrl}`);
-            }
-        }
-        catch (err) {
-            console.error(`Failed to send invitation email to ${email}:`, err);
-        }
+        <p style="font-size: 14px; color: #6b7280;">If the button doesn't work, copy and paste this URL into your browser:</p>
+        <p style="font-size: 14px; color: #4f46e5; word-break: break-all;">${inviteLink}</p>
+      </div>
+    `;
+        await (0, email_helper_1.sendEmail)({
+            to: email,
+            subject,
+            text,
+            html,
+        });
     }
     async sendAddedToOrgEmail(email, orgName) {
-        const transporter = await this.getTransporter();
-        if (!transporter)
-            return;
-        const from = process.env.SMTP_FROM || `"GroundLense" <no-reply@groundlense.com>`;
-        const mailOptions = {
-            from,
-            to: email,
-            subject: `You have been added to ${orgName} on GroundLense`,
-            text: `You have been added to the organization ${orgName} on GroundLense. You can now log in to access your organization dashboard.`,
-            html: `
-        <div style="font-family: sans-serif; padding: 20px; color: #333;">
-          <h2 style="color: #4f46e5;">Organization Update</h2>
-          <p>Hello,</p>
-          <p>You have been added to the organization <strong>${orgName}</strong> on GroundLense.</p>
-          <p>You can now log in using your existing credentials to access your new organization's dashboard.</p>
-          <div style="margin: 30px 0;">
-            <a href="http://localhost:3000/login" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block;">
-              Log In Now
-            </a>
-          </div>
+        const subject = `You have been added to ${orgName} on GroundLense`;
+        const text = `You have been added to the organization ${orgName} on GroundLense. You can now log in to access your organization dashboard.`;
+        const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+        const html = `
+      <div style="font-family: sans-serif; padding: 20px; color: #333;">
+        <h2 style="color: #4f46e5;">Organization Update</h2>
+        <p>Hello,</p>
+        <p>You have been added to the organization <strong>${orgName}</strong> on GroundLense.</p>
+        <p>You can now log in using your existing credentials to access your new organization's dashboard.</p>
+        <div style="margin: 30px 0;">
+          <a href="${webUrl}/login" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block;">
+            Log In Now
+          </a>
         </div>
-      `,
-        };
-        try {
-            const info = await transporter.sendMail(mailOptions);
-            console.log(`[Email] Added-to-org notification sent to ${email}. Message ID: ${info.messageId}`);
-            const previewUrl = nodemailer.getTestMessageUrl(info);
-            if (previewUrl) {
-                console.log(`[Email] Added-to-org Preview URL (Ethereal): ${previewUrl}`);
-            }
-        }
-        catch (err) {
-            console.error(`Failed to send added-to-org email to ${email}:`, err);
-        }
+      </div>
+    `;
+        await (0, email_helper_1.sendEmail)({
+            to: email,
+            subject,
+            text,
+            html,
+        });
     }
     async getJoinRequests(user) {
         const organizationId = user.organizationId;

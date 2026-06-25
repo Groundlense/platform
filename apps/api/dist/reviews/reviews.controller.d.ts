@@ -55,8 +55,8 @@ export declare class ReviewsController {
     })[]>;
     findThreadsAssignedToMe(user: any): Promise<({
         borehole: {
-            id: string;
             name: string | null;
+            id: string;
             projectId: string;
             boreholeCode: string;
         };
@@ -72,20 +72,20 @@ export declare class ReviewsController {
                 id: string;
             };
         } & {
+            attachments: import("@prisma/client/runtime/library").JsonValue | null;
             id: string;
             createdAt: Date;
             message: string;
-            attachments: import("@prisma/client/runtime/library").JsonValue | null;
             senderId: string;
             threadId: string;
         })[];
     } & {
+        priority: string;
         id: string;
         status: string;
         createdAt: Date;
         updatedAt: Date;
         boreholeId: string;
-        priority: string;
         threadType: string;
         raisedByUserId: string;
         assignedToUserId: string;
@@ -108,20 +108,20 @@ export declare class ReviewsController {
                 id: string;
             };
         } & {
+            attachments: import("@prisma/client/runtime/library").JsonValue | null;
             id: string;
             createdAt: Date;
             message: string;
-            attachments: import("@prisma/client/runtime/library").JsonValue | null;
             senderId: string;
             threadId: string;
         })[];
     } & {
+        priority: string;
         id: string;
         status: string;
         createdAt: Date;
         updatedAt: Date;
         boreholeId: string;
-        priority: string;
         threadType: string;
         raisedByUserId: string;
         assignedToUserId: string;
@@ -144,20 +144,20 @@ export declare class ReviewsController {
                 id: string;
             };
         } & {
+            attachments: import("@prisma/client/runtime/library").JsonValue | null;
             id: string;
             createdAt: Date;
             message: string;
-            attachments: import("@prisma/client/runtime/library").JsonValue | null;
             senderId: string;
             threadId: string;
         })[];
     } & {
+        priority: string;
         id: string;
         status: string;
         createdAt: Date;
         updatedAt: Date;
         boreholeId: string;
-        priority: string;
         threadType: string;
         raisedByUserId: string;
         assignedToUserId: string;
@@ -169,10 +169,10 @@ export declare class ReviewsController {
             id: string;
         };
     } & {
+        attachments: import("@prisma/client/runtime/library").JsonValue | null;
         id: string;
         createdAt: Date;
         message: string;
-        attachments: import("@prisma/client/runtime/library").JsonValue | null;
         senderId: string;
         threadId: string;
     }>;
@@ -188,12 +188,12 @@ export declare class ReviewsController {
             id: string;
         };
     } & {
+        priority: string;
         id: string;
         status: string;
         createdAt: Date;
         updatedAt: Date;
         boreholeId: string;
-        priority: string;
         threadType: string;
         raisedByUserId: string;
         assignedToUserId: string;

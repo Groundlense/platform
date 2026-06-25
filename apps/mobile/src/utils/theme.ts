@@ -26,9 +26,9 @@ export const colors = {
 
 export const typography = {
   fontFamilyMono: 'monospace',
-  fontSizeTitle: 24,
-  fontSizeSubtitle: 14,
-  fontSizeBody: 12,
-  fontSizeCaption: 10,
-  fontSizeMicro: 8,
+  fontSizeTitle: 32,
+  fontSizeSubtitle: 19,
+  fontSizeBody: 16,
+  fontSizeCaption: 14,
+  fontSizeMicro: 11,
 };

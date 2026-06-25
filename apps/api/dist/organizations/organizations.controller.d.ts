@@ -7,9 +7,9 @@ export declare class OrganizationsController {
     private readonly organizationsService;
     constructor(organizationsService: OrganizationsService);
     findAll(query: ListOrganizationsQueryDto): Promise<{
+        name: string;
         type: import("@prisma/client").$Enums.OrganizationType;
         id: string;
-        name: string;
         city: string | null;
         state: string | null;
     }[]>;
@@ -18,12 +18,12 @@ export declare class OrganizationsController {
         organizationId: string;
         roles?: any;
     }): Promise<{
+        name: string;
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         phone: string | null;
         address: string | null;
         city: string | null;
@@ -46,12 +46,12 @@ export declare class OrganizationsController {
         organizationId: string;
         roles?: any;
     }): Promise<{
+        name: string;
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         phone: string | null;
         address: string | null;
         city: string | null;
@@ -74,12 +74,12 @@ export declare class OrganizationsController {
         organizationId: string;
         roles?: any;
     }): Promise<{
+        name: string;
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         phone: string | null;
         address: string | null;
         city: string | null;
@@ -102,12 +102,12 @@ export declare class OrganizationsController {
         organizationId: string;
         roles?: any;
     }): Promise<{
+        name: string;
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         phone: string | null;
         address: string | null;
         city: string | null;

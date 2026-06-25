@@ -65,7 +65,7 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
           <Text style={styles.headerTitle}>Rock Coring</Text>
         </View>
         <View style={{ padding: 24 }}>
-          <Text style={{ fontSize: 12, color: colors.redMid, fontWeight: '700' }}>
+          <Text style={{ fontSize: 16, color: colors.redMid, fontWeight: '700' }}>
             Boring data missing — reopen from the boring list. / डेटा नहीं मिला — सूची से दोबारा खोलें।
           </Text>
           <TouchableOpacity style={[styles.saveBtn, { marginTop: 16 }]} onPress={() => navigation.goBack()}>
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 14,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.white,
   },
@@ -332,12 +332,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: 14,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -352,12 +352,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   rockVal: {
-    fontSize: 14,
+    fontSize: 19,
     fontWeight: '700',
     color: '#FAC775',
   },
   rockSub: {
-    fontSize: 8.5,
+    fontSize: 11,
     color: colors.grayBorder,
     marginTop: 2,
   },
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   fieldLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginBottom: 4,
   },
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     borderColor: colors.grayDark,
   },
   weatherTileText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.grayDark,
   },
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greenLight,
   },
   photoBtnText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.greenMid,
     fontWeight: '700',
   },
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayDark,
   },
   calcResults: {
@@ -446,16 +446,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   calcLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
   },
   calcVal: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.rust,
   },
   ratingVal: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.greenMid,
   },
@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
   },
   saveBtnText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
   },
 });

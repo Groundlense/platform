@@ -1,43 +1,10 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
@@ -48,7 +15,7 @@ const database_service_1 = require("../database/database.service");
 const activity_logs_service_1 = require("../activity-logs/activity-logs.service");
 const project_access_service_1 = require("../common/access/project-access.service");
 const notifications_service_1 = require("../notifications/notifications.service");
-const nodemailer = __importStar(require("nodemailer"));
+const email_helper_1 = require("../common/email.helper");
 let ProjectsService = class ProjectsService {
     db;
     activityLogsService;
@@ -823,65 +790,13 @@ let ProjectsService = class ProjectsService {
         });
         return { success: true, message: 'Project join request rejected successfully.' };
     }
-    async getTransporter() {
-        const host = process.env.SMTP_HOST;
-        const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
-        const user = process.env.SMTP_USER;
-        const pass = process.env.SMTP_PASS;
-        if (host && user && pass) {
-            return nodemailer.createTransport({
-                host,
-                port,
-                secure: port === 465,
-                auth: {
-                    user,
-                    pass,
-                },
-            });
-        }
-        else {
-            console.log('[Email] SMTP credentials not configured. Creating Ethereal test account...');
-            try {
-                const testAccount = await nodemailer.createTestAccount();
-                return nodemailer.createTransport({
-                    host: 'smtp.ethereal.email',
-                    port: 587,
-                    secure: false,
-                    auth: {
-                        user: testAccount.user,
-                        pass: testAccount.pass,
-                    },
-                });
-            }
-            catch (err) {
-                console.error('Failed to create Ethereal test account:', err);
-                return null;
-            }
-        }
-    }
     async sendMail(email, subject, text, html) {
-        const transporter = await this.getTransporter();
-        if (!transporter)
-            return;
-        const from = process.env.SMTP_FROM || `"GroundLense" <no-reply@groundlense.com>`;
-        const mailOptions = {
-            from,
+        await (0, email_helper_1.sendEmail)({
             to: email,
             subject,
             text,
             html,
-        };
-        try {
-            const info = await transporter.sendMail(mailOptions);
-            console.log(`[Email] Email sent to ${email}. Message ID: ${info.messageId}`);
-            const previewUrl = nodemailer.getTestMessageUrl(info);
-            if (previewUrl) {
-                console.log(`[Email] Email Preview URL (Ethereal): ${previewUrl}`);
-            }
-        }
-        catch (err) {
-            console.error(`Failed to send email to ${email}:`, err);
-        }
+        });
     }
 };
 exports.ProjectsService = ProjectsService;

@@ -58,7 +58,7 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
           <Text style={styles.headerTitle}>SPT Entry</Text>
         </View>
         <View style={{ padding: 24 }}>
-          <Text style={{ fontSize: 12, color: colors.redMid, fontWeight: '700' }}>
+          <Text style={{ fontSize: 16, color: colors.redMid, fontWeight: '700' }}>
             Boring data missing — reopen from the boring list. / डेटा नहीं मिला — सूची से दोबारा खोलें।
           </Text>
           <TouchableOpacity style={[styles.nextBtn, { marginTop: 16 }]} onPress={() => navigation.goBack()}>
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 14,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.white,
   },
@@ -412,12 +412,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: 14,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   loopText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.amber,
   },
@@ -464,17 +464,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   depthVal: {
-    fontSize: 22,
+    fontSize: 30,
     fontWeight: '700',
     color: colors.white,
   },
   depthSub: {
-    fontSize: 9,
+    fontSize: 12,
     color: '#F5C4B3',
     marginTop: 2,
   },
   fieldLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginBottom: 4,
   },
@@ -499,11 +499,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   blowLabel: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayMid,
   },
   blowNum: {
-    fontSize: 14,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.grayDark,
     marginTop: 2,
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   editTitle: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.rustMid,
     textTransform: 'uppercase',
@@ -545,12 +545,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   keypadBtnText: {
-    fontSize: 20,
+    fontSize: 27,
     fontWeight: '700',
     color: colors.rust,
   },
   keypadDisplay: {
-    fontSize: 28,
+    fontSize: 38,
     fontWeight: '700',
     color: colors.rust,
     minWidth: 40,
@@ -568,12 +568,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   calcLeft: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.amber,
     fontWeight: '700',
   },
   calcRight: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.greenMid,
   },
@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   promptText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.blueDark,
     fontWeight: '600',
   },
@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.grayMid,
   },
   promptBtnText: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayDark,
   },
   promptBtnTextActive: {
@@ -630,7 +630,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.redMid,
   },
   refusalToggleBtnText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.redMid,
   },
@@ -646,7 +646,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   refusalTitle: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.redMid,
   },
@@ -664,16 +664,16 @@ const styles = StyleSheet.create({
     width: 60,
     paddingVertical: 4,
     paddingHorizontal: 8,
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.redMid,
   },
   refusalUnit: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
   },
   refusalSub: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.redMid,
     marginTop: 3,
   },
@@ -691,7 +691,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greenLight,
   },
   photoBtnText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.greenMid,
     fontWeight: '700',
   },
@@ -713,7 +713,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionBtnSecText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.grayDark,
     fontWeight: '600',
   },
@@ -727,7 +727,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionBtnTermText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.redMid,
     fontWeight: '600',
   },
@@ -741,7 +741,7 @@ const styles = StyleSheet.create({
   },
   nextBtnText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
   },
 });

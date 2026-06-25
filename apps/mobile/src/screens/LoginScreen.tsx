@@ -258,10 +258,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   logoIconText: {
-    fontSize: 20,
+    fontSize: 27,
   },
   logoTitle: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: '700',
     color: colors.rust,
   },
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.rustMid,
   },
   tabBtnText: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.rust,
   },
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.grayDark,
   },
   primaryBtn: {
@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
   },
   secondaryBtn: {
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: {
     color: colors.rust,
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '600',
   },
   divider: {
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   errorBoxText: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.redMid,
   },
@@ -387,12 +387,12 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   infoBoxBlueTitle: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.blueDark,
   },
   infoBoxBlueSub: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -404,12 +404,12 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   infoBoxAmberTitle: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.amber,
   },
   infoBoxAmberSub: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginTop: 4,
     lineHeight: 14,

@@ -19,8 +19,8 @@ export declare class NablLabsController {
     }>;
     findAllLabs(): Promise<({
         organization: {
-            email: string | null;
             name: string;
+            email: string | null;
             phone: string | null;
         };
     } & {
