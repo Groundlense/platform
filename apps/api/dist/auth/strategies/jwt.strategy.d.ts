@@ -14,12 +14,12 @@ export declare class JwtStrategy extends JwtStrategy_base {
         employeeCode: string | null;
         email: string | null;
         organization: {
+            name: string;
             type: import("@prisma/client").$Enums.OrganizationType;
             email: string | null;
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             phone: string | null;
             address: string | null;
             city: string | null;

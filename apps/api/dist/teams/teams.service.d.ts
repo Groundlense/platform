@@ -7,12 +7,12 @@ export declare class TeamsService {
     constructor(db: DatabaseService, access: ProjectAccessService);
     private assertTeamAccess;
     createTeam(organizationId: string, dto: CreateTeamDto, actor: any): Promise<{
+        name: string;
         description: string | null;
         organizationId: string;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         isActive: boolean;
         code: string;
         projectId: string | null;
@@ -42,12 +42,12 @@ export declare class TeamsService {
             teamId: string;
         })[];
     } & {
+        name: string;
         description: string | null;
         organizationId: string;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         isActive: boolean;
         code: string;
         projectId: string | null;
@@ -83,12 +83,12 @@ export declare class TeamsService {
             teamId: string;
         })[];
     } & {
+        name: string;
         description: string | null;
         organizationId: string;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         isActive: boolean;
         code: string;
         projectId: string | null;
@@ -107,12 +107,12 @@ export declare class TeamsService {
         abandoned: number;
     }>;
     deleteTeam(teamId: string, actor: any): Promise<{
+        name: string;
         description: string | null;
         organizationId: string;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         isActive: boolean;
         code: string;
         projectId: string | null;

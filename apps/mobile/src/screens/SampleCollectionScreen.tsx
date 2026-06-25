@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 14,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.white,
   },
@@ -504,12 +504,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: 14,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -525,13 +525,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   loopText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.amber,
     textAlign: 'center',
   },
   fieldLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginBottom: 4,
     marginTop: 4,
@@ -561,7 +561,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   tileText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.grayDark,
     textAlign: 'center',
@@ -583,12 +583,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   udsCareTitle: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.blueDark,
   },
   udsCareSub: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blueDark,
   },
   sampleIdLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: '#A5D6A7',
     marginBottom: 4,
   },
@@ -612,13 +612,13 @@ const styles = StyleSheet.create({
   },
   sampleIdVal: {
     fontFamily: typography.fontFamilyMono,
-    fontSize: 16,
+    fontSize: 22,
     fontWeight: '600',
     color: colors.white,
     letterSpacing: 1,
   },
   sampleIdHint: {
-    fontSize: 8,
+    fontSize: 11,
     color: '#C8E6C9',
     marginTop: 4,
   },
@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayDark,
   },
   recoveryRow: {
@@ -651,11 +651,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   recoveryLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
   },
   recoveryVal: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.blueDark,
   },
@@ -668,12 +668,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   slateTitle: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.amber,
   },
   slateSub: {
-    fontSize: 8,
+    fontSize: 11,
     color: '#633806',
     marginTop: 2,
   },
@@ -701,12 +701,12 @@ const styles = StyleSheet.create({
     borderColor: colors.greenMid,
   },
   cameraText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayDark,
     fontWeight: '700',
   },
   cameraTextWide: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayDark,
     fontWeight: '700',
   },
@@ -727,7 +727,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greenLight,
   },
   confirmText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.greenMid,
     fontWeight: '700',
   },
@@ -743,12 +743,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   udsVerificationTitle: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.redMid,
   },
   udsVerificationSub: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -773,7 +773,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   checkTileText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayDark,
     fontWeight: '600',
     textAlign: 'center',
@@ -791,12 +791,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   timerTitle: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.amber,
   },
   timerSub: {
-    fontSize: 8,
+    fontSize: 11,
     color: '#633806',
     marginTop: 2,
   },
@@ -817,11 +817,11 @@ const styles = StyleSheet.create({
   },
   nextBtnText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
   },
   blockHint: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.redMid,
     textAlign: 'center',
     marginBottom: 24,

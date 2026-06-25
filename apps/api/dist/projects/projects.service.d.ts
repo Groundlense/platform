@@ -12,12 +12,12 @@ export declare class ProjectsService {
     private readonly notificationsService;
     constructor(db: DatabaseService, activityLogsService: ActivityLogsService, access: ProjectAccessService, notificationsService: NotificationsService);
     create(dto: CreateProjectDto, userId: string, organizationId: string): Promise<{
+        name: string;
         description: string | null;
         id: string;
         status: import("@prisma/client").$Enums.ProjectStatus;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         state: string | null;
         geotechOrganizationId: string | null;
         epcOrganizationId: string | null;
@@ -39,12 +39,12 @@ export declare class ProjectsService {
     }>;
     findAll(user: any): Promise<({
         epcOrganization: {
+            name: string;
             type: import("@prisma/client").$Enums.OrganizationType;
             email: string | null;
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             phone: string | null;
             address: string | null;
             city: string | null;
@@ -63,12 +63,12 @@ export declare class ProjectsService {
             isActive: boolean;
         } | null;
         geotechOrganization: {
+            name: string;
             type: import("@prisma/client").$Enums.OrganizationType;
             email: string | null;
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             phone: string | null;
             address: string | null;
             city: string | null;
@@ -87,12 +87,12 @@ export declare class ProjectsService {
             isActive: boolean;
         } | null;
         initiatedByCompany: {
+            name: string;
             type: import("@prisma/client").$Enums.OrganizationType;
             email: string | null;
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             phone: string | null;
             address: string | null;
             city: string | null;
@@ -111,12 +111,12 @@ export declare class ProjectsService {
             isActive: boolean;
         } | null;
         billingCompany: {
+            name: string;
             type: import("@prisma/client").$Enums.OrganizationType;
             email: string | null;
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             phone: string | null;
             address: string | null;
             city: string | null;
@@ -135,12 +135,12 @@ export declare class ProjectsService {
             isActive: boolean;
         } | null;
     } & {
+        name: string;
         description: string | null;
         id: string;
         status: import("@prisma/client").$Enums.ProjectStatus;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         state: string | null;
         geotechOrganizationId: string | null;
         epcOrganizationId: string | null;
@@ -168,9 +168,9 @@ export declare class ProjectsService {
         found: boolean;
         hasAccess: boolean;
         project: {
+            name: string;
             id: string;
             status: import("@prisma/client").$Enums.ProjectStatus;
-            name: string;
             state: string | null;
             projectCode: string;
             district: string | null;
@@ -202,12 +202,12 @@ export declare class ProjectsService {
     getMyProjects(userId: string): Promise<({
         project: {
             epcOrganization: {
+                name: string;
                 type: import("@prisma/client").$Enums.OrganizationType;
                 email: string | null;
                 id: string;
                 createdAt: Date;
                 updatedAt: Date;
-                name: string;
                 phone: string | null;
                 address: string | null;
                 city: string | null;
@@ -226,12 +226,12 @@ export declare class ProjectsService {
                 isActive: boolean;
             } | null;
             geotechOrganization: {
+                name: string;
                 type: import("@prisma/client").$Enums.OrganizationType;
                 email: string | null;
                 id: string;
                 createdAt: Date;
                 updatedAt: Date;
-                name: string;
                 phone: string | null;
                 address: string | null;
                 city: string | null;
@@ -250,12 +250,12 @@ export declare class ProjectsService {
                 isActive: boolean;
             } | null;
         } & {
+            name: string;
             description: string | null;
             id: string;
             status: import("@prisma/client").$Enums.ProjectStatus;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             state: string | null;
             geotechOrganizationId: string | null;
             epcOrganizationId: string | null;
@@ -283,9 +283,9 @@ export declare class ProjectsService {
     })[]>;
     inviteCompany(projectId: string, dto: InviteProjectCompanyDto, actor: any): Promise<{
         company: {
+            name: string;
             type: import("@prisma/client").$Enums.OrganizationType;
             id: string;
-            name: string;
             city: string | null;
         };
     } & {
@@ -300,9 +300,9 @@ export declare class ProjectsService {
     }>;
     getCompanies(projectId: string, actor: any): Promise<({
         company: {
+            name: string;
             type: import("@prisma/client").$Enums.OrganizationType;
             id: string;
-            name: string;
             city: string | null;
         };
     } & {
@@ -330,8 +330,8 @@ export declare class ProjectsService {
     }>;
     assignUserRole(projectId: string, dto: AssignProjectRoleDto, actor: any): Promise<{
         role: {
-            id: string;
             name: string;
+            id: string;
             code: string;
         };
     } & {
@@ -352,13 +352,13 @@ export declare class ProjectsService {
             id: string;
         };
         role: {
-            id: string;
             name: string;
+            id: string;
             code: string;
         };
         company: {
-            id: string;
             name: string;
+            id: string;
         };
     } & {
         id: string;
@@ -382,13 +382,20 @@ export declare class ProjectsService {
         isInvitation: boolean;
     }>;
     getPendingProjectJoinRequests(user: any): Promise<({
+        user: {
+            organizationId: string;
+            firstName: string;
+            lastName: string | null;
+            email: string | null;
+            id: string;
+        };
         organization: {
+            name: string;
             type: import("@prisma/client").$Enums.OrganizationType;
             email: string | null;
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             phone: string | null;
             address: string | null;
             city: string | null;
@@ -406,13 +413,6 @@ export declare class ProjectsService {
             subscriptionExpiry: Date | null;
             isActive: boolean;
         };
-        user: {
-            organizationId: string;
-            firstName: string;
-            lastName: string | null;
-            email: string | null;
-            id: string;
-        };
         project: {
             createdBy: {
                 organizationId: string;
@@ -422,12 +422,12 @@ export declare class ProjectsService {
                 id: string;
             };
         } & {
+            name: string;
             description: string | null;
             id: string;
             status: import("@prisma/client").$Enums.ProjectStatus;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             state: string | null;
             geotechOrganizationId: string | null;
             epcOrganizationId: string | null;
@@ -465,6 +465,5 @@ export declare class ProjectsService {
         success: boolean;
         message: string;
     }>;
-    private getTransporter;
     private sendMail;
 }

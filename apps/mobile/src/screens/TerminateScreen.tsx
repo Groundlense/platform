@@ -5,6 +5,7 @@ import {
   View,
   TouchableOpacity,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
@@ -136,76 +137,78 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
   return (
     <View style={styles.container}>
       <View style={styles.popupCard}>
-        <Text style={styles.popupTitle}>⏹ {t('confirmTerminate', lang)}</Text>
-        <Text style={styles.popupSub}>
-          {borehole.boreholeCode} · Depth {safeDepth.toFixed(1)}m
-        </Text>
-
-        {/* Reasons Grid */}
-        <Text style={styles.fieldLabel}>{t('reason', lang)} / कारण</Text>
-        <View style={styles.grid2x2}>
-          {reasons.map((r) => {
-            const isSelected = reason === r.code;
-            return (
-              <TouchableOpacity
-                key={r.code}
-                style={[styles.tileHalf, isSelected && styles.tileHalfSelected]}
-                onPress={() => setReason(r.code)}
-              >
-                <Text style={[styles.tileHalfText, isSelected && styles.tileHalfTextSelected]}>
-                  {r.icon} {r.code}
-                </Text>
-                <Text style={[styles.tileHalfSub, isSelected && styles.tileHalfTextSelected]}>
-                  {r.hi}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Will Resume Selector */}
-        <Text style={styles.fieldLabel}>{t('willResume', lang)}</Text>
-        <View style={styles.horizontalRow}>
-          <TouchableOpacity
-            style={[styles.tileHalfRow, willResume && styles.tileHalfRowYes]}
-            onPress={() => setWillResume(true)}
-          >
-            <Text style={[styles.tileText, willResume && styles.tileTextActive]}>
-              Yes — resume later / हाँ — बाद में
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tileHalfRow, !willResume && styles.tileHalfRowNo]}
-            onPress={() => setWillResume(false)}
-          >
-            <Text style={[styles.tileText, !willResume && styles.tileTextActive]}>
-              No — permanent stop / नहीं
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Info label */}
-        <View style={styles.infoBoxRed}>
-          <Text style={styles.infoBoxRedTitle}>
-            Depth {safeDepth.toFixed(1)}m + your ID + timestamp will be recorded
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1 }}>
+          <Text style={styles.popupTitle}>⏹ {t('confirmTerminate', lang)}</Text>
+          <Text style={styles.popupSub}>
+            {borehole.boreholeCode} · Depth {safeDepth.toFixed(1)}m
           </Text>
-        </View>
 
-        {/* Buttons */}
-        <View style={styles.btnRow}>
-          <TouchableOpacity
-            style={styles.cancelBtn}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.cancelBtnText}>{t('cancel', lang)}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.submitBtn}
-            onPress={handleConfirm}
-          >
-            <Text style={styles.submitBtnText}>Confirm / पुष्टि करें</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Reasons Grid */}
+          <Text style={styles.fieldLabel}>{t('reason', lang)} / कारण</Text>
+          <View style={styles.grid2x2}>
+            {reasons.map((r) => {
+              const isSelected = reason === r.code;
+              return (
+                <TouchableOpacity
+                  key={r.code}
+                  style={[styles.tileHalf, isSelected && styles.tileHalfSelected]}
+                  onPress={() => setReason(r.code)}
+                >
+                  <Text style={[styles.tileHalfText, isSelected && styles.tileHalfTextSelected]}>
+                    {r.icon} {r.code}
+                  </Text>
+                  <Text style={[styles.tileHalfSub, isSelected && styles.tileHalfTextSelected]}>
+                    {r.hi}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Will Resume Selector */}
+          <Text style={styles.fieldLabel}>{t('willResume', lang)}</Text>
+          <View style={styles.horizontalRow}>
+            <TouchableOpacity
+              style={[styles.tileHalfRow, willResume && styles.tileHalfRowYes]}
+              onPress={() => setWillResume(true)}
+            >
+              <Text style={[styles.tileText, willResume && styles.tileTextActive]}>
+                Yes — resume later / हाँ — बाद में
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tileHalfRow, !willResume && styles.tileHalfRowNo]}
+              onPress={() => setWillResume(false)}
+            >
+              <Text style={[styles.tileText, !willResume && styles.tileTextActive]}>
+                No — permanent stop / नहीं
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Info label */}
+          <View style={styles.infoBoxRed}>
+            <Text style={styles.infoBoxRedTitle}>
+              Depth {safeDepth.toFixed(1)}m + your ID + timestamp will be recorded
+            </Text>
+          </View>
+
+          {/* Buttons */}
+          <View style={styles.btnRow}>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={styles.cancelBtnText}>{t('cancel', lang)}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.submitBtn}
+              onPress={handleConfirm}
+            >
+              <Text style={styles.submitBtnText}>Confirm / पुष्टि करें</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </View>
     </View>
   );
@@ -226,21 +229,22 @@ const styles = StyleSheet.create({
     width: '100%',
     borderWidth: 0.5,
     borderColor: colors.grayBorder,
+    maxHeight: '90%',
   },
   popupTitle: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.redMid,
     textAlign: 'center',
   },
   popupSub: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     textAlign: 'center',
     marginBottom: 10,
   },
   fieldLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginBottom: 4,
     marginTop: 6,
@@ -267,7 +271,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   tileHalfText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.grayDark,
   },
@@ -275,7 +279,7 @@ const styles = StyleSheet.create({
     color: colors.amber,
   },
   tileHalfSub: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -305,7 +309,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   tileText: {
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: '600',
     color: colors.grayDark,
     textAlign: 'center',
@@ -323,7 +327,7 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   infoBoxRedTitle: {
-    fontSize: 8.5,
+    fontSize: 11,
     fontWeight: '700',
     color: colors.redMid,
     textAlign: 'center',
@@ -343,7 +347,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelBtnText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.grayDark,
   },
   submitBtn: {
@@ -354,7 +358,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitBtnText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.white,
     fontWeight: '700',
   },

@@ -365,12 +365,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 22,
     fontWeight: '700',
     color: colors.white,
   },
   userInfo: {
-    fontSize: 10,
+    fontSize: 14,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -387,7 +387,7 @@ const styles = StyleSheet.create({
   },
   syncBtnText: {
     color: colors.white,
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '600',
   },
   logoutBtn: {
@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   },
   logoutBtnText: {
     color: colors.white,
-    fontSize: 10,
+    fontSize: 14,
   },
   listContainer: {
     padding: 16,
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   syncErrorText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.amber,
   },
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '600',
     fontFamily: typography.fontFamilyMono,
     color: colors.grayDark,
@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
   },
   searchBtnText: {
     color: colors.white,
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
   },
   searchResultCard: {
@@ -483,37 +483,37 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   srCode: {
-    fontSize: 9,
+    fontSize: 12,
     fontFamily: typography.fontFamilyMono,
     fontWeight: '700',
     color: colors.blueDark,
   },
   srCodeWarn: {
-    fontSize: 9,
+    fontSize: 12,
     fontFamily: typography.fontFamilyMono,
     fontWeight: '700',
     color: colors.amber,
   },
   srName: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: '#0C447C',
     marginTop: 4,
   },
   srNameWarn: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.amber,
     marginTop: 4,
   },
   srCodeError: {
-    fontSize: 9,
+    fontSize: 12,
     fontFamily: typography.fontFamilyMono,
     fontWeight: '700',
     color: colors.redMid,
   },
   srNameError: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.redMid,
     marginTop: 4,
@@ -530,12 +530,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   queryInboxBtnText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.blueDark,
     fontWeight: '700',
   },
   srSub: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -548,11 +548,11 @@ const styles = StyleSheet.create({
   },
   srOpenBtnText: {
     color: colors.white,
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '600',
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.grayDark,
     marginBottom: 8,
@@ -571,13 +571,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyTitle: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.grayDark,
     textAlign: 'center',
   },
   emptySub: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginTop: 4,
     textAlign: 'center',
@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
   },
   emptySyncBtnText: {
     color: colors.white,
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
   },
   projectCard: {
@@ -604,18 +604,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   projCode: {
-    fontSize: 8,
+    fontSize: 11,
     fontFamily: typography.fontFamilyMono,
     color: colors.amber,
   },
   projName: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.grayDark,
     marginTop: 2,
   },
   projSub: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -638,11 +638,11 @@ const styles = StyleSheet.create({
     borderColor: colors.grayBorder,
   },
   chipTextRust: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.rust,
   },
   chipTextGray: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayMid,
   },
   projectCardOld: {
@@ -655,12 +655,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   projCodeOld: {
-    fontSize: 8,
+    fontSize: 11,
     fontFamily: typography.fontFamilyMono,
     color: colors.grayMid,
   },
   projNameOld: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.grayMid,
     marginTop: 2,

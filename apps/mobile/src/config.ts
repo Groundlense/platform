@@ -16,4 +16,4 @@
  * All API calls go through services/api.ts, which imports this constant,
  * so this is the only place that needs editing.
  */
-export const API_BASE_URL = 'http://10.0.2.2:3000/api/v1';
+export const API_BASE_URL = 'http://10.0.2.2:8000/api/v1';

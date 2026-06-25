@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 14,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.white,
   },
@@ -262,12 +262,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: 14,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -283,13 +283,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   loopText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.amber,
     textAlign: 'center',
   },
   fieldLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginBottom: 4,
     marginTop: 8,
@@ -317,17 +317,17 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   soilIcon: {
-    fontSize: 16,
+    fontSize: 22,
   },
   soilName: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.grayDark,
     textAlign: 'center',
     marginTop: 2,
   },
   soilHi: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayMid,
     textAlign: 'center',
   },
@@ -347,13 +347,13 @@ const styles = StyleSheet.create({
     marginVertical: 6,
   },
   isMapLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.amber,
     fontWeight: '700',
   },
   isMapVal: {
     fontFamily: typography.fontFamilyMono,
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.rust,
   },
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   consistencyText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.grayDark,
     fontWeight: '600',
   },
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   voiceBtnDisabledText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.grayMid,
     fontWeight: '700',
   },
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 10,
+    fontSize: 14,
     color: colors.grayDark,
     minHeight: 56,
     textAlignVertical: 'top',
@@ -438,12 +438,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   rockNoticeTitle: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: '#FAC775',
   },
   rockNoticeSub: {
-    fontSize: 9,
+    fontSize: 12,
     color: '#B4B2A9',
     marginTop: 1,
   },
@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
   },
   nextBtnText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
   },
 });

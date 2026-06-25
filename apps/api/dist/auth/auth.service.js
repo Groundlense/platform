@@ -45,7 +45,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
 const jwt_1 = require("@nestjs/jwt");
-const nodemailer = __importStar(require("nodemailer"));
+const email_helper_1 = require("../common/email.helper");
 const bcrypt = __importStar(require("bcrypt"));
 const crypto = __importStar(require("crypto"));
 const users_service_1 = require("../users/users.service");
@@ -297,71 +297,24 @@ let AuthService = class AuthService {
         };
     }
     async sendEmailOtp(email, code) {
-        const host = process.env.SMTP_HOST;
-        const port = process.env.SMTP_PORT
-            ? parseInt(process.env.SMTP_PORT, 10)
-            : 587;
-        const user = process.env.SMTP_USER;
-        const pass = process.env.SMTP_PASS;
-        const from = process.env.SMTP_FROM || `"GroundLense" <no-reply@groundlense.com>`;
-        let transporter;
-        if (host && user && pass) {
-            transporter = nodemailer.createTransport({
-                host,
-                port,
-                secure: port === 465,
-                auth: {
-                    user,
-                    pass,
-                },
-            });
-        }
-        else {
-            console.log('[Email] SMTP credentials not configured. Creating Ethereal test account...');
-            try {
-                const testAccount = await nodemailer.createTestAccount();
-                transporter = nodemailer.createTransport({
-                    host: 'smtp.ethereal.email',
-                    port: 587,
-                    secure: false,
-                    auth: {
-                        user: testAccount.user,
-                        pass: testAccount.pass,
-                    },
-                });
-            }
-            catch (err) {
-                console.error('Failed to create Ethereal test account:', err);
-                return;
-            }
-        }
-        const mailOptions = {
-            from,
-            to: email,
-            subject: 'Your GroundLense Verification OTP',
-            text: `Your GroundLense OTP is ${code}. It is valid for 5 minutes.`,
-            html: `
-        <div style="font-family: sans-serif; padding: 20px; color: #333;">
-          <h2 style="color: #4f46e5;">GroundLense Verification</h2>
-          <p>Please use the following One-Time Password (OTP) to complete your verification:</p>
-          <div style="font-size: 28px; font-weight: bold; background: #f3f4f6; padding: 15px; text-align: center; border-radius: 8px; letter-spacing: 4px; margin: 20px 0;">
-            ${code}
-          </div>
-          <p style="font-size: 14px; color: #6b7280;">This OTP is valid for 5 minutes. Please do not share it with anyone.</p>
+        const subject = 'Your GroundLense Verification OTP';
+        const text = `Your GroundLense OTP is ${code}. It is valid for 5 minutes.`;
+        const html = `
+      <div style="font-family: sans-serif; padding: 20px; color: #333;">
+        <h2 style="color: #4f46e5;">GroundLense Verification</h2>
+        <p>Please use the following One-Time Password (OTP) to complete your verification:</p>
+        <div style="font-size: 28px; font-weight: bold; background: #f3f4f6; padding: 15px; text-align: center; border-radius: 8px; letter-spacing: 4px; margin: 20px 0;">
+          ${code}
         </div>
-      `,
-        };
-        try {
-            const info = await transporter.sendMail(mailOptions);
-            console.log(`[Email] OTP sent to ${email}. Message ID: ${info.messageId}`);
-            const previewUrl = nodemailer.getTestMessageUrl(info);
-            if (previewUrl) {
-                console.log(`[Email] Preview URL (Ethereal): ${previewUrl}`);
-            }
-        }
-        catch (err) {
-            console.error(`Failed to send email to ${email}:`, err);
-        }
+        <p style="font-size: 14px; color: #6b7280;">This OTP is valid for 5 minutes. Please do not share it with anyone.</p>
+      </div>
+    `;
+        await (0, email_helper_1.sendEmail)({
+            to: email,
+            subject,
+            text,
+            html,
+        });
     }
     async sendSmsOtp(mobile, code) {
         const accountSid = process.env.TWILIO_ACCOUNT_SID;

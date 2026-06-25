@@ -16,19 +16,19 @@ export declare class OrganizationsService {
     private readonly activityLogsService;
     constructor(db: DatabaseService, access: ProjectAccessService, activityLogsService: ActivityLogsService);
     findAll(type?: OrganizationType): Promise<{
+        name: string;
         type: import("@prisma/client").$Enums.OrganizationType;
         id: string;
-        name: string;
         city: string | null;
         state: string | null;
     }[]>;
     findOne(organizationId: string, user: AuthUser): Promise<{
+        name: string;
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         phone: string | null;
         address: string | null;
         city: string | null;
@@ -47,12 +47,12 @@ export declare class OrganizationsService {
         isActive: boolean;
     }>;
     create(dto: CreateOrganizationDto, user: AuthUser): Promise<{
+        name: string;
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         phone: string | null;
         address: string | null;
         city: string | null;
@@ -71,12 +71,12 @@ export declare class OrganizationsService {
         isActive: boolean;
     }>;
     update(organizationId: string, dto: UpdateOrganizationDto, user: AuthUser): Promise<{
+        name: string;
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         phone: string | null;
         address: string | null;
         city: string | null;
@@ -95,12 +95,12 @@ export declare class OrganizationsService {
         isActive: boolean;
     }>;
     verifyKyc(organizationId: string, user: AuthUser): Promise<{
+        name: string;
         type: import("@prisma/client").$Enums.OrganizationType;
         email: string | null;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         phone: string | null;
         address: string | null;
         city: string | null;
@@ -122,7 +122,6 @@ export declare class OrganizationsService {
         id: string;
         organizationId: string;
     }): Promise<Record<string, unknown>[]>;
-    private getTransporter;
     private sendInviteEmail;
     private sendAddedToOrgEmail;
     getJoinRequests(user: AuthUser): Promise<({

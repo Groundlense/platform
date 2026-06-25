@@ -4,11 +4,11 @@ export declare class SitesController {
     private readonly sitesService;
     constructor(sitesService: SitesService);
     create(projectId: string, dto: CreateSiteDto): Promise<{
+        name: string;
         description: string | null;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         isActive: boolean;
         code: string;
         projectId: string;
@@ -16,11 +16,11 @@ export declare class SitesController {
         longitude: import("@prisma/client/runtime/library").Decimal | null;
     }>;
     findByProject(projectId: string): Promise<{
+        name: string;
         description: string | null;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         isActive: boolean;
         code: string;
         projectId: string;
@@ -29,12 +29,12 @@ export declare class SitesController {
     }[]>;
     findOne(id: string): Promise<({
         project: {
+            name: string;
             description: string | null;
             id: string;
             status: import("@prisma/client").$Enums.ProjectStatus;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             state: string | null;
             geotechOrganizationId: string | null;
             epcOrganizationId: string | null;
@@ -55,11 +55,11 @@ export declare class SitesController {
             lockedAt: Date | null;
         };
         boreholes: {
+            name: string | null;
             id: string;
             status: import("@prisma/client").$Enums.BoreholeStatus;
             createdAt: Date;
             updatedAt: Date;
-            name: string | null;
             createdByUserId: string;
             lockedAt: Date | null;
             projectId: string;
@@ -79,11 +79,11 @@ export declare class SitesController {
             startDepth: import("@prisma/client/runtime/library").Decimal | null;
         }[];
     } & {
+        name: string;
         description: string | null;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         isActive: boolean;
         code: string;
         projectId: string;

@@ -11,11 +11,11 @@ export declare class BoreholesController {
     private readonly boreholesService;
     constructor(boreholesService: BoreholesService);
     create(projectId: string, dto: CreateBoreholeDto, user: any): Promise<{
+        name: string | null;
         id: string;
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        name: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
         projectId: string;
@@ -36,12 +36,12 @@ export declare class BoreholesController {
     }>;
     findByProject(projectId: string, user: any): Promise<({
         team: {
+            name: string;
             description: string | null;
             organizationId: string;
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             isActive: boolean;
             code: string;
             projectId: string | null;
@@ -50,11 +50,11 @@ export declare class BoreholesController {
             notificationSent: boolean;
         } | null;
     } & {
+        name: string | null;
         id: string;
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        name: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
         projectId: string;
@@ -75,12 +75,12 @@ export declare class BoreholesController {
     })[]>;
     findOne(id: string, user: any): Promise<({
         project: {
+            name: string;
             description: string | null;
             id: string;
             status: import("@prisma/client").$Enums.ProjectStatus;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             state: string | null;
             geotechOrganizationId: string | null;
             epcOrganizationId: string | null;
@@ -101,11 +101,11 @@ export declare class BoreholesController {
             lockedAt: Date | null;
         };
     } & {
+        name: string | null;
         id: string;
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        name: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
         projectId: string;
@@ -215,11 +215,11 @@ export declare class BoreholesController {
         assignedLabId: string | null;
     }[]>;
     assign(boreholeId: string, dto: AssignBoreholeDto, user: any): Promise<{
+        name: string | null;
         id: string;
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        name: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
         projectId: string;
@@ -239,11 +239,11 @@ export declare class BoreholesController {
         startDepth: import("@prisma/client/runtime/library").Decimal | null;
     }>;
     updateStatus(boreholeId: string, dto: UpdateBoreholeStatusDto, user: any): Promise<{
+        name: string | null;
         id: string;
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        name: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
         projectId: string;
@@ -264,12 +264,12 @@ export declare class BoreholesController {
     }>;
     getReportData(boreholeId: string, user: any): Promise<({
         team: {
+            name: string;
             description: string | null;
             organizationId: string;
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             isActive: boolean;
             code: string;
             projectId: string | null;
@@ -278,11 +278,11 @@ export declare class BoreholesController {
             notificationSent: boolean;
         } | null;
         site: {
+            name: string;
             description: string | null;
             id: string;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             isActive: boolean;
             code: string;
             projectId: string;
@@ -365,11 +365,11 @@ export declare class BoreholesController {
             readingType: import("@prisma/client").$Enums.WaterReadingType | null;
         }[];
     } & {
+        name: string | null;
         id: string;
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        name: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
         projectId: string;
@@ -427,11 +427,11 @@ export declare class BoreholesController {
         exportedAt: string;
         project: ({
             sites: {
+                name: string;
                 description: string | null;
                 id: string;
                 createdAt: Date;
                 updatedAt: Date;
-                name: string;
                 isActive: boolean;
                 code: string;
                 projectId: string;
@@ -497,11 +497,11 @@ export declare class BoreholesController {
                     readingType: import("@prisma/client").$Enums.WaterReadingType | null;
                 }[];
             } & {
+                name: string | null;
                 id: string;
                 status: import("@prisma/client").$Enums.BoreholeStatus;
                 createdAt: Date;
                 updatedAt: Date;
-                name: string | null;
                 createdByUserId: string;
                 lockedAt: Date | null;
                 projectId: string;
@@ -521,12 +521,12 @@ export declare class BoreholesController {
                 startDepth: import("@prisma/client/runtime/library").Decimal | null;
             })[];
         } & {
+            name: string;
             description: string | null;
             id: string;
             status: import("@prisma/client").$Enums.ProjectStatus;
             createdAt: Date;
             updatedAt: Date;
-            name: string;
             state: string | null;
             geotechOrganizationId: string | null;
             epcOrganizationId: string | null;

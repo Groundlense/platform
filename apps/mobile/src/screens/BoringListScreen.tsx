@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 22,
     fontWeight: '700',
     color: colors.white,
   },
@@ -313,12 +313,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 11,
+    fontSize: 15,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -340,17 +340,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   projCode: {
-    fontSize: 8,
+    fontSize: 11,
     fontFamily: typography.fontFamilyMono,
     color: colors.amber,
   },
   projName: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.rust,
   },
   projSub: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.rustMid,
     marginTop: 2,
   },
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   changeBtnText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.rust,
     fontWeight: '600',
   },
@@ -376,12 +376,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   offlineText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.amber,
   },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.grayMid,
     marginBottom: 8,
@@ -396,13 +396,13 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   emptyTitle: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.grayDark,
     textAlign: 'center',
   },
   emptySub: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     textAlign: 'center',
     marginTop: 6,
@@ -438,18 +438,18 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.grayBorder,
   },
   bhCode: {
-    fontSize: 8,
+    fontSize: 11,
     fontFamily: typography.fontFamilyMono,
     color: colors.grayMid,
   },
   bhName: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.grayDark,
     marginTop: 2,
   },
   bhStatus: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -489,7 +489,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.rustMid,
   },
   progressText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginTop: 6,
   },
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
   },
 });

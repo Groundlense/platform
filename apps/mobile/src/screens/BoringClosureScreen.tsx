@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 14,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.white,
   },
@@ -421,12 +421,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: 14,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -448,17 +448,17 @@ const styles = StyleSheet.create({
     borderColor: colors.grayBorder,
   },
   dateLabel: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayMid,
   },
   dateVal: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.grayDark,
     marginTop: 2,
   },
   dateTime: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.rust,
     marginTop: 1,
@@ -483,11 +483,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   sumLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
   },
   sumVal: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.grayDark,
   },
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   gwtConfirmTitle: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.blueDark,
     marginBottom: 6,
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blueDark,
   },
   gwtBtnText: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayDark,
   },
   gwtBtnTextSelected: {
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   gwtSubHint: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.blueDark,
     marginTop: 4,
     textAlign: 'center',
@@ -547,7 +547,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greenLight,
   },
   cameraBtnText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.greenMid,
     fontWeight: '700',
   },
@@ -569,11 +569,11 @@ const styles = StyleSheet.create({
     borderColor: colors.rustMid,
   },
   signaturePlaceholder: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.grayMid,
   },
   signatureText: {
-    fontSize: 14,
+    fontSize: 19,
     fontFamily: 'serif',
     fontStyle: 'italic',
     color: colors.rustMid,
@@ -591,11 +591,11 @@ const styles = StyleSheet.create({
   },
   submitBtnText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
   },
   warningText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     textAlign: 'center',
     marginTop: 6,

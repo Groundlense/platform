@@ -58,11 +58,11 @@ export declare class ProjectAccessService {
     canAccessProject(user: any, projectId: string): Promise<boolean>;
     assertProjectAccess(user: any, projectId: string): Promise<void>;
     assertBoreholeAccess(user: any, boreholeId: string): Promise<{
+        name: string | null;
         id: string;
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        name: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
         projectId: string;

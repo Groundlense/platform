@@ -5,12 +5,12 @@ export declare class TeamsController {
     private readonly teamsService;
     constructor(teamsService: TeamsService);
     createTeam(organizationId: string, dto: CreateTeamDto, user: any): Promise<{
+        name: string;
         description: string | null;
         organizationId: string;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         isActive: boolean;
         code: string;
         projectId: string | null;
@@ -40,12 +40,12 @@ export declare class TeamsController {
             teamId: string;
         })[];
     } & {
+        name: string;
         description: string | null;
         organizationId: string;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         isActive: boolean;
         code: string;
         projectId: string | null;
@@ -81,12 +81,12 @@ export declare class TeamsController {
             teamId: string;
         })[];
     } & {
+        name: string;
         description: string | null;
         organizationId: string;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         isActive: boolean;
         code: string;
         projectId: string | null;
@@ -105,12 +105,12 @@ export declare class TeamsController {
         abandoned: number;
     }>;
     deleteTeam(teamId: string, user: any): Promise<{
+        name: string;
         description: string | null;
         organizationId: string;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
         isActive: boolean;
         code: string;
         projectId: string | null;

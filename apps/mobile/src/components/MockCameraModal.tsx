@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
   },
   topBarText: {
     color: '#FFF',
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '600',
   },
   iconBtn: {
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
   },
   closeText: {
     color: '#FFF',
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
   },
   viewfinder: {
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   sceneGraphicContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
     opacity: 0.65,
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
   },
   slateHeaderTitle: {
     color: colors.amber || '#F39C12',
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     textAlign: 'center',
     letterSpacing: 1.5,
@@ -436,13 +436,13 @@ const styles = StyleSheet.create({
   },
   slateLabel: {
     color: '#888',
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     fontFamily: 'monospace',
   },
   slateValue: {
     color: '#EEE',
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     fontFamily: 'monospace',
     textAlign: 'right',
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
   },
   viewfinderBadgeText: {
     color: '#FFF',
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1,
   },
@@ -475,7 +475,7 @@ const styles = StyleSheet.create({
   },
   hintText: {
     color: '#7F8C8D',
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '600',
   },
   shutterBtn: {
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
   },
   confirmTitle: {
     color: '#2ECC71',
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
   },
   btnRow: {
@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
   },
   retakeBtnText: {
     color: '#ECF0F1',
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
   },
   saveBtn: {
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
   },
   saveBtnText: {
     color: '#FFF',
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
   },
 });

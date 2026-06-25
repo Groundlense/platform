@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 14,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.white,
   },
@@ -305,12 +305,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: 14,
     color: '#A5D6A7',
     marginTop: 2,
   },
@@ -326,17 +326,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   infoBoxGreenTitle: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.greenMid,
   },
   infoBoxGreenSub: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginTop: 2,
   },
   fieldLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginBottom: 4,
     marginTop: 8,
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   tileHalfText: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.grayDark,
   },
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
     color: colors.greenMid,
   },
   tileHalfSub: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   tileText: {
-    fontSize: 10,
+    fontSize: 14,
     color: colors.grayDark,
     fontWeight: '600',
   },
@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayDark,
   },
   monoText: {
@@ -445,11 +445,11 @@ const styles = StyleSheet.create({
     color: colors.amber,
   },
   dateHint: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
   },
   microHint: {
-    fontSize: 8,
+    fontSize: 11,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   errorText: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.redMid,
     fontWeight: '700',
     marginTop: 3,
@@ -472,12 +472,12 @@ const styles = StyleSheet.create({
     marginVertical: 12,
   },
   infoBoxAmberTitle: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.amber,
   },
   infoBoxAmberSub: {
-    fontSize: 9,
+    fontSize: 12,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -491,7 +491,7 @@ const styles = StyleSheet.create({
   },
   confirmBtnText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '700',
   },
 });

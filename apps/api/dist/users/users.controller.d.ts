@@ -25,11 +25,11 @@ export declare class UsersController {
         profilePhotoUrl: string | null;
         roles: ({
             role: {
+                name: string;
                 description: string | null;
                 id: string;
                 createdAt: Date;
                 updatedAt: Date;
-                name: string;
                 code: string;
                 scope: import("@prisma/client").$Enums.ScopeType;
                 isSystemRole: boolean;
@@ -99,11 +99,11 @@ export declare class UsersController {
         profilePhotoUrl: string | null;
         roles: ({
             role: {
+                name: string;
                 description: string | null;
                 id: string;
                 createdAt: Date;
                 updatedAt: Date;
-                name: string;
                 code: string;
                 scope: import("@prisma/client").$Enums.ScopeType;
                 isSystemRole: boolean;
@@ -116,12 +116,12 @@ export declare class UsersController {
         })[];
         teamMemberships: ({
             team: {
+                name: string;
                 description: string | null;
                 organizationId: string;
                 id: string;
                 createdAt: Date;
                 updatedAt: Date;
-                name: string;
                 isActive: boolean;
                 code: string;
                 projectId: string | null;
