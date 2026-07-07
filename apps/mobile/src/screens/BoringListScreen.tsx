@@ -243,6 +243,15 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
                 <Text style={[styles.bhStatus, item.status === 'TERMINATED' && styles.statusTermText]}>
                   {getStatusLine(item)}
                 </Text>
+                {item.latitude != null && item.longitude != null ? (
+                  <Text style={styles.bhCoordinates}>
+                    📍 Lat: {Number(item.latitude).toFixed(6)} · Lng: {Number(item.longitude).toFixed(6)}
+                  </Text>
+                ) : (
+                  <Text style={styles.bhCoordinatesNoGps}>
+                    ⚠️ No GPS coordinates mapped / जीपीएस मैप नहीं है
+                  </Text>
+                )}
               </View>
               <View style={[styles.statusDot, getBoringDotStyle(item.status)]} />
             </TouchableOpacity>
@@ -452,6 +461,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.grayMid,
     marginTop: 2,
+  },
+  bhCoordinates: {
+    fontSize: 10.5,
+    color: colors.grayMid,
+    marginTop: 3,
+  },
+  bhCoordinatesNoGps: {
+    fontSize: 10.5,
+    color: colors.amber,
+    marginTop: 3,
   },
   statusTermText: {
     color: colors.amber,

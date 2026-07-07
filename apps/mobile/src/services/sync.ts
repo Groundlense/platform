@@ -211,5 +211,10 @@ export const syncManager = {
       boringSessionId,
       status: 'PENDING',
     });
+
+    // Trigger immediate background sync
+    this.syncWithServer().catch((err) => {
+      console.log('[Sync] Immediate background sync failed/offline:', err);
+    });
   }
 };

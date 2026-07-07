@@ -22,6 +22,7 @@ import { JoinRequestDto } from './dto/join-request.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { CreatePasswordDto } from './dto/create-password.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -169,5 +170,10 @@ export class AuthController {
       dto.code,
       dto.newPassword,
     );
+  }
+
+  @Post('create-password')
+  createPassword(@Body() dto: CreatePasswordDto) {
+    return this.authService.createPassword(dto.mobile, dto.password);
   }
 }

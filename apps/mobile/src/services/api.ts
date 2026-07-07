@@ -101,6 +101,14 @@ export const api = {
     return response.data; // { accessToken, refreshToken }
   },
 
+  async createPassword(mobile: string, password: any) {
+    const response = await apiClient.post('/auth/create-password', {
+      mobile,
+      password,
+    });
+    return response.data;
+  },
+
   async logout() {
     const refreshToken = await storage.getRefreshToken();
     if (refreshToken) {

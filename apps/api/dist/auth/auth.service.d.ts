@@ -86,4 +86,8 @@ export declare class AuthService {
         success: boolean;
         message: string;
     }>;
+    createPassword(mobile: string, password: any): Promise<{
+        success: boolean;
+        message: string;
+    }>;
 }

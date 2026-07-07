@@ -120,4 +120,7 @@ export declare class TeamsService {
         supervisorUserId: string | null;
         notificationSent: boolean;
     }>;
+    removeMember(teamId: string, userId: string, actor: any): Promise<{
+        success: boolean;
+    }>;
 }

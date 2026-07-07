@@ -582,18 +582,6 @@ export declare class BoreholesService {
     exportProject(projectId: string, user: any): Promise<{
         exportedAt: string;
         project: ({
-            sites: {
-                name: string;
-                description: string | null;
-                id: string;
-                createdAt: Date;
-                updatedAt: Date;
-                isActive: boolean;
-                code: string;
-                projectId: string;
-                latitude: import("@prisma/client/runtime/library").Decimal | null;
-                longitude: import("@prisma/client/runtime/library").Decimal | null;
-            }[];
             boreholes: ({
                 intervals: ({
                     samples: {
@@ -676,6 +664,18 @@ export declare class BoreholesService {
                 rigType: string | null;
                 startDepth: import("@prisma/client/runtime/library").Decimal | null;
             })[];
+            sites: {
+                name: string;
+                description: string | null;
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                isActive: boolean;
+                code: string;
+                projectId: string;
+                latitude: import("@prisma/client/runtime/library").Decimal | null;
+                longitude: import("@prisma/client/runtime/library").Decimal | null;
+            }[];
         } & {
             name: string;
             description: string | null;

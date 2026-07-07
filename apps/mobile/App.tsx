@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -21,6 +21,9 @@ import TerminateScreen from './src/screens/TerminateScreen';
 import BoringClosureScreen from './src/screens/BoringClosureScreen';
 import EngineerQueryScreen from './src/screens/EngineerQueryScreen';
 
+import { syncManager } from './src/services/sync';
+import { storage } from './src/services/storage';
+
 // Initialize Navigation Stack
 const Stack = createNativeStackNavigator();
 
@@ -28,6 +31,30 @@ const Stack = createNativeStackNavigator();
 const queryClient = new QueryClient();
 
 function App() {
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const token = await storage.getToken();
+      if (!token) return;
+
+      const queue = await storage.getSyncQueue();
+      if (queue.length > 0) {
+        console.log(`[Auto-Sync] Found ${queue.length} pending ops, attempting background sync...`);
+        try {
+          const result = await syncManager.syncWithServer();
+          if (result.success) {
+            console.log('[Auto-Sync] Sync completed successfully.');
+          } else {
+            console.warn('[Auto-Sync] Sync failed:', result.error);
+          }
+        } catch (err) {
+          console.warn('[Auto-Sync] Auto-sync failed:', err);
+        }
+      }
+    }, 15000); // Check every 15 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>

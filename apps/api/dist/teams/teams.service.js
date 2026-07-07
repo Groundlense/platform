@@ -77,6 +77,12 @@ let TeamsService = class TeamsService {
     }
     async addMember(teamId, userId, actor) {
         await this.assertTeamAccess(actor, teamId);
+        const existing = await this.db.teamMember.findFirst({
+            where: { teamId, userId },
+        });
+        if (existing) {
+            return existing;
+        }
         return this.db.teamMember.create({
             data: {
                 teamId,
@@ -136,6 +142,16 @@ let TeamsService = class TeamsService {
         return this.db.team.delete({
             where: { id: teamId },
         });
+    }
+    async removeMember(teamId, userId, actor) {
+        await this.assertTeamAccess(actor, teamId);
+        await this.db.teamMember.deleteMany({
+            where: {
+                teamId,
+                userId,
+            },
+        });
+        return { success: true };
     }
 };
 exports.TeamsService = TeamsService;

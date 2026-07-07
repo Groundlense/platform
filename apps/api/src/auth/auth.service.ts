@@ -915,4 +915,31 @@ export class AuthService {
       message: 'Password reset successfully.',
     };
   }
+
+  async createPassword(mobile: string, password: any) {
+    const user = await this.db.user.findFirst({
+      where: { mobile },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User account with this mobile number not found');
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await this.db.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        mobileVerified: true,
+        status: 'ACTIVE',
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Password created successfully and account activated.',
+    };
+  }
 }
+
