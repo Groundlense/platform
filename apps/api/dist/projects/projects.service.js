@@ -230,12 +230,27 @@ let ProjectsService = class ProjectsService {
     }
     async addMember(projectId, userId, actor) {
         await this.access.assertProjectAccess(actor, projectId);
-        return this.db.projectMember.create({
+        const existing = await this.db.projectMember.findFirst({
+            where: { projectId, userId },
+        });
+        if (existing) {
+            return existing;
+        }
+        const membership = await this.db.projectMember.create({
             data: {
                 projectId,
                 userId,
             },
         });
+        await this.db.notification.create({
+            data: {
+                userId,
+                title: 'New Project Assignment',
+                message: 'you have been assigned new project',
+                type: 'PROJECT_ASSIGNMENT',
+            },
+        });
+        return membership;
     }
     async getMembers(projectId, actor) {
         await this.access.assertProjectAccess(actor, projectId);
@@ -260,7 +275,24 @@ let ProjectsService = class ProjectsService {
         });
     }
     async getMyProjects(userId) {
-        return this.db.projectMember.findMany({
+        const actor = await this.db.user.findUnique({
+            where: { id: userId },
+            include: {
+                roles: {
+                    include: {
+                        role: true,
+                    },
+                },
+            },
+        });
+        if (!actor)
+            return [];
+        const actorFormatted = {
+            id: actor.id,
+            organizationId: actor.organizationId,
+            roles: actor.roles.map((ur) => ur.role.code),
+        };
+        const directMemberships = await this.db.projectMember.findMany({
             where: {
                 userId,
             },
@@ -273,6 +305,24 @@ let ProjectsService = class ProjectsService {
                 },
             },
         });
+        const allScopedProjects = await this.db.project.findMany({
+            where: this.access.projectScopeWhere(actorFormatted),
+            include: {
+                epcOrganization: true,
+                geotechOrganization: true,
+            },
+        });
+        const directProjectIds = new Set(directMemberships.map(m => m.projectId));
+        const extraMemberships = allScopedProjects
+            .filter(p => !directProjectIds.has(p.id))
+            .map(p => ({
+            id: `virtual-${p.id}`,
+            projectId: p.id,
+            userId,
+            createdAt: new Date(),
+            project: p,
+        }));
+        return [...directMemberships, ...extraMemberships];
     }
     async inviteCompany(projectId, dto, actor) {
         await this.access.assertProjectAccess(actor, projectId);

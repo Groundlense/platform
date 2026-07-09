@@ -74,6 +74,46 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
       }
     } finally {
       setLoggingIn(false);
+  // Register inputs
+  const [regMobile, setRegMobile] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [regError, setRegError] = useState('');
+  const [regSuccess, setRegSuccess] = useState(false);
+  const [registering, setRegistering] = useState(false);
+
+  const handleRegister = async () => {
+    const mobile = regMobile.trim();
+    if (!mobile || !regPassword || !regConfirmPassword) {
+      setRegError('Enter your mobile number and password / मोबाइल नंबर और पासवर्ड दर्ज करें');
+      return;
+    }
+    if (regPassword.length < 4) {
+      setRegError('Password must be at least 4 characters / पासवर्ड कम से कम 4 अक्षर का होना चाहिए');
+      return;
+    }
+    if (regPassword !== regConfirmPassword) {
+      setRegError('Passwords do not match / पासवर्ड मेल नहीं खाते');
+      return;
+    }
+    setRegError('');
+    setRegistering(true);
+    try {
+      await api.createPassword(mobile, regPassword);
+      setRegSuccess(true);
+      setRegMobile('');
+      setRegPassword('');
+      setRegConfirmPassword('');
+      alert('Account activated successfully! Please log in now. / खाता सफलतापूर्वक सक्रिय हो गया! कृपया अब लॉगिन करें।');
+      setActiveTab('login');
+    } catch (err: any) {
+      const serverMsg = err.response?.data?.message;
+      setRegError(
+        'Activation failed / सक्रियण विफल रहा\n' +
+          (serverMsg ? (Array.isArray(serverMsg) ? serverMsg.join(', ') : serverMsg) : 'Check mobile number / मोबाइल नंबर जांचें')
+      );
+    } finally {
+      setRegistering(false);
     }
   };
 
@@ -186,18 +226,80 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
             </View>
           </View>
         ) : (
-          /* REGISTER VIEW — self-registration is not supported by the backend */
+          /* REGISTER VIEW — active password activation form */
           <View style={styles.formCard}>
-            <View style={styles.infoBoxAmber}>
-              <Text style={styles.infoBoxAmberTitle}>
-                Registration is not available yet / पंजीकरण अभी उपलब्ध नहीं है
-              </Text>
-              <Text style={styles.infoBoxAmberSub}>
-                Your supervisor will create your worker ID (GL-W-XXXX) and PIN, then you can log
-                in here. / आपका सुपरवाइजर आपकी वर्कर ID (GL-W-XXXX) और पिन बनाएगा, फिर आप यहां
-                लॉगिन कर सकते हैं।
-              </Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.rust, marginBottom: 12, textAlign: 'center' }}>
+              Activate Account / खाता सक्रिय करें
+            </Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Mobile Number / मोबाइल नंबर</Text>
+              <TextInput
+                style={styles.input}
+                value={regMobile}
+                onChangeText={(text) => {
+                  setRegMobile(text);
+                  if (regError) setRegError('');
+                }}
+                placeholder="e.g. 9876543210"
+                keyboardType="phone-pad"
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholderTextColor={colors.grayMid}
+              />
             </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Password / पासवर्ड</Text>
+              <TextInput
+                style={styles.input}
+                value={regPassword}
+                onChangeText={(text) => {
+                  setRegPassword(text);
+                  if (regError) setRegError('');
+                }}
+                placeholder="Choose a password"
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholderTextColor={colors.grayMid}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Confirm Password / पासवर्ड की पुष्टि करें</Text>
+              <TextInput
+                style={styles.input}
+                value={regConfirmPassword}
+                onChangeText={(text) => {
+                  setRegConfirmPassword(text);
+                  if (regError) setRegError('');
+                }}
+                placeholder="Re-enter password"
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholderTextColor={colors.grayMid}
+              />
+            </View>
+
+            {regError ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorBoxText}>{regError}</Text>
+              </View>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.primaryBtn, registering && styles.primaryBtnDisabled]}
+              onPress={handleRegister}
+              disabled={registering}
+            >
+              {registering ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={styles.primaryBtnText}>Activate / सक्रिय करें</Text>
+              )}
+            </TouchableOpacity>
 
             <TouchableOpacity style={styles.secondaryBtn} onPress={() => setActiveTab('login')}>
               <Text style={styles.secondaryBtnText}>

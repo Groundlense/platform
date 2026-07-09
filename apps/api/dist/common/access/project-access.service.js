@@ -50,6 +50,17 @@ let ProjectAccessService = class ProjectAccessService {
                         },
                     },
                 },
+                {
+                    boreholes: {
+                        some: {
+                            team: {
+                                members: {
+                                    some: { userId: user.id },
+                                },
+                            },
+                        },
+                    },
+                },
             ],
         };
     }

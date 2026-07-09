@@ -43,6 +43,9 @@ let TeamsController = class TeamsController {
     deleteTeam(teamId, user) {
         return this.teamsService.deleteTeam(teamId, user);
     }
+    deleteTeamMember(teamId, userId, user) {
+        return this.teamsService.removeMember(teamId, userId, user);
+    }
 };
 exports.TeamsController = TeamsController;
 __decorate([
@@ -95,6 +98,15 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], TeamsController.prototype, "deleteTeam", null);
+__decorate([
+    (0, common_1.Delete)('teams/:teamId/members/:userId'),
+    __param(0, (0, common_1.Param)('teamId')),
+    __param(1, (0, common_1.Param)('userId')),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], TeamsController.prototype, "deleteTeamMember", null);
 exports.TeamsController = TeamsController = __decorate([
     (0, swagger_1.ApiTags)('Teams'),
     (0, swagger_1.ApiBearerAuth)(),

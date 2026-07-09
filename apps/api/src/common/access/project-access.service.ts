@@ -58,6 +58,18 @@ export class ProjectAccessService {
             },
           },
         },
+        // Access via team assigned to a borehole in the project:
+        {
+          boreholes: {
+            some: {
+              team: {
+                members: {
+                  some: { userId: user.id },
+                },
+              },
+            },
+          },
+        },
       ],
     };
   }

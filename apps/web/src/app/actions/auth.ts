@@ -291,3 +291,13 @@ export async function resetPasswordAction(fd: FormData) {
     return { error: err.message };
   }
 }
+
+export async function createPasswordAction(mobile: string, passwordEncoded: string) {
+  const password = passwordEncoded ? Buffer.from(passwordEncoded, "base64").toString("utf-8") : "";
+  try {
+    return await apiPost<any>("/auth/create-password", { mobile, password });
+  } catch (err: any) {
+    return { error: err.message || "Failed to create password" };
+  }
+}
+

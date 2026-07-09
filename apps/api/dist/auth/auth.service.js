@@ -769,6 +769,27 @@ let AuthService = class AuthService {
             message: 'Password reset successfully.',
         };
     }
+    async createPassword(mobile, password) {
+        const user = await this.db.user.findFirst({
+            where: { mobile },
+        });
+        if (!user) {
+            throw new common_1.NotFoundException('User account with this mobile number not found');
+        }
+        const passwordHash = await bcrypt.hash(password, 10);
+        await this.db.user.update({
+            where: { id: user.id },
+            data: {
+                passwordHash,
+                mobileVerified: true,
+                status: 'ACTIVE',
+            },
+        });
+        return {
+            success: true,
+            message: 'Password created successfully and account activated.',
+        };
+    }
 };
 exports.AuthService = AuthService;
 exports.AuthService = AuthService = __decorate([

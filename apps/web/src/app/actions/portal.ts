@@ -273,5 +273,16 @@ export async function updateUserProfileAction(
   }
 }
 
+export async function deleteTeamMemberAction(teamId: string, userId: string): Promise<PortalActionResult<any>> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const res = await apiDelete<any>(`/teams/${teamId}/members/${userId}`, token);
+    return { success: true, data: res };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to remove crew member.") };
+  }
+}
+
 
 

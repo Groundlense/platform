@@ -83,5 +83,17 @@ export class TeamsController {
   ) {
     return this.teamsService.deleteTeam(teamId, user);
   }
+
+  @Delete('teams/:teamId/members/:userId')
+  deleteTeamMember(
+    @Param('teamId')
+    teamId: string,
+    @Param('userId')
+    userId: string,
+
+    @CurrentUser() user: any,
+  ) {
+    return this.teamsService.removeMember(teamId, userId, user);
+  }
 }
 

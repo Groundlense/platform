@@ -506,10 +506,10 @@ function Step3({
         </div>
       )}
 
-      <div className="text-[10px] text-text-sec uppercase tracking-wider mb-2">Pending approval requests</div>
+      {/* <div className="text-[10px] text-text-sec uppercase tracking-wider mb-2">Pending approval requests</div>
       <div className="bg-bg-card border border-border rounded-[7px] text-center text-[11px] text-text-ter" style={{ padding: "14px 12px" }}>
         No access requests yet
-      </div>
+      </div> */}
     </div>
   );
 }

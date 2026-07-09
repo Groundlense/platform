@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   turbopack: {
-    root: path.resolve(__dirname, "../../"),
+    root: path.resolve(process.cwd()),
   },
   // Proxy API calls to the NestJS backend during development
   async rewrites() {

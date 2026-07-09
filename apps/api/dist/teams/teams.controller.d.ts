@@ -118,4 +118,7 @@ export declare class TeamsController {
         supervisorUserId: string | null;
         notificationSent: boolean;
     }>;
+    deleteTeamMember(teamId: string, userId: string, user: any): Promise<{
+        success: boolean;
+    }>;
 }

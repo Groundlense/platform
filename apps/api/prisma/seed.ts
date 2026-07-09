@@ -348,8 +348,10 @@ async function main() {
     'PROJECT_VIEW',
     'BOREHOLE_VIEW',
     'BOREHOLE_EDIT',
+    'BOREHOLE_CREATE',
     'SPT_VIEW',
     'REPORT_VIEW',
+    'USER_MANAGE',
     'REVIEW_CREATE',
     'REVIEW_VIEW',
   ];

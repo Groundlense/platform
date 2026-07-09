@@ -42,6 +42,47 @@ export declare class UsersController {
         })[];
     }[]>;
     createUser(dto: CreateUserDto, user: any): Promise<{
+        isExisting: boolean;
+        roles: ({
+            role: {
+                name: string;
+                description: string | null;
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                code: string;
+                scope: import("@prisma/client").$Enums.ScopeType;
+                isSystemRole: boolean;
+            };
+        } & {
+            id: string;
+            createdAt: Date;
+            userId: string;
+            roleId: string;
+        })[];
+        organizationId: string;
+        firstName: string;
+        lastName: string | null;
+        email: string | null;
+        employeeCode: string | null;
+        designation: string | null;
+        userType: string | null;
+        preferredLanguage: string | null;
+        mobile: string | null;
+        id: string;
+        inviteToken: string | null;
+        mobileVerified: boolean;
+        passwordHash: string;
+        pinHash: string | null;
+        status: import("@prisma/client").$Enums.UserStatus;
+        lastLoginAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        inviteExpiresAt: Date | null;
+        profilePhotoUrl: string | null;
+        user?: undefined;
+        oneTimePassword?: undefined;
+    } | {
         user: {
             organizationId: string;
             firstName: string;

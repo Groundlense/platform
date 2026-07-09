@@ -12,12 +12,14 @@ export declare class ProjectAccessService {
             members?: undefined;
             projectCompanies?: undefined;
             userProjectRoles?: undefined;
+            boreholes?: undefined;
         } | {
             geotechOrganizationId: any;
             epcOrganizationId?: undefined;
             members?: undefined;
             projectCompanies?: undefined;
             userProjectRoles?: undefined;
+            boreholes?: undefined;
         } | {
             members: {
                 some: {
@@ -28,6 +30,7 @@ export declare class ProjectAccessService {
             geotechOrganizationId?: undefined;
             projectCompanies?: undefined;
             userProjectRoles?: undefined;
+            boreholes?: undefined;
         } | {
             projectCompanies: {
                 some: {
@@ -42,6 +45,7 @@ export declare class ProjectAccessService {
             geotechOrganizationId?: undefined;
             members?: undefined;
             userProjectRoles?: undefined;
+            boreholes?: undefined;
         } | {
             userProjectRoles: {
                 some: {
@@ -53,6 +57,24 @@ export declare class ProjectAccessService {
             geotechOrganizationId?: undefined;
             members?: undefined;
             projectCompanies?: undefined;
+            boreholes?: undefined;
+        } | {
+            boreholes: {
+                some: {
+                    team: {
+                        members: {
+                            some: {
+                                userId: any;
+                            };
+                        };
+                    };
+                };
+            };
+            epcOrganizationId?: undefined;
+            geotechOrganizationId?: undefined;
+            members?: undefined;
+            projectCompanies?: undefined;
+            userProjectRoles?: undefined;
         })[];
     };
     canAccessProject(user: any, projectId: string): Promise<boolean>;

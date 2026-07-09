@@ -62,7 +62,11 @@ export class UsersService {
   async findByIdentifier(identifier: string) {
     return this.db.user.findFirst({
       where: {
-        OR: [{ email: identifier }, { employeeCode: identifier }],
+        OR: [
+          { email: identifier },
+          { employeeCode: identifier },
+          { mobile: identifier },
+        ],
       },
       include: {
         roles: {
@@ -98,6 +102,49 @@ export class UsersService {
     const organizationId = this.isSuperAdmin(actor)
       ? dto.organizationId
       : actor.organizationId;
+
+    if (dto.email) {
+      const existingEmail = await this.db.user.findFirst({
+        where: { email: dto.email },
+      });
+      if (existingEmail) {
+        throw new BadRequestException('Email address is already registered / ईमेल पहले से पंजीकृत है');
+      }
+    }
+
+    if (dto.mobile) {
+      const existingMobile = await this.db.user.findFirst({
+        where: { mobile: dto.mobile },
+        include: {
+          roles: {
+            include: {
+              role: true,
+            },
+          },
+        },
+      });
+      if (existingMobile) {
+        // Compare names (case-insensitive, trimmed)
+        const nameInput = (dto.firstName || "").trim().toLowerCase();
+        const nameExisting = (existingMobile.firstName || "").trim().toLowerCase();
+        const nameMismatch = nameInput !== nameExisting;
+
+        // Compare roles
+        const existingRoleCodes = existingMobile.roles.map((r: any) => r.role.code.toLowerCase());
+        const inputRoleCode = (dto.roleCode || "").trim().toLowerCase();
+        const roleMismatch = inputRoleCode ? !existingRoleCodes.includes(inputRoleCode) : false;
+
+        if (nameMismatch || roleMismatch) {
+          throw new BadRequestException("Mobile number assigned to another member.");
+        }
+
+        // Return existing user cleanly with isExisting flag
+        return {
+          ...existingMobile,
+          isExisting: true,
+        };
+      }
+    }
 
     const oneTimePassword = crypto.randomBytes(9).toString('base64url');
 
@@ -151,12 +198,7 @@ export class UsersService {
 
     let mobileVerified = false;
     if (dto.mobile) {
-      const otpRecord = await this.db.otp.findUnique({
-        where: { type_target: { type: 'MOBILE', target: dto.mobile } },
-      });
-      if (otpRecord && otpRecord.verified) {
-        mobileVerified = true;
-      }
+      mobileVerified = true;
     }
 
     const user = await this.db.user.create({

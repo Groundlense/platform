@@ -13,6 +13,7 @@ import {
   RiLock2Line,
   RiUserAddLine,
   RiCloseLine,
+  RiCheckboxCircleLine,
 } from "react-icons/ri";
 import { usePortalTab } from "./PortalContext";
 import {
@@ -30,6 +31,7 @@ import {
   verifyOtpAction,
   deleteTeamAction,
   updateUserProfileAction,
+  deleteTeamMemberAction,
   type BoreholeIntegrity,
 } from "@/app/actions/portal";
 import { createBoreholeAction, assignBoreholeTeamAction, approveProjectJoinRequestAction, rejectProjectJoinRequestAction } from "@/app/actions/projects";
@@ -92,6 +94,148 @@ function parseNum(v: any): number | null {
   if (v === null || v === undefined || v === "") return null;
   const n = parseFloat(v);
   return isNaN(n) ? null : n;
+}
+
+// ── UTM → WGS84 Decimal Degrees conversion ──
+// Accepts easting (e.g. 521847) and northing (e.g. 3148203) in UTM.
+// zone: UTM zone number (default 43 for most of India)
+// southern: true if south of equator
+function utmToLatLng(
+  easting: number,
+  northing: number,
+  zone = 43,
+  southern = false
+): { lat: number; lng: number } {
+  const k0 = 0.9996;
+  const a = 6378137.0;
+  const e = 0.0818191908426;
+  const e2 = e * e;
+  const e4 = e2 * e2;
+  const e6 = e4 * e2;
+  const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+
+  const x = easting - 500000;
+  const y = southern ? northing - 10000000 : northing;
+
+  const longOrigin = (zone - 1) * 6 - 180 + 3;
+  const eccPrimeSquared = e2 / (1 - e2);
+
+  const M = y / k0;
+  const mu =
+    M /
+    (a *
+      (1 -
+        e2 / 4 -
+        (3 * e4) / 64 -
+        (5 * e6) / 256));
+
+  const phi1Rad =
+    mu +
+    ((3 * e1) / 2 - (27 * e1 * e1 * e1) / 32) * Math.sin(2 * mu) +
+    ((21 * e1 * e1) / 16 - (55 * e1 * e1 * e1 * e1) / 32) * Math.sin(4 * mu) +
+    ((151 * e1 * e1 * e1) / 96) * Math.sin(6 * mu);
+
+  const N1 = a / Math.sqrt(1 - e2 * Math.sin(phi1Rad) * Math.sin(phi1Rad));
+  const T1 = Math.tan(phi1Rad) * Math.tan(phi1Rad);
+  const C1 = eccPrimeSquared * Math.cos(phi1Rad) * Math.cos(phi1Rad);
+  const R1 =
+    (a * (1 - e2)) /
+    Math.pow(1 - e2 * Math.sin(phi1Rad) * Math.sin(phi1Rad), 1.5);
+  const D = x / (N1 * k0);
+
+  const lat =
+    phi1Rad -
+    ((N1 * Math.tan(phi1Rad)) / R1) *
+      (D * D / 2 -
+        ((5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * eccPrimeSquared) *
+          D *
+          D *
+          D *
+          D) /
+          24 +
+        ((61 +
+          90 * T1 +
+          298 * C1 +
+          45 * T1 * T1 -
+          252 * eccPrimeSquared -
+          3 * C1 * C1) *
+          D *
+          D *
+          D *
+          D *
+          D *
+          D) /
+          720);
+
+  const lng =
+    (D -
+      ((1 + 2 * T1 + C1) * D * D * D) / 6 +
+      ((5 -
+        2 * C1 +
+        28 * T1 -
+        3 * C1 * C1 +
+        8 * eccPrimeSquared +
+        24 * T1 * T1) *
+        D *
+        D *
+        D *
+        D *
+        D) /
+        120) /
+      Math.cos(phi1Rad);
+
+  return {
+    lat: (lat * 180) / Math.PI,
+    lng: (lng * 180) / Math.PI + longOrigin,
+  };
+}
+
+// Normalizes a coordinate string to decimal degrees.
+// If it looks like a UTM easting/northing (integer ≥ 10000), converts via UTM→WGS84.
+// Returns { lat, lng } or null if cannot determine.
+function normalizeCoords(
+  rawLat: string | null | undefined,
+  rawLng: string | null | undefined
+): { lat: number; lng: number } | null {
+  if (!rawLat || !rawLng) return null;
+  const latN = parseFloat(rawLat);
+  const lngN = parseFloat(rawLng);
+  if (isNaN(latN) || isNaN(lngN)) return null;
+
+  // Already decimal degrees: lat in [-90,90] and lng in [-180,180]
+  if (latN >= -90 && latN <= 90 && lngN >= -180 && lngN <= 180 && (latN !== 0 || lngN !== 0)) {
+    return { lat: latN, lng: lngN };
+  }
+
+  // Likely UTM: easting is 6-digit (100000-999999), northing is 7-digit (1000000-9999999)
+  // In our case rawLat column may hold northing and rawLng easting (or vice-versa).
+  // We detect by value ranges: easting ~100000-900000, northing ~1000000-9999999
+  const isEasting = (v: number) => v >= 100000 && v <= 900000;
+  const isNorthing = (v: number) => v >= 1000000 && v <= 9999999;
+
+  let easting: number | null = null;
+  let northing: number | null = null;
+
+  if (isEasting(lngN) && isNorthing(latN)) {
+    easting = lngN; northing = latN;
+  } else if (isEasting(latN) && isNorthing(lngN)) {
+    easting = latN; northing = lngN;
+  } else if (isEasting(lngN) || isNorthing(lngN)) {
+    // Best guess: treat lat col as northing, lng col as easting
+    easting = lngN; northing = latN;
+  } else {
+    return null;
+  }
+
+  try {
+    const converted = utmToLatLng(easting, northing);
+    if (converted.lat >= -90 && converted.lat <= 90 && converted.lng >= -180 && converted.lng <= 180) {
+      return converted;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function fmtNum(v: number | null | undefined, digits = 1, suffix = ""): string {
@@ -164,6 +308,12 @@ export default function PortalClient({
   const { activeTab, setActiveTab } = usePortalTab();
   const router = useRouter();
 
+  const [localBoreholes, setLocalBoreholes] = useState<any[]>(boreholes);
+  useEffect(() => {
+    setLocalBoreholes(boreholes);
+  }, [boreholes]);
+  const [activationLinkModal, setActivationLinkModal] = useState<string | null>(null);
+
   const proj = project; // No mock fallback — null renders honest "—" values
   const u = user as any;
   const isGeotech = useMemo(() => {
@@ -175,8 +325,8 @@ export default function PortalClient({
     return u.organizationId === proj?.epcOrganizationId || u.organizationId === proj?.geotechOrganizationId;
   }, [u, proj]);
   const isBoringStarted = useMemo(() => {
-    return (boreholes || []).some((bh: any) => bh.status !== "PLANNED");
-  }, [boreholes]);
+    return (localBoreholes || []).some((bh: any) => bh.status !== "PLANNED");
+  }, [localBoreholes]);
   const userName = u
     ? `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || (u.email as string) || "Engineer"
     : "Engineer";
@@ -185,7 +335,7 @@ export default function PortalClient({
 
   // ── Real boreholes only — no mock dataset, no fabricated merge ──
   const mappedBoreholes = useMemo(() => {
-    return (boreholes || []).map((bh: any) => {
+    return (localBoreholes || []).map((bh: any) => {
       const intervals = [...(bh.intervals || [])]
         .map((iv: any) => ({
           ...iv,
@@ -214,6 +364,11 @@ export default function PortalClient({
         ...bh,
         name: bh.name || bh.boreholeCode,
         teamName: bh.team?.name ?? null,
+        // Normalize coordinates: auto-converts UTM to decimal degrees if needed
+        _normalizedCoords: normalizeCoords(
+          bh.latitude != null ? String(bh.latitude) : null,
+          bh.longitude != null ? String(bh.longitude) : null
+        ),
         latitude: bh.latitude != null ? String(bh.latitude) : null,
         longitude: bh.longitude != null ? String(bh.longitude) : null,
         groundLevelRL: parseNum(bh.groundLevelRL),
@@ -915,84 +1070,92 @@ export default function PortalClient({
       return;
     }
 
+    const loadXLSX = (): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        if ((window as any).XLSX) {
+          resolve((window as any).XLSX);
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js";
+        script.onload = () => resolve((window as any).XLSX);
+        script.onerror = (err) => reject(err);
+        document.head.appendChild(script);
+      });
+    };
+
     const reader = new FileReader();
     reader.onload = async (evt) => {
-      const text = evt.target?.result as string;
-      if (!text) return;
+      try {
+        const ab = evt.target?.result as ArrayBuffer;
+        if (!ab) return;
 
-      const lines = text.split(/\r?\n/);
-      if (lines.length < 2) {
-        alert("Invalid CSV format or empty file.");
-        return;
-      }
+        const XLSX = await loadXLSX();
+        const workbook = XLSX.read(ab, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
 
-      const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
-      const bhNoIdx = headers.findIndex(h => ["bh_no", "bh no", "bhno", "bh-no", "borehole_no", "borehole"].includes(h));
-      const subStructIdx = headers.findIndex(h => ["sub_structure", "sub structure", "location", "name"].includes(h));
-      const eastingIdx = headers.findIndex(h => ["easting", "longitude", "lng", "lon"].includes(h));
-      const northingIdx = headers.findIndex(h => ["northing", "latitude", "lat"].includes(h));
-      const rlIdx = headers.findIndex(h => ["rl_mamsl", "rl", "rl(m)"].includes(h));
-      const plannedDepthIdx = headers.findIndex(h => ["planned_depth_m", "planned depth", "depth"].includes(h));
+        if (rows.length < 2) {
+          alert("Invalid Excel/CSV format or empty file.");
+          return;
+        }
 
-      if (bhNoIdx === -1) {
-        alert("Missing BH_No/Borehole column in CSV.");
-        return;
-      }
+        const headers = rows[0].map((h: any) => String(h || "").trim().toLowerCase());
+        const bhNoIdx = headers.findIndex(h => ["bh_no", "bh no", "bhno", "bh-no", "borehole_no", "borehole"].includes(h));
+        const subStructIdx = headers.findIndex(h => ["sub_structure", "sub structure", "location", "name"].includes(h));
+        const eastingIdx = headers.findIndex(h => ["easting", "longitude", "lng", "lon"].includes(h));
+        const northingIdx = headers.findIndex(h => ["northing", "latitude", "lat"].includes(h));
+        const rlIdx = headers.findIndex(h => ["rl_mamsl", "rl", "rl(m)"].includes(h));
+        const plannedDepthIdx = headers.findIndex(h => ["planned_depth_m", "planned depth", "depth"].includes(h));
 
-      let createdCount = 0;
-      let errorCount = 0;
+        if (bhNoIdx === -1) {
+          alert("Missing BH_No/Borehole column in file.");
+          return;
+        }
 
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
+        let createdCount = 0;
+        let errorCount = 0;
 
-        // Simple CSV splitter handling quoted values
-        const cells: string[] = [];
-        let cur = "";
-        let inQuotes = false;
-        for (let j = 0; j < line.length; j++) {
-          const char = line[j];
-          if (char === '"') {
-            inQuotes = !inQuotes;
-          } else if (char === ',' && !inQuotes) {
-            cells.push(cur.trim());
-            cur = "";
+        for (let i = 1; i < rows.length; i++) {
+          const cells = rows[i];
+          if (!cells || cells.length === 0) continue;
+
+          const bhNo = String(cells[bhNoIdx] || "").trim();
+          if (!bhNo) continue;
+
+          const nameVal = subStructIdx !== -1 ? String(cells[subStructIdx] || "").trim() : "";
+          const eastingVal = eastingIdx !== -1 ? String(cells[eastingIdx] || "").trim() : "";
+          const northingVal = northingIdx !== -1 ? String(cells[northingIdx] || "").trim() : "";
+          const rlVal = rlIdx !== -1 ? String(cells[rlIdx] || "").trim() : "";
+          const depthVal = plannedDepthIdx !== -1 ? String(cells[plannedDepthIdx] || "").trim() : "";
+
+          const formData = new FormData();
+          formData.append("projectId", proj.id);
+          formData.append("boreholeCode", bhNo);
+          if (nameVal) formData.append("name", nameVal);
+          if (northingVal) formData.append("latitude", northingVal);
+          if (eastingVal) formData.append("longitude", eastingVal);
+          if (rlVal) formData.append("groundLevelRL", rlVal);
+          if (depthVal) formData.append("plannedDepth", depthVal);
+
+          const res = await createBoreholeAction(formData);
+          if (res.success) {
+            createdCount++;
           } else {
-            cur += char;
+            console.error("Failed to import borehole:", bhNo, res.error);
+            errorCount++;
           }
         }
-        cells.push(cur.trim());
 
-        const bhNo = cells[bhNoIdx];
-        if (!bhNo) continue;
-
-        const nameVal = subStructIdx !== -1 ? cells[subStructIdx] : "";
-        const eastingVal = eastingIdx !== -1 ? cells[eastingIdx] : "";
-        const northingVal = northingIdx !== -1 ? cells[northingIdx] : "";
-        const rlVal = rlIdx !== -1 ? cells[rlIdx] : "";
-        const depthVal = plannedDepthIdx !== -1 ? cells[plannedDepthIdx] : "";
-
-        const formData = new FormData();
-        formData.append("projectId", proj.id);
-        formData.append("boreholeCode", bhNo);
-        if (nameVal) formData.append("name", nameVal);
-        if (northingVal) formData.append("latitude", northingVal);
-        if (eastingVal) formData.append("longitude", eastingVal);
-        if (rlVal) formData.append("groundLevelRL", rlVal);
-        if (depthVal) formData.append("plannedDepth", depthVal);
-
-        const res = await createBoreholeAction(formData);
-        if (res.success) {
-          createdCount++;
-        } else {
-          errorCount++;
-        }
+        alert(`Successfully processed file. Imported ${createdCount} boreholes.${errorCount > 0 ? ` Failed to import ${errorCount} boreholes.` : ""}`);
+        router.refresh();
+      } catch (err) {
+        console.error("Error parsing spreadsheet file:", err);
+        alert("Failed to parse the file. Please ensure it is a valid Excel or CSV file.");
       }
-
-      alert(`Successfully processed file. Imported ${createdCount} boreholes.${errorCount > 0 ? ` Failed to import ${errorCount} boreholes.` : ""}`);
-      router.refresh();
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   };
 
   // ── Setup tab: Project Details state & handlers ──
@@ -1403,10 +1566,7 @@ export default function PortalClient({
         return;
       }
 
-      if (newWorkerMobile.trim() && !otpVerified && !isVerificationSkipped) {
-        setCrewMemberAddError("Please verify the mobile number with OTP first or select Verify Later.");
-        return;
-      }
+      setMemberAddLoading(teamId);
 
       setMemberAddLoading(teamId);
       setCrewMemberAddError("");
@@ -1473,6 +1633,14 @@ export default function PortalClient({
         const updatedTeams = await fetchOrgTeams(orgId);
         setLocalTeams(updatedTeams);
       }
+      if (newWorkerMobile.trim() && !newUser.isExisting) {
+        const host = window.location.origin || "http://localhost:3000";
+        const link = `${host}/create-account?mobile=${encodeURIComponent(newWorkerMobile.trim())}`;
+        setActivationLinkModal(link);
+      } else if (newUser.isExisting) {
+        alert("This member is already registered on Groundlense. They have been assigned to this borehole team and can access it immediately on their mobile app.");
+      }
+
       router.refresh();
       setShowAddCrewMemberModal(null);
       setNewWorkerMobile("");
@@ -1482,6 +1650,22 @@ export default function PortalClient({
       setIsVerificationSkipped(false);
       setNewWorkerName("");
       setNewWorkerQual("");
+    }
+  };
+
+  const handleDeleteCrewMember = async (teamId: string, userId: string) => {
+    if (!confirm("Are you sure you want to remove this crew member?")) return;
+    setMemberAddLoading(teamId);
+    const res = await deleteTeamMemberAction(teamId, userId);
+    setMemberAddLoading(null);
+    if (!res.success) {
+      alert(res.error || "Failed to remove crew member.");
+    } else {
+      if (orgId) {
+        const updatedTeams = await fetchOrgTeams(orgId);
+        setLocalTeams(updatedTeams);
+      }
+      router.refresh();
     }
   };
 
@@ -1555,6 +1739,19 @@ export default function PortalClient({
         for (const bhId of selectedBoreholeIds) {
           await assignBoreholeTeamAction(bhId, newTeamId);
         }
+        setLocalBoreholes(prev =>
+          prev.map(bh => {
+            if (selectedBoreholeIds.includes(bh.id)) {
+              return {
+                ...bh,
+                teamId: newTeamId,
+                teamName: newTeamName.trim(),
+                team: { id: newTeamId, name: newTeamName.trim() }
+              };
+            }
+            return bh;
+          })
+        );
       }
 
       const updatedTeams = await fetchOrgTeams(orgId);
@@ -1590,6 +1787,20 @@ export default function PortalClient({
     }
     const res = await deleteTeamAction(teamId);
     if (res.success) {
+      setLocalBoreholes(prev =>
+        prev.map(bh => {
+          if (bh.teamId === teamId) {
+            return {
+              ...bh,
+              teamId: null,
+              teamName: null,
+              team: null
+            };
+          }
+          return bh;
+        })
+      );
+
       const orgId = (u as any)?.organizationId;
       if (orgId) {
         const updatedTeams = await fetchOrgTeams(orgId);
@@ -1622,6 +1833,12 @@ export default function PortalClient({
   const [selectedReportBhId, setSelectedReportBhId] = useState<string>("");
   const [reportGenerated, setReportGenerated] = useState(false);
   const [showExcelSec, setShowExcelSec] = useState(false);
+  // Map expand / zoom / pan state
+  const [mapExpanded, setMapExpanded] = useState(false);
+  const [mapZoom, setMapZoom] = useState(1);
+  const [mapOffset, setMapOffset] = useState({ x: 0, y: 0 });
+  const [mapDragging, setMapDragging] = useState(false);
+  const [mapDragStart, setMapDragStart] = useState({ x: 0, y: 0 });
 
   const reportBh = useMemo(() => {
     return (
@@ -1653,6 +1870,8 @@ export default function PortalClient({
       cancelled = true;
     };
   }, [activeTab, reportBhId]);
+
+
 
   // Liquefaction from REAL intervals of the selected report borehole
   const liquefactionData = useMemo(() => {
@@ -1725,50 +1944,151 @@ export default function PortalClient({
   // Schematic map positions from real coordinates (relative layout)
   const mapPoints = useMemo(() => {
     const withCoords = mappedBoreholes.filter(
-      (b: any) => parseNum(b.latitude) != null && parseNum(b.longitude) != null
+      (b: any) => b._normalizedCoords != null
     );
     if (withCoords.length === 0) return [];
-    const lats = withCoords.map((b: any) => parseNum(b.latitude) as number);
-    const lngs = withCoords.map((b: any) => parseNum(b.longitude) as number);
+    const lats = withCoords.map((b: any) => b._normalizedCoords.lat);
+    const lngs = withCoords.map((b: any) => b._normalizedCoords.lng);
     const minLat = Math.min(...lats), maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
     const latSpan = maxLat - minLat, lngSpan = maxLng - minLng;
     return withCoords.map((b: any) => {
-      const lat = parseNum(b.latitude) as number;
-      const lng = parseNum(b.longitude) as number;
+      const lat = b._normalizedCoords.lat;
+      const lng = b._normalizedCoords.lng;
       const left = lngSpan > 0 ? 10 + ((lng - minLng) / lngSpan) * 75 : 48;
       const top = latSpan > 0 ? 20 + (1 - (lat - minLat) / latSpan) * 55 : 48;
       return { bh: b, left: `${left.toFixed(1)}%`, top: `${top.toFixed(1)}%` };
     });
   }, [mappedBoreholes]);
 
-  // Yandex Static Maps URL from GPS decimal coordinates
-  const yandexMapUrl = useMemo(() => {
-    const withCoords = mappedBoreholes.filter(
-      (b: any) => parseNum(b.latitude) != null && parseNum(b.longitude) != null
-    );
+  // Yandex maps is replaced with relative GPS schematic map by default
+  const yandexMapUrl = null;
+
+  // Google Maps link for the expanded modal
+  const googleMapsUrl = useMemo(() => {
+    const withCoords = mappedBoreholes.filter((b: any) => b._normalizedCoords != null);
     if (withCoords.length === 0) return null;
-
-    const allGPS = withCoords.every((b: any) => {
-      const lat = parseNum(b.latitude) as number;
-      const lng = parseNum(b.longitude) as number;
-      return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat !== 0 || lng !== 0);
-    });
-
-    if (!allGPS) return null;
-
-    const pts = withCoords.map((b: any, idx: number) => {
-      const lat = parseNum(b.latitude) as number;
-      const lng = parseNum(b.longitude) as number;
-      const color = b.status === "COMPLETED" ? "gn" : b.status === "IN_PROGRESS" ? "bl" : "gr";
-      const markerText = b.boreholeCode?.split("-").pop() || String(idx + 1);
-      const parsedNum = parseInt(markerText, 10);
-      const cleanMarkerText = isNaN(parsedNum) ? (b.boreholeCode?.slice(-1) || "1") : String(parsedNum);
-      return `${lng},${lat},pm2${color}m${cleanMarkerText}`;
-    });
-
-    return `https://static-maps.yandex.ru/1.x/?l=map&pt=${pts.join("~")}&size=650,160`;
+    const first = withCoords[0]._normalizedCoords;
+    const markers = withCoords
+      .map((b: any) => `${b._normalizedCoords.lat},${b._normalizedCoords.lng}`)
+      .join("/");
+    return `https://www.google.com/maps/@${first.lat},${first.lng},15z?q=${markers}`;
   }, [mappedBoreholes]);
+
+  // Load Leaflet and initialize maps
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let cssLink = document.getElementById("leaflet-css") as HTMLLinkElement;
+    if (!cssLink) {
+      cssLink = document.createElement("link");
+      cssLink.id = "leaflet-css";
+      cssLink.rel = "stylesheet";
+      cssLink.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(cssLink);
+    }
+
+    const initMap = () => {
+      const L = (window as any).L;
+      if (!L) return;
+
+      const pts = mapPoints.map((p: any) => p.bh._normalizedCoords).filter(Boolean);
+      if (pts.length === 0) return;
+
+      const avgLat = pts.reduce((sum: number, p: any) => sum + p.lat, 0) / pts.length;
+      const avgLng = pts.reduce((sum: number, p: any) => sum + p.lng, 0) / pts.length;
+
+      // Custom icon settings to ensure CDN asset loading path issues are resolved
+      const customIcon = L.icon({
+        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+      });
+
+      // 1. Inline Map
+      const inlineContainer = document.getElementById("inline-leaflet-map");
+      if (inlineContainer) {
+        if ((inlineContainer as any)._leaflet_map) {
+          try {
+            (inlineContainer as any)._leaflet_map.remove();
+          } catch (e) {}
+        }
+
+        const inlineMap = L.map("inline-leaflet-map", { zoomControl: true }).setView([avgLat, avgLng], 14);
+        (inlineContainer as any)._leaflet_map = inlineMap;
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(inlineMap);
+
+        mapPoints.forEach(({ bh }: any) => {
+          if (!bh._normalizedCoords) return;
+          const marker = L.marker([bh._normalizedCoords.lat, bh._normalizedCoords.lng], { icon: customIcon }).addTo(inlineMap);
+          const statusText = bh.status === "COMPLETED" ? "✅ Completed" : bh.status === "IN_PROGRESS" ? "🔵 In Progress" : "⭕ Pending";
+          marker.bindPopup(
+            `<b>BH ID:</b> ${bh.boreholeCode}<br/>` +
+            `<b>Location:</b> ${bh.name || "—"}<br/>` +
+            `<b>Team:</b> ${bh.teamName || "Unassigned"}<br/>` +
+            `<b>Status:</b> ${statusText}<br/>` +
+            `<b>Coordinates:</b> ${bh._normalizedCoords.lat.toFixed(6)}, ${bh._normalizedCoords.lng.toFixed(6)}`
+          );
+        });
+      }
+
+      // 2. Expanded Map
+      if (mapExpanded) {
+        const expandedContainer = document.getElementById("expanded-leaflet-map");
+        if (expandedContainer) {
+          if ((expandedContainer as any)._leaflet_map) {
+            try {
+              (expandedContainer as any)._leaflet_map.remove();
+            } catch (e) {}
+          }
+
+          const expandedMap = L.map("expanded-leaflet-map", { zoomControl: true }).setView([avgLat, avgLng], 15);
+          (expandedContainer as any)._leaflet_map = expandedMap;
+
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: '&copy; OpenStreetMap contributors',
+          }).addTo(expandedMap);
+
+          mapPoints.forEach(({ bh }: any) => {
+            if (!bh._normalizedCoords) return;
+            const marker = L.marker([bh._normalizedCoords.lat, bh._normalizedCoords.lng], { icon: customIcon }).addTo(expandedMap);
+            const statusText = bh.status === "COMPLETED" ? "✅ Completed" : bh.status === "IN_PROGRESS" ? "🔵 In Progress" : "⭕ Pending";
+            marker.bindPopup(
+              `<div style="font-family: sans-serif; font-size: 11px; line-height: 1.4;">` +
+              `<b style="font-size: 12px; color: #1A1918;">${bh.boreholeCode}</b><br/>` +
+              `<b>Sub-structure:</b> ${bh.name || "—"}<br/>` +
+              `<b>Assigned Team:</b> ${bh.teamName || "Unassigned"}<br/>` +
+              `<b>Status:</b> ${statusText}<br/>` +
+              `<b>Coords:</b> ${bh._normalizedCoords.lat.toFixed(6)}, ${bh._normalizedCoords.lng.toFixed(6)}` +
+              `</div>`
+            );
+          });
+        }
+      }
+    };
+
+    let script = document.getElementById("leaflet-js") as HTMLScriptElement;
+    if (!script) {
+      script = document.createElement("script");
+      script.id = "leaflet-js";
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.onload = () => {
+        initMap();
+      };
+      document.head.appendChild(script);
+    } else {
+      if ((window as any).L) {
+        initMap();
+      } else {
+        script.addEventListener("load", initMap);
+      }
+    }
+  }, [mapPoints, mapExpanded]);
 
   const modSuccessFor = (ivId: string) => appliedMods[ivId];
 
@@ -1886,6 +2206,18 @@ export default function PortalClient({
         .map-grid2 { position: absolute; inset: 0; opacity: 0.05; background: linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px); background-size: 40px 40px; }
         .mp { position: absolute; cursor: pointer; display: flex; align-items: center; font-size: 12px; }
         .mp-lbl { font-size: 8px; font-family: 'DM Mono', monospace; font-weight: 700; background: var(--color-bg-surface); padding: 1px 4px; border: 0.5px solid var(--color-border-mid); border-radius: 3px; margin-left: 2px; white-space: nowrap; }
+        /* MAP MODAL */
+        .map-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.15s ease; }
+        .map-modal { background: var(--color-bg-surface); border-radius: 12px; width: 90vw; max-width: 1100px; height: 85vh; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--color-border); box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+        .map-modal-header { padding: 10px 16px; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .map-modal-body { flex: 1; position: relative; overflow: hidden; background: #252423; }
+        .map-controls { position: absolute; top: 8px; right: 8px; z-index: 20; display: flex; flex-direction: column; gap: 4px; }
+        .map-ctrl-btn { width: 28px; height: 28px; background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; font-weight: 700; color: var(--color-text-sec); transition: all 0.1s; user-select: none; }
+        .map-ctrl-btn:hover { background: var(--color-bg-card); color: var(--color-text-pri); }
+        .map-expand-btn { position: absolute; top: 6px; right: 6px; z-index: 10; background: rgba(37,36,35,0.85); border: 1px solid var(--color-border); border-radius: 5px; padding: 3px 8px; font-size: 9px; cursor: pointer; color: var(--color-text-ter); backdrop-filter: blur(4px); transition: color 0.1s; }
+        .map-expand-btn:hover { color: var(--color-text-pri); }
+        .map-inner { width: 100%; height: 100%; transform-origin: center center; cursor: grab; }
+        .map-inner.dragging { cursor: grabbing; }
 
         /* TABLE styles */
         .dt { width: 100%; border-collapse: collapse; font-size: 11px; }
@@ -2046,19 +2378,169 @@ export default function PortalClient({
               </div>
             </div>
 
+            {/* ─── Boring Locations ─── MOVED HERE: first section after stats ─── */}
+            <div className="card shadow-sm">
+              <div className="card-title">
+                <span>📍 Boring Locations</span>
+                <div className="flex gap-2">
+                  <span className="ct-lock self-center">🔒 Locked after boring start</span>
+                  {!isBoringStarted && (
+                    <span className="ct-action self-center" onClick={() => setShowExcelSec(!showExcelSec)}>
+                      {showExcelSec ? "✕ Close Excel tool" : "📂 Excel Import / Export"}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Excel Import Panel */}
+              {showExcelSec && (
+                <div className="bg-bg-raised border border-border rounded-lg p-3 mb-3 animate-fade-down">
+                  <div className="ib ib-b">
+                    ℹ Download the Excel template, fill boring locations with your structural engineer / contractor, then upload. Format: BH No. · Latitude · Longitude · RL · Planned Depth
+                  </div>
+                  <div className="grid2 mb-2">
+                    <button className="btn btn-b w-full" onClick={downloadExcelTemplate}>⬇ Download Excel template</button>
+                    <div
+                      className="excel-zone py-2 flex flex-col justify-center items-center cursor-pointer hover:bg-bg-card transition"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <div className="text-[16px] mb-1">📂</div>
+                      <div className="text-[10px] font-semibold text-text-sec">Upload filled Excel</div>
+                      <div className="text-[8px] text-text-ter">Click to select files</div>
+                      <input
+                        type="file"
+                        accept=".csv,.xls,.xlsx"
+                        ref={fileInputRef}
+                        onChange={handleExcelUpload}
+                        className="hidden"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Leaflet geographical map */}
+              <div className="map-wrap" style={{ position: "relative", width: "100%", height: "240px" }}>
+                {mapPoints.length === 0 ? (
+                  <>
+                    <div className="map-bg2" />
+                    <div className="map-grid2" />
+                    <div className="relative z-10 text-[10px] text-text-ter p-3">
+                      No GPS coordinates recorded yet — locations appear when boreholes are geo-tagged
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div id="inline-leaflet-map" style={{ width: "100%", height: "100%", zIndex: 1 }} />
+                    <button
+                      type="button"
+                      className="map-expand-btn"
+                      style={{ zIndex: 10, position: "absolute", top: "10px", right: "10px" }}
+                      onClick={(e) => { e.stopPropagation(); setMapExpanded(true); }}
+                    >
+                      ⛶ Expand
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Locations table */}
+              <div className="overflow-x-auto">
+                <table className="dt" style={{ minWidth: "760px" }}>
+                  <thead>
+                    <tr>
+                      <th>BH ID</th>
+                      <th>Location / Sub-structure</th>
+                      <th>Team</th>
+                      <th>Latitude (raw)</th>
+                      <th>Longitude (raw)</th>
+                      <th>Converted Coords</th>
+                      <th>RL (m)</th>
+                      <th>Planned Depth (m)</th>
+                      <th>Final Depth (m)</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mappedBoreholes.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="text-center text-text-ter py-4">
+                          No boreholes created yet — they appear here once the project setup adds them.
+                        </td>
+                      </tr>
+                    ) : (
+                      mappedBoreholes.map((bh: any) => {
+                        const st = BH_STATUS[bh.status] || BH_STATUS.PLANNED;
+                        const nc = bh._normalizedCoords;
+                        const isConverted = nc && (
+                          Math.abs(nc.lat - (parseNum(bh.latitude) ?? 0)) > 0.001 ||
+                          Math.abs(nc.lng - (parseNum(bh.longitude) ?? 0)) > 0.001
+                        );
+                        return (
+                          <tr key={bh.id}>
+                            <td className="font-mono text-[9px] text-amber-d">{bh.boreholeCode}</td>
+                            <td className="td-p">{bh.name}</td>
+                            <td>{bh.teamName ? <span className="pill p-b" style={{ fontSize: "8px" }}>{bh.teamName}</span> : "—"}</td>
+                            <td className="font-mono text-[10px]">{bh.latitude ?? "—"}</td>
+                            <td className="font-mono text-[10px]">{bh.longitude ?? "—"}</td>
+                            <td className="font-mono text-[10px]">
+                              {nc ? (
+                                <span title={isConverted ? "Converted from UTM" : "Decimal degrees"}>
+                                  {isConverted && <span className="text-amber-d mr-1" title="Auto-converted from UTM">↻</span>}
+                                  {nc.lat.toFixed(6)}, {nc.lng.toFixed(6)}
+                                </span>
+                              ) : "—"}
+                            </td>
+                            <td className="font-mono text-[10px]">{fmtNum(bh.groundLevelRL, 3)}</td>
+                            <td>{fmtNum(bh.plannedDepth, 1)}</td>
+                            <td>{fmtNum(bh.finalDepth, 1)}</td>
+                            <td><span className={`pill ${st.cls}`}>{st.text}</span></td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {!isBoringStarted ? (
+                <div className="btn-row justify-end mt-3">
+                  <button
+                    className="btn btn-p"
+                    disabled={!isGeotech}
+                    onClick={() => alert("Project setup configuration saved successfully!")}
+                  >
+                    Save Setup
+                  </button>
+                  <button className="btn btn-w flex items-center gap-1" onClick={() => setShowExcelSec(!showExcelSec)}>
+                    📂 Import / Export Excel
+                  </button>
+                </div>
+              ) : (
+                <div className="ib ib-r mt-3 mb-0">
+                  🔒 Data collection has started in the field. Configuration and borehole setup are locked.
+                </div>
+              )}
+            </div>
+            {/* ─── END Boring Locations ─── */}
+
             {/* Project Details Card — real project data, editable */}
             <div className="card shadow-sm">
               <div className="card-title">
                 <span>📋 Project Details</span>
                 {canEditProject && (
                   <div className="flex gap-2">
-                    {isEditingProjectDetails ? (
-                      <>
-                        <span className="ct-action cursor-pointer text-green-d bg-green-light border-green-d" onClick={handleSaveProjectDetails}>Save</span>
-                        <span className="ct-action cursor-pointer text-text-sec bg-bg-card border-border" onClick={() => setIsEditingProjectDetails(false)}>Cancel</span>
-                      </>
+                    {!isBoringStarted ? (
+                      isEditingProjectDetails ? (
+                        <>
+                          <span className="ct-action cursor-pointer text-green-d bg-green-light border-green-d" onClick={handleSaveProjectDetails}>Save</span>
+                          <span className="ct-action cursor-pointer text-text-sec bg-bg-card border-border" onClick={() => setIsEditingProjectDetails(false)}>Cancel</span>
+                        </>
+                      ) : (
+                        <span className="ct-action cursor-pointer" onClick={() => setIsEditingProjectDetails(true)}>Edit</span>
+                      )
                     ) : (
-                      <span className="ct-action cursor-pointer" onClick={() => setIsEditingProjectDetails(true)}>Edit</span>
+                      <span className="text-[10px] text-text-ter self-center italic">🔒 Locked (boring started)</span>
                     )}
                   </div>
                 )}
@@ -2188,18 +2670,22 @@ export default function PortalClient({
             <div className="card shadow-sm">
               <div className="card-title">
                 <span>⚙ Investigation Parameters</span>
-                {canEditProject && !isBoringStarted && (
+                {canEditProject && (
                   <div className="flex gap-2">
-                    {isEditingInvestigationParameters ? (
-                      <>
-                        <span className="ct-action cursor-pointer text-green-d bg-green-light border-green-d" onClick={() => {
-                          setIsEditingInvestigationParameters(false);
-                          alert("Investigation parameters saved successfully!");
-                        }}>Save</span>
-                        <span className="ct-action cursor-pointer text-text-sec bg-bg-card border-border" onClick={() => setIsEditingInvestigationParameters(false)}>Cancel</span>
-                      </>
+                    {!isBoringStarted ? (
+                      isEditingInvestigationParameters ? (
+                        <>
+                          <span className="ct-action cursor-pointer text-green-d bg-green-light border-green-d" onClick={() => {
+                            setIsEditingInvestigationParameters(false);
+                            alert("Investigation parameters saved successfully!");
+                          }}>Save</span>
+                          <span className="ct-action cursor-pointer text-text-sec bg-bg-card border-border" onClick={() => setIsEditingInvestigationParameters(false)}>Cancel</span>
+                        </>
+                      ) : (
+                        <span className="ct-action cursor-pointer" onClick={() => setIsEditingInvestigationParameters(true)}>Edit</span>
+                      )
                     ) : (
-                      <span className="ct-action cursor-pointer" onClick={() => setIsEditingInvestigationParameters(true)}>Edit</span>
+                      <span className="text-[10px] text-text-ter self-center italic">🔒 Locked (boring started)</span>
                     )}
                   </div>
                 )}
@@ -2306,18 +2792,21 @@ export default function PortalClient({
             <div className="card shadow-sm">
               <div className="card-title">
                 <span>👥 Team Assignment</span>
-                {canEditProject && (
-                  <span className="ct-action flex items-center gap-1 cursor-pointer" onClick={() => setShowAddMemberModal(true)}><RiUserAddLine /> Add member</span>
-                )}
               </div>
               {canEditProject && (
                 <div className="flex gap-2 mb-3">
-                  <button
-                    className="btn btn-p btn-sm"
-                    onClick={() => setShowAddTeamModal(true)}
-                  >
-                    + Add Team
-                  </button>
+                  {!isBoringStarted ? (
+                    <button
+                      className="btn btn-p btn-sm"
+                      onClick={() => setShowAddTeamModal(true)}
+                    >
+                      + Add Team
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-text-ter bg-bg-card border border-border px-2 py-1 rounded italic self-center">
+                      🔒 Setup locked (boring started)
+                    </span>
+                  )}
                   <div className="text-[10px] text-text-ter self-center">
                     Create crews/drilling teams and assign project members to them.
                   </div>
@@ -2350,7 +2839,7 @@ export default function PortalClient({
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-[8px] text-text-ter font-mono">ID: {team.id.substring(0, 8)}...</span>
-                                {canEditProject && (
+                                {canEditProject && !isBoringStarted && (
                                   <button
                                     type="button"
                                     className="btn btn-d btn-sm text-[8px] py-0.5 px-1.5"
@@ -2413,19 +2902,14 @@ export default function PortalClient({
                                               >
                                                 View log
                                               </button>
-                                              {tmu.mobile && !tmu.mobileVerified && (
-                                                <button
-                                                  className="btn btn-b btn-sm text-[8px] py-0.5 px-1.5"
-                                                  onClick={() => {
-                                                    setVerifyingUser(tmu);
-                                                    setVerifyRowOtpCode("");
-                                                    setVerifyRowOtpSent(false);
-                                                    setVerifyRowError("");
-                                                  }}
-                                                >
-                                                  Verify
-                                                </button>
-                                              )}
+                                              <button
+                                                className="btn btn-r btn-sm text-[8px] py-0.5 px-1.5"
+                                                onClick={() => handleDeleteCrewMember(team.id, tmu.id ?? tm.userId)}
+                                                disabled={!canEditProject}
+                                                title="Remove crew member"
+                                              >
+                                                Delete
+                                              </button>
                                             </td>
                                           </tr>
                                         );
@@ -2438,7 +2922,7 @@ export default function PortalClient({
                           </div>
 
                           {/* Add Crew Member Action */}
-                          {canEditProject && (
+                          {canEditProject && !isBoringStarted && (
                             <div className="border-t border-dashed border-border pt-2 mt-2 flex justify-end">
                               <button
                                 className="btn btn-p btn-sm text-[9px] py-0.5 px-2"
@@ -2469,51 +2953,7 @@ export default function PortalClient({
                 )}
               </div>
 
-              {members.length === 0 ? (
-                <div className="empty-state">
-                  <b>No members assigned to this project yet.</b><br />
-                  Members appear here once they are added to the project.
-                </div>
-              ) : (
-                <div className="bg-bg-raised border border-border rounded-lg p-3">
-                  <div className="text-[11px] font-bold text-green-d mb-2">Project Members ({members.length})</div>
-                  <table className="dt">
-                    <thead>
-                      <tr>
-                        <th>GL ID</th>
-                        <th>Name</th>
-                        <th>Role</th>
-                        <th>Email</th>
-                        <th>Joined</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {members.map((m: any, i: number) => {
-                        const mu = m.user || {};
-                        const name = `${mu.firstName ?? ""} ${mu.lastName ?? ""}`.trim() || "—";
-                        return (
-                          <tr key={m.id || i}>
-                            <td className="font-mono text-[9px] text-amber-d">{mu.employeeCode ?? "—"}</td>
-                            <td className="td-p">{name}</td>
-                            <td>{m.role ?? mu.designation ?? "Member"}</td>
-                            <td className="text-[10px]">{mu.email ?? "—"}</td>
-                            <td className="text-[10px]">{m.createdAt ? new Date(m.createdAt).toLocaleDateString("en-IN") : "—"}</td>
-                            <td>
-                              <button
-                                className="btn btn-s btn-sm"
-                                onClick={() => openLogPanel(mu.id ?? m.userId, name, mu.employeeCode ?? "")}
-                              >
-                                View log
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              {/* Project Members table removed */}
             </div>
 
             {/* Site Geology + Seismicity — report calculation inputs (feed liquefaction) */}
@@ -2557,142 +2997,6 @@ export default function PortalClient({
               </div>
             </div>
 
-            {/* Boring Locations Table with Excel import */}
-            <div className="card shadow-sm">
-              <div className="card-title">
-                <span>📍 Boring Locations</span>
-                <div className="flex gap-2">
-                  <span className="ct-lock self-center">🔒 Locked after boring start</span>
-                  <span className="ct-action self-center" onClick={() => setShowExcelSec(!showExcelSec)}>
-                    {showExcelSec ? "✕ Close Excel tool" : "📂 Excel Import / Export"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Excel Import Panel — UI placeholder, functionality matches groundlense_v4.html */}
-              {showExcelSec && (
-                <div className="bg-bg-raised border border-border rounded-lg p-3 mb-3 animate-fade-down">
-                  <div className="ib ib-b">
-                    ℹ Download the Excel template, fill boring locations with your structural engineer / contractor, then upload. Format: BH No. · Latitude · Longitude · RL · Planned Depth
-                  </div>
-                  <div className="grid2 mb-2">
-                    <button className="btn btn-b w-full" onClick={downloadExcelTemplate}>⬇ Download Excel template</button>
-                    <div 
-                      className="excel-zone py-2 flex flex-col justify-center items-center cursor-pointer hover:bg-bg-card transition"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <div className="text-[16px] mb-1">📂</div>
-                      <div className="text-[10px] font-semibold text-text-sec">Upload filled Excel</div>
-                      <div className="text-[8px] text-text-ter">Click to select files</div>
-                      <input 
-                        type="file" 
-                        accept=".csv,.xls,.xlsx" 
-                        ref={fileInputRef} 
-                        onChange={handleExcelUpload} 
-                        className="hidden" 
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Schematic map from real GPS coordinates */}
-              <div className="map-wrap">
-                {yandexMapUrl ? (
-                  <>
-                    <img 
-                      src={yandexMapUrl} 
-                      alt="Borehole Locations Map" 
-                      className="w-full h-full object-cover" 
-                    />
-                    <div className="absolute bottom-1 right-2 z-10 text-[8px] text-text-ter bg-bg-base/70 px-1 rounded">
-                      © Yandex · OpenStreetMap
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="map-bg2" />
-                    <div className="map-grid2" />
-                    {mapPoints.length === 0 ? (
-                      <div className="relative z-10 text-[10px] text-text-ter">No GPS coordinates recorded yet — locations appear when boreholes are geo-tagged</div>
-                    ) : (
-                      mapPoints.map(({ bh, left, top }: any) => {
-                        const icon = bh.status === "COMPLETED" ? "📍" : bh.status === "IN_PROGRESS" ? "🔵" : "⭕";
-                        const color = bh.status === "COMPLETED" ? "#97C459" : bh.status === "IN_PROGRESS" ? "#85B7EB" : "#6B6966";
-                        const label = bh.status === "COMPLETED" ? "✓" : bh.status === "IN_PROGRESS" ? "active" : "pending";
-                        return (
-                          <div key={bh.id} className="mp" style={{ left, top }} title={`${bh.boreholeCode} · ${bh.name}`}>
-                            <span>{icon}</span>
-                            <div className="mp-lbl" style={{ color }}>{bh.boreholeCode?.split("-").pop()} {label}</div>
-                          </div>
-                        );
-                      })
-                    )}
-                    {mapPoints.length > 0 && (
-                      <div className="absolute bottom-1 right-2 z-10 text-[8px] text-text-ter">Relative layout from recorded GPS — not to scale</div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Locations table — real fields only */}
-              <div className="overflow-x-auto">
-                <table className="dt" style={{ minWidth: "760px" }}>
-                  <thead>
-                    <tr>
-                      <th>BH ID</th>
-                      <th>Location / Sub-structure</th>
-                      <th>Team</th>
-                      <th>Latitude</th>
-                      <th>Longitude</th>
-                      <th>RL (m)</th>
-                      <th>Planned Depth (m)</th>
-                      <th>Final Depth (m)</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mappedBoreholes.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="text-center text-text-ter py-4">
-                          No boreholes created yet — they appear here once the project setup adds them.
-                        </td>
-                      </tr>
-                    ) : (
-                      mappedBoreholes.map((bh: any) => {
-                        const st = BH_STATUS[bh.status] || BH_STATUS.PLANNED;
-                        return (
-                          <tr key={bh.id}>
-                            <td className="font-mono text-[9px] text-amber-d">{bh.boreholeCode}</td>
-                            <td className="td-p">{bh.name}</td>
-                            <td>{bh.teamName ? <span className="pill p-b" style={{ fontSize: "8px" }}>{bh.teamName}</span> : "—"}</td>
-                            <td className="font-mono text-[10px]">{bh.latitude ?? "—"}</td>
-                            <td className="font-mono text-[10px]">{bh.longitude ?? "—"}</td>
-                            <td className="font-mono text-[10px]">{fmtNum(bh.groundLevelRL, 3)}</td>
-                            <td>{fmtNum(bh.plannedDepth, 1)}</td>
-                            <td>{fmtNum(bh.finalDepth, 1)}</td>
-                            <td><span className={`pill ${st.cls}`}>{st.text}</span></td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="btn-row justify-end mt-3">
-                <button 
-                  className="btn btn-p" 
-                  disabled={!isGeotech} 
-                  onClick={() => alert("Project setup configuration saved successfully!")}
-                >
-                  Save Setup
-                </button>
-                <button className="btn btn-w flex items-center gap-1" onClick={() => setShowExcelSec(!showExcelSec)}>
-                  📂 Import / Export Excel
-                </button>
-              </div>
-            </div>
 
             {/* Sites Table */}
             {sites.length > 0 && (
@@ -2724,6 +3028,63 @@ export default function PortalClient({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ════ Fullscreen Map Modal ════ */}
+        {mapExpanded && (
+          <div
+            className="map-modal-overlay"
+            onClick={() => setMapExpanded(false)}
+          >
+            <div
+              className="map-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal header */}
+              <div className="map-modal-header">
+                <div>
+                  <span className="text-[12px] font-bold text-text-pri mr-2">📍 Boring Locations Map</span>
+                  <span className="text-[10px] text-text-ter">
+                    {mapPoints.length} borehole{mapPoints.length !== 1 ? "s" : ""} plotted
+                    {yandexMapUrl ? " — satellite view" : " — relative GPS schematic"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {googleMapsUrl && (
+                    <a
+                      href={googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] underline"
+                      style={{ color: "var(--color-blue-d)" }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      🗺 Open in Google Maps
+                    </a>
+                  )}
+                  <button
+                    className="map-ctrl-btn"
+                    style={{ width: 26, height: 26, fontSize: 12 }}
+                    onClick={() => setMapExpanded(false)}
+                    title="Close (Esc)"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal body */}
+              <div className="map-modal-body" style={{ height: "480px", position: "relative" }}>
+                {mapPoints.length === 0 ? (
+                  <div className="absolute inset-0 flex items-center justify-center text-text-ter text-[12px] bg-bg-card">
+                    No GPS coordinates recorded yet
+                  </div>
+                ) : (
+                  <div id="expanded-leaflet-map" style={{ width: "100%", height: "100%", zIndex: 1 }} />
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -4637,7 +4998,29 @@ export default function PortalClient({
               </div>
 
               <div className="fg">
-                <span className="fl">Assign Boreholes</span>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="fl">Assign Boreholes</span>
+                  {mappedBoreholes.filter(bh => !bh.teamId).length > 0 && (
+                    <button
+                      type="button"
+                      className="text-[9px] hover:underline font-semibold"
+                      style={{ color: "var(--color-blue-d)" }}
+                      onClick={() => {
+                        const unassignedIds = mappedBoreholes.filter(bh => !bh.teamId).map(bh => bh.id);
+                        const allSelected = unassignedIds.every(id => selectedBoreholeIds.includes(id));
+                        if (allSelected) {
+                          setSelectedBoreholeIds(prev => prev.filter(id => !unassignedIds.includes(id)));
+                        } else {
+                          setSelectedBoreholeIds(prev => Array.from(new Set([...prev, ...unassignedIds])));
+                        }
+                      }}
+                    >
+                      {mappedBoreholes.filter(bh => !bh.teamId).every(bh => selectedBoreholeIds.includes(bh.id))
+                        ? "Deselect All"
+                        : "Select All"}
+                    </button>
+                  )}
+                </div>
                 <div className="border border-border-mid rounded-lg p-2 max-h-32 overflow-y-auto space-y-1.5" style={{ background: "var(--color-bg-card)" }}>
                   {mappedBoreholes.filter(bh => !bh.teamId).length === 0 ? (
                     <div className="text-[10px] text-text-ter italic">No boreholes available to assign.</div>
@@ -4792,14 +5175,7 @@ export default function PortalClient({
               </button>
             </div>
             
-            <div className="modal-body">
-              {crewMemberAddError && (
-                <div className="ib ib-r p-2 text-[10px] font-medium mb-2">
-                  ❌ {crewMemberAddError}
-                </div>
-              )}
-
-            <div className="modal-body">
+            <div className="modal-body bg-bg-raised">
               {crewMemberAddError && (
                 <div className="ib ib-r p-2 text-[10px] font-medium mb-2">
                   ❌ {crewMemberAddError}
@@ -4853,88 +5229,16 @@ export default function PortalClient({
 
                 <div className="fg">
                   <span className="fl">Mobile Number</span>
-                  <div className="flex gap-2">
-                    <input
-                      type="tel"
-                      className="fi flex-1"
-                      value={newWorkerMobile}
-                      onChange={(e) => {
-                        setNewWorkerMobile(e.target.value);
-                        setOtpSent(false);
-                        setOtpVerified(false);
-                        setIsVerificationSkipped(false);
-                      }}
-                      placeholder="e.g. 9876543210"
-                      disabled={otpVerified || isVerificationSkipped}
-                      required
-                    />
-                    {!otpVerified && !isVerificationSkipped && newWorkerMobile.trim() && (
-                      <div className="flex gap-2 self-center">
-                        <button
-                          type="button"
-                          className="btn btn-b text-[10px] py-1 px-3"
-                          onClick={handleSendNewWorkerOtp}
-                          disabled={otpLoading}
-                        >
-                          {otpLoading ? "Sending..." : otpSent ? "Resend OTP" : "Send OTP"}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-w text-[10px] py-1 px-3 border border-border"
-                          style={{ borderColor: "var(--color-border)" }}
-                          onClick={() => {
-                            setIsVerificationSkipped(true);
-                            setOtpVerified(false);
-                            setOtpSent(false);
-                            setCrewMemberAddError("");
-                            alert("Verification skipped. You can verify this number later.");
-                          }}
-                        >
-                          Verify Later
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <input
+                    type="tel"
+                    className="fi"
+                    value={newWorkerMobile}
+                    onChange={(e) => setNewWorkerMobile(e.target.value)}
+                    placeholder="e.g. 9876543210"
+                    required
+                  />
                 </div>
-
-                {otpSent && !otpVerified && !isVerificationSkipped && (
-                  <div className="fg">
-                    <span className="fl">Enter 6-Digit OTP</span>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        className="fi flex-1"
-                        value={otpCode}
-                        onChange={(e) => setOtpCode(e.target.value)}
-                        placeholder={otpIsMock ? "Enter 123456" : "Enter 6-digit OTP"}
-                        maxLength={6}
-                        required
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-g text-[10px] py-1 px-3 self-center"
-                        onClick={handleVerifyNewWorkerOtp}
-                        disabled={otpLoading}
-                      >
-                        {otpLoading ? "Verifying..." : "Verify"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {otpVerified && !isVerificationSkipped && (
-                  <div className="text-[10px] text-green-d font-semibold flex items-center gap-1 mt-1" style={{ color: "var(--color-green-d)" }}>
-                    <span>✓ Mobile Number Verified</span>
-                  </div>
-                )}
-
-                {isVerificationSkipped && (
-                  <div className="text-[10px] text-amber-d font-semibold flex items-center gap-1 mt-1">
-                    <span>⚠️ Verification deferred. You can verify later.</span>
-                  </div>
-                )}
               </div>
-            </div>
             </div>
 
             <div className="modal-footer">
@@ -4963,8 +5267,7 @@ export default function PortalClient({
                     const teamMemberIds = new Set((showAddCrewMemberModal.members || []).map((tm: any) => tm.userId));
                     const assignableMembers = members.filter((m: any) => !teamMemberIds.has(m.userId));
                     return assignableMembers.length === 0;
-                  })()) ||
-                  (crewMemberType === "new" && newWorkerMobile.trim() !== "" && !otpVerified && !isVerificationSkipped)
+                  })())
                 }
               >
                 {memberAddLoading === showAddCrewMemberModal.id ? "Adding..." : "Add Member"}
@@ -5081,6 +5384,62 @@ export default function PortalClient({
               )}
             </div>
           </form>
+        </div>
+      )}
+      {/* ACTIVATION LINK MODAL */}
+      {activationLinkModal && (
+        <div className="modal-overlay">
+          <div className="modal-content max-w-[420px]" style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)", borderRadius: "12px", boxShadow: "0 24px 60px rgba(0,0,0,0.5)" }}>
+            <div className="modal-header">
+              <span className="modal-title">📱 Account Activation Link</span>
+              <button
+                type="button"
+                className="logp-close"
+                onClick={() => setActivationLinkModal(null)}
+              >
+                <RiCloseLine />
+              </button>
+            </div>
+            <div className="modal-body space-y-4">
+              <div className="text-center py-2">
+                <div className="w-12 h-12 bg-green-d/15 border border-green-d/30 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <RiCheckboxCircleLine className="text-2xl text-green-d" />
+                </div>
+                <h3 className="text-xs font-bold text-text-pri uppercase tracking-wider">Crew Member Created!</h3>
+                <p className="text-[11px] text-text-sec mt-1.5 leading-relaxed">
+                  The crew member has been added. Since OTP verification is bypassed, please share this activation link with them to create a password:
+                </p>
+              </div>
+              <div className="fg">
+                <input
+                  type="text"
+                  readOnly
+                  value={activationLinkModal}
+                  className="fi text-xs font-mono select-all bg-bg-card border-white/10"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="btn btn-primary flex-1 justify-center text-xs py-2 rounded-lg"
+                  onClick={() => {
+                    navigator.clipboard.writeText(activationLinkModal);
+                    alert("Activation link copied to clipboard!");
+                  }}
+                >
+                  Copy Link
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost flex-1 justify-center text-xs py-2 rounded-lg"
+                  onClick={() => setActivationLinkModal(null)}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
