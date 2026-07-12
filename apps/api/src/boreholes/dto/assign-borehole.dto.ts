@@ -17,4 +17,12 @@ export class AssignBoreholeDto {
   @IsOptional()
   @IsString()
   teamId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Field worker responsible for this borehole — receives engineer query threads',
+  })
+  @IsOptional()
+  @IsString()
+  assignedWorkerId?: string;
 }

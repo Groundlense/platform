@@ -13,6 +13,7 @@ import {
   getOrgTeams,
   getUsers,
   getPendingProjectJoinRequests,
+  getProjectSetupStatus,
 } from "@/lib/api/endpoints";
 import PortalClient from "@/components/portal/PortalClient";
 
@@ -33,15 +34,21 @@ export default async function PortalPage({ params }: { params: Promise<{ project
   let teams: any[] = [];
   let orgUsers: any[] = [];
   let pendingRequests: any[] = [];
+  let setupLocked = false;
 
   if (token) {
     try {
       // Phase 1: Core data (parallel)
-      [projects, boreholes, sites] = await Promise.all([
+      const [projectsRes, boreholesRes, sitesRes, setupStatusRes] = await Promise.all([
         getProjects(token),
         getProjectBoreholes(projectId, token),
         getProjectSites(projectId, token),
+        getProjectSetupStatus(projectId, token).catch(() => null),
       ]);
+      projects = projectsRes;
+      boreholes = boreholesRes;
+      sites = sitesRes;
+      setupLocked = setupStatusRes?.locked === true;
       currentProject = projects.find((p: any) => p.id === projectId) || null;
 
       // Phase 2: Extended data (parallel, wrapped in try-catch for graceful degradation)
@@ -68,7 +75,7 @@ export default async function PortalPage({ params }: { params: Promise<{ project
       const orgId = user?.organizationId as string | undefined;
       if (orgId) {
         try {
-          teams = await getOrgTeams(orgId, token);
+          teams = await getOrgTeams(orgId, token, projectId);
         } catch (err) {
           console.warn("Failed to fetch teams:", err);
         }
@@ -127,6 +134,7 @@ export default async function PortalPage({ params }: { params: Promise<{ project
       teams={teams}
       orgUsers={orgUsers}
       pendingRequests={pendingRequests}
+      setupLocked={setupLocked}
     />
   );
 }

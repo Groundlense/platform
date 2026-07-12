@@ -145,6 +145,19 @@ export const api = {
     return response.data;
   },
 
+  /**
+   * Boreholes assigned to the calling worker via team membership.
+   * Each result includes team {id, code, name} and
+   * project {id, projectCode, name}. Pass projectId to scope to one
+   * project; omit it to get assignments across all projects.
+   */
+  async getAssignedBoreholes(projectId?: string) {
+    const response = await apiClient.get('/boreholes/assigned', {
+      params: projectId ? { projectId } : undefined,
+    });
+    return response.data;
+  },
+
   async getBoreholeDetails(boreholeId: string) {
     const response = await apiClient.get(`/boreholes/${boreholeId}`);
     return response.data;
@@ -212,22 +225,6 @@ export const api = {
     return response.data;
   },
 
-  // --- Media Upload ---
-  async uploadMedia(intervalId: string, base64Data: string, filename: string) {
-    const formData = new FormData();
-    formData.append('file', {
-      uri: `data:image/jpeg;base64,${base64Data}`,
-      name: filename,
-      type: 'image/jpeg',
-    } as any);
-
-    const token = await storage.getToken();
-    const response = await apiClient.post(`/intervals/${intervalId}/media`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-    return response.data;
-  },
+  // Media upload lives in services/media.ts (photo queue → multipart fetch
+  // on sync); no base64 upload path remains.
 };

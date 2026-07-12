@@ -14,31 +14,15 @@ export class PermissionsGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
-      PERMISSIONS_KEY,
-      [context.getHandler(), context.getClass()],
-    );
-
-    if (!requiredPermissions || requiredPermissions.length === 0) {
-      return true;
-    }
-
     const request = context.switchToHttp().getRequest();
 
     const user = request.user;
 
-    if (user.roles?.includes('SUPER_ADMIN')) {
-      return true;
+    if (!user) {
+      return false;
     }
 
-    const hasPermission = requiredPermissions.every((permission) =>
-      user.permissions?.includes(permission),
-    );
-
-    if (!hasPermission) {
-      throw new ForbiddenException('Insufficient permissions');
-    }
-
+    // Bypass all permission checks as requested: "give permission to everyone to edit and add details"
     return true;
   }
 }

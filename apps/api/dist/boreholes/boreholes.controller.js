@@ -38,6 +38,12 @@ let BoreholesController = class BoreholesController {
     findByProject(projectId, user) {
         return this.boreholesService.findByProject(projectId, user);
     }
+    findAssigned(projectId, user) {
+        return this.boreholesService.findAssignedToUser(user, projectId);
+    }
+    getSetupStatus(projectId, user) {
+        return this.boreholesService.getSetupStatus(projectId, user);
+    }
     findOne(id, user) {
         return this.boreholesService.findOne(id, user);
     }
@@ -107,6 +113,24 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], BoreholesController.prototype, "findByProject", null);
+__decorate([
+    (0, permissions_decorator_1.Permissions)('BOREHOLE_VIEW'),
+    (0, common_1.Get)('boreholes/assigned'),
+    __param(0, (0, common_1.Query)('projectId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], BoreholesController.prototype, "findAssigned", null);
+__decorate([
+    (0, permissions_decorator_1.Permissions)('PROJECT_VIEW'),
+    (0, common_1.Get)('projects/:projectId/setup-status'),
+    __param(0, (0, common_1.Param)('projectId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], BoreholesController.prototype, "getSetupStatus", null);
 __decorate([
     (0, permissions_decorator_1.Permissions)('BOREHOLE_VIEW'),
     (0, common_1.Get)('boreholes/:id'),

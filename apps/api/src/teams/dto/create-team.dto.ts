@@ -23,4 +23,12 @@ export class CreateTeamDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({
+    description: 'Associated project ID (optional)',
+    example: 'd9b0f7e1-8a5f-4a6f-a5b6-7c8d9e0f1a2b',
+  })
+  @IsOptional()
+  @IsString()
+  projectId?: string;
 }

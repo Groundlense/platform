@@ -35,7 +35,7 @@ let SyncController = class SyncController {
 };
 exports.SyncController = SyncController;
 __decorate([
-    (0, permissions_decorator_1.Permissions)('BOREHOLE_EDIT'),
+    (0, permissions_decorator_1.Permissions)('SPT_CREATE'),
     (0, common_1.Post)('operations'),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),

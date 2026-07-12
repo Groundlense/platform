@@ -28,8 +28,8 @@ let TeamsController = class TeamsController {
     createTeam(organizationId, dto, user) {
         return this.teamsService.createTeam(organizationId, dto, user);
     }
-    getTeams(organizationId, user) {
-        return this.teamsService.getTeams(organizationId, user);
+    getTeams(organizationId, projectId, user) {
+        return this.teamsService.getTeams(organizationId, projectId, user);
     }
     addMember(teamId, dto, user) {
         return this.teamsService.addMember(teamId, dto.userId, user);
@@ -60,9 +60,10 @@ __decorate([
 __decorate([
     (0, common_1.Get)('organizations/:organizationId/teams'),
     __param(0, (0, common_1.Param)('organizationId')),
-    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Query)('projectId')),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, Object, Object]),
     __metadata("design:returntype", void 0)
 ], TeamsController.prototype, "getTeams", null);
 __decorate([

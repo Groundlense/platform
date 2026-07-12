@@ -11,8 +11,7 @@ import { colors } from '../utils/theme';
 import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
-import { api } from '../services/api';
-import MockCameraModal from '../components/MockCameraModal';
+import { media } from '../services/media';
 
 function formatDate(iso?: string | null): string {
   if (!iso) return '—';
@@ -63,8 +62,9 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
 
   const [maxIntervalNo, setMaxIntervalNo] = useState<number>(1);
 
-  const [cameraVisible, setCameraVisible] = useState(false);
   const [photoCaptured, setPhotoCaptured] = useState(false);
+  // Real queued-photo count for this borehole (uploads happen on sync)
+  const [pendingPhotos, setPendingPhotos] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -133,6 +133,7 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
       });
 
       setGwtEncountered(latestObs ? true : false);
+      setPendingPhotos(await media.pendingCountForBorehole(borehole.id));
     })();
   }, [borehole.id, borehole.currentDepth, borehole.startedAt]);
 
@@ -145,31 +146,26 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
     );
   };
 
-  const handleFinalPhoto = () => {
+  // Real camera capture — the closure photo attaches to the deepest
+  // completed interval and uploads on the next successful sync.
+  const handleFinalPhoto = async () => {
     if (readOnly) return;
-    setCameraVisible(true);
-  };
-
-  const handleCapturePhoto = async (base64Data: string, filename: string) => {
+    const shot = await media.capturePhoto('CLOSURE');
+    if (!shot) return; // cancelled / unavailable / denied — honest Alert already shown
+    await media.queuePhoto({
+      boreholeId: borehole.id,
+      intervalNo: maxIntervalNo,
+      purpose: 'CLOSURE',
+      uri: shot.uri,
+      fileName: shot.fileName,
+      mimeType: shot.type,
+      gpsLat: shot.gpsLat,
+      gpsLng: shot.gpsLng,
+      accuracyM: shot.accuracyM,
+      takenAt: new Date().toISOString(),
+    });
     setPhotoCaptured(true);
-
-    const intervalId = `interval-${borehole.id}-${maxIntervalNo}`;
-    try {
-      await api.uploadMedia(intervalId, base64Data, filename);
-    } catch {
-      await syncManager.queueOperation(
-        'PHOTO',
-        `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        'CREATE',
-        {
-          intervalId,
-          fileName: filename,
-          mimeType: 'image/jpeg',
-          base64Data,
-        },
-        route.params.sessionId || null
-      );
-    }
+    setPendingPhotos(await media.pendingCountForBorehole(borehole.id));
   };
 
   const handleSubmit = async () => {
@@ -205,8 +201,11 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
         { status: 'COMPLETED', completedAt: new Date() }
       );
 
-      // Trigger sync
-      await syncManager.syncWithServer();
+      // Kick off sync in the background — the closure is already saved and
+      // queued locally, so the user gets instant confirmation and the data
+      // reaches the main DB on the next network window (a full sync round
+      // can take minutes on slow networks; never block the field worker).
+      syncManager.syncWithServer().catch(() => {});
 
       Alert.alert(
         'Boring Submitted & Locked / सबमिट और लॉक हो गया',
@@ -282,7 +281,11 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
           </View>
           <View style={styles.sumRow}>
             <Text style={styles.sumLabel}>Photos uploaded / फोटो</Text>
-            <Text style={styles.sumVal}>{photoCaptured ? '1 photo captured' : 'None'}</Text>
+            <Text style={styles.sumVal}>
+              {pendingPhotos > 0
+                ? `${pendingPhotos} queued — uploads on sync / सिंक पर अपलोड`
+                : 'None / कोई नहीं'}
+            </Text>
           </View>
           <View style={styles.sumRow}>
             <Text style={styles.sumLabel}>Water table / भूजल स्तर</Text>
@@ -336,14 +339,16 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
           </Text>
         </View>
 
-        {/* Final photo — camera module not yet integrated, honest state */}
+        {/* Final photo — opens the real device camera */}
         <TouchableOpacity
           style={[styles.cameraBtn, photoCaptured && styles.cameraBtnDone]}
           onPress={handleFinalPhoto}
           disabled={readOnly}
         >
           <Text style={[styles.cameraBtnText, photoCaptured && styles.cameraBtnTextDone]}>
-            {photoCaptured ? '✓ Final Photo Captured / फोटो ले लिया गया' : '📷 Final Borehole Photo / बोरहोल फोटो'}
+            {photoCaptured
+              ? '✓ Photo captured — uploads on sync / फोटो ली गई'
+              : '📷 Final Borehole Photo / बोरहोल फोटो'}
           </Text>
         </TouchableOpacity>
 
@@ -380,16 +385,6 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
           </TouchableOpacity>
         )}
       </ScrollView>
-
-      {/* Simulated Viewfinder Overlay */}
-      <MockCameraModal
-        visible={cameraVisible}
-        onClose={() => setCameraVisible(false)}
-        onCapture={handleCapturePhoto}
-        boreholeCode={borehole.boreholeCode}
-        depth={summary?.finalDepth ?? borehole.currentDepth ?? 0}
-        photoType="Final Borehole Photo"
-      />
     </View>
   );
 }
@@ -406,11 +401,12 @@ const styles = StyleSheet.create({
   },
   headerTitleRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 19,
+    fontSize: 21,
     fontWeight: '700',
     color: colors.white,
   },
@@ -421,12 +417,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -435,6 +431,7 @@ const styles = StyleSheet.create({
   },
   dateGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 12,
   },
@@ -448,17 +445,17 @@ const styles = StyleSheet.create({
     borderColor: colors.grayBorder,
   },
   dateLabel: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayMid,
   },
   dateVal: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.grayDark,
     marginTop: 2,
   },
   dateTime: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.rust,
     marginTop: 1,
@@ -474,6 +471,7 @@ const styles = StyleSheet.create({
   },
   sumRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingVertical: 6,
     borderBottomWidth: 0.5,
@@ -483,11 +481,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   sumLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
   },
   sumVal: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.grayDark,
   },
@@ -500,13 +498,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   gwtConfirmTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.blueDark,
     marginBottom: 6,
   },
   gwtBtnRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
   },
   gwtBtn: {
@@ -520,7 +519,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blueDark,
   },
   gwtBtnText: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayDark,
   },
   gwtBtnTextSelected: {
@@ -528,7 +527,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   gwtSubHint: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.blueDark,
     marginTop: 4,
     textAlign: 'center',
@@ -547,7 +546,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greenLight,
   },
   cameraBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.greenMid,
     fontWeight: '700',
   },
@@ -569,11 +568,11 @@ const styles = StyleSheet.create({
     borderColor: colors.rustMid,
   },
   signaturePlaceholder: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.grayMid,
   },
   signatureText: {
-    fontSize: 19,
+    fontSize: 21,
     fontFamily: 'serif',
     fontStyle: 'italic',
     color: colors.rustMid,
@@ -591,11 +590,11 @@ const styles = StyleSheet.create({
   },
   submitBtnText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
   warningText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     textAlign: 'center',
     marginTop: 6,

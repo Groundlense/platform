@@ -216,10 +216,6 @@ let UsersService = class UsersService {
                 attempts++;
             }
         }
-        let mobileVerified = false;
-        if (dto.mobile) {
-            mobileVerified = true;
-        }
         const user = await this.db.user.create({
             data: {
                 organizationId,
@@ -227,7 +223,7 @@ let UsersService = class UsersService {
                 lastName: dto.lastName,
                 email: dto.email,
                 mobile: dto.mobile,
-                mobileVerified,
+                mobileVerified: false,
                 employeeCode,
                 passwordHash,
                 designation: dto.designation,

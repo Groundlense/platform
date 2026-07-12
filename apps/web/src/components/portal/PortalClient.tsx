@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   RiSettings4Line,
@@ -14,6 +14,8 @@ import {
   RiUserAddLine,
   RiCloseLine,
   RiCheckboxCircleLine,
+  RiFileCopyLine,
+  RiWhatsappLine,
 } from "react-icons/ri";
 import { usePortalTab } from "./PortalContext";
 import {
@@ -26,7 +28,6 @@ import {
   addTeamMemberAction,
   fetchOrgTeams,
   addProjectMemberAction,
-  createUserAction,
   sendOtpAction,
   verifyOtpAction,
   deleteTeamAction,
@@ -34,6 +35,7 @@ import {
   deleteTeamMemberAction,
   type BoreholeIntegrity,
 } from "@/app/actions/portal";
+import { createCrewMemberAction } from "@/app/actions/crew";
 import { createBoreholeAction, assignBoreholeTeamAction, approveProjectJoinRequestAction, rejectProjectJoinRequestAction } from "@/app/actions/projects";
 
 interface PortalClientProps {
@@ -49,6 +51,7 @@ interface PortalClientProps {
   teams?: any[];
   orgUsers?: any[];
   pendingRequests?: any[];
+  setupLocked?: boolean; // Server truth: GET /projects/:id/setup-status — fieldwork started
 }
 
 // Soil color mappings for SVG strata drawing
@@ -68,7 +71,9 @@ const BH_STATUS: Record<string, { cls: string; text: string }> = {
   IN_PROGRESS: { cls: "p-a", text: "● In progress" },
   COMPLETED: { cls: "p-g", text: "✓ Complete" },
   ABANDONED: { cls: "p-red", text: "✗ Abandoned" },
-  TERMINATED: { cls: "p-red", text: "✗ Terminated" },
+  // Mobile terminate-with-resume flow (e.g. "End of day") — work is paused,
+  // not dead; the crew resumes the same borehole next shift.
+  TERMINATED: { cls: "p-a", text: "⏸ Paused — resumable" },
   SUSPENDED: { cls: "p-a", text: "❚❚ Suspended" },
 };
 
@@ -238,6 +243,20 @@ function normalizeCoords(
   return null;
 }
 
+
+/** Planned-vs-actual GPS deviation in meters (haversine); null until the
+ *  field app records an arrival position for the borehole. */
+function gpsDeviationM(bh: any): number | null {
+  const pLat = Number(bh?.latitude), pLng = Number(bh?.longitude);
+  const aLat = Number(bh?.actualLat), aLng = Number(bh?.actualLng);
+  if (![pLat, pLng, aLat, aLng].every(Number.isFinite)) return null;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const h =
+    Math.sin(toRad(aLat - pLat) / 2) ** 2 +
+    Math.cos(toRad(pLat)) * Math.cos(toRad(aLat)) * Math.sin(toRad(aLng - pLng) / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
+
 function fmtNum(v: number | null | undefined, digits = 1, suffix = ""): string {
   if (v === null || v === undefined || isNaN(v)) return "—";
   return `${v.toFixed(digits)}${suffix}`;
@@ -291,6 +310,41 @@ interface Anomaly {
   message: string;
 }
 
+// ── Crew invite / WhatsApp share helpers ──
+const WORKER_APP_LINK =
+  process.env.NEXT_PUBLIC_WORKER_APP_URL || "(app download link — set NEXT_PUBLIC_WORKER_APP_URL)";
+
+/** wa.me phone: strip non-digits, prefix 91 when a bare 10-digit Indian number. */
+function waPhone(mobile: string | null | undefined): string | null {
+  const digits = (mobile || "").replace(/\D/g, "");
+  if (!digits) return null;
+  return digits.length === 10 ? `91${digits}` : digits;
+}
+
+function waShareUrl(mobile: string | null | undefined, message: string): string | null {
+  const phone = waPhone(mobile);
+  return phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null;
+}
+
+function buildCrewInviteMessage(
+  firstName: string,
+  projectCode: string,
+  projectName: string,
+  mobile: string
+): string {
+  return `Namaste ${firstName}! You've been added to GroundLense project ${projectCode} — ${projectName}. 1) Install the GroundLense Worker app: ${WORKER_APP_LINK} 2) Open 'Create account / खाता बनाएं' 3) Enter your mobile number ${mobile} and set your own password. फिर लॉगिन करके अपनी बोरिंग देखें।`;
+}
+
+function buildAssignmentMessage(boreholeCodes: string, projectCode: string): string {
+  return `New borehole assigned / नई बोरिंग: ${boreholeCodes} in project ${projectCode}. Open the GroundLense app and tap Sync to see it.`;
+}
+
+const CREW_ROLE_OPTIONS = [
+  { code: "FIELD_WORKER", label: "Field Worker" },
+  { code: "GEOTECH_ENGINEER", label: "Geotech Engineer" },
+  { code: "GEOTECH_MANAGER", label: "Geotech Manager" },
+];
+
 export default function PortalClient({
   project,
   projects = [],
@@ -304,15 +358,24 @@ export default function PortalClient({
   teams = [],
   orgUsers = [],
   pendingRequests = [],
+  setupLocked = false,
 }: PortalClientProps) {
   const { activeTab, setActiveTab } = usePortalTab();
   const router = useRouter();
+
+  // Live updates: field data lands via mobile sync at any moment, so re-pull
+  // the server data every 30s while this tab is visible — no manual reload.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") router.refresh();
+    }, 30000);
+    return () => clearInterval(id);
+  }, [router]);
 
   const [localBoreholes, setLocalBoreholes] = useState<any[]>(boreholes);
   useEffect(() => {
     setLocalBoreholes(boreholes);
   }, [boreholes]);
-  const [activationLinkModal, setActivationLinkModal] = useState<string | null>(null);
 
   const proj = project; // No mock fallback — null renders honest "—" values
   const u = user as any;
@@ -322,11 +385,16 @@ export default function PortalClient({
   const canEditProject = useMemo(() => {
     if (!u) return false;
     if (u.roles?.includes("SUPER_ADMIN")) return true;
-    return u.organizationId === proj?.epcOrganizationId || u.organizationId === proj?.geotechOrganizationId;
-  }, [u, proj]);
+    const isViewer = u.roles?.includes("EPC_VIEWER") || u.roles?.includes("VIEWER");
+    if (isViewer) return false;
+    return true;
+  }, [u]);
   const isBoringStarted = useMemo(() => {
     return (localBoreholes || []).some((bh: any) => bh.status !== "PLANNED");
   }, [localBoreholes]);
+  // Setup freeze: server truth (GET /projects/:id/setup-status) OR the local
+  // borehole-status heuristic — either one locks all Setup-tab mutations.
+  const setupIsLocked = setupLocked || isBoringStarted;
   const userName = u
     ? `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || (u.email as string) || "Engineer"
     : "Engineer";
@@ -364,6 +432,9 @@ export default function PortalClient({
         ...bh,
         name: bh.name || bh.boreholeCode,
         teamName: bh.team?.name ?? null,
+        structureType: bh.structureType ?? null,
+        chainage: bh.chainage ?? null,
+        span: bh.span ?? null,
         // Normalize coordinates: auto-converts UTM to decimal degrees if needed
         _normalizedCoords: normalizeCoords(
           bh.latitude != null ? String(bh.latitude) : null,
@@ -463,7 +534,12 @@ export default function PortalClient({
   const stats = useMemo(() => {
     const total = mappedBoreholes.length;
     const completed = mappedBoreholes.filter((b: any) => b.status === "COMPLETED").length;
-    const active = mappedBoreholes.filter((b: any) => b.status === "IN_PROGRESS").length;
+    // Active = fieldwork has started and isn't finished: in progress right
+    // now, paused for the day (TERMINATED is the resumable mobile pause),
+    // or suspended pending an engineer decision.
+    const active = mappedBoreholes.filter((b: any) =>
+      ["IN_PROGRESS", "TERMINATED", "SUSPENDED"].includes(b.status)
+    ).length;
     const pending = mappedBoreholes.filter((b: any) => b.status === "PLANNED").length;
     return { total, completed, active, pending };
   }, [mappedBoreholes]);
@@ -635,7 +711,8 @@ export default function PortalClient({
     () => allSamples.find((s: any) => s.id === selectedSampleId) || allSamples[0] || null,
     [selectedSampleId, allSamples]
   );
-  const sampleLocked = !!selectedSample && (selectedSample.hasResult || !!labSavedIds[selectedSample.id]);
+  const [tempUnlock, setTempUnlock] = useState(false);
+  const sampleLocked = !!selectedSample && (selectedSample.hasResult || !!labSavedIds[selectedSample.id]) && !tempUnlock;
 
   const labStats = useMemo(() => {
     const total = allSamples.length;
@@ -701,6 +778,7 @@ export default function PortalClient({
   const selectSample = (id: string) => {
     setSelectedSampleId(id);
     resetLabForm();
+    setTempUnlock(false);
   };
 
   useEffect(() => {
@@ -808,7 +886,7 @@ export default function PortalClient({
   }, [voidRatio]);
 
   const canSubmitLab =
-    isGeotech &&
+    canEditProject &&
     !!selectedSample &&
     !sampleLocked &&
     nablLabs.length > 0 &&
@@ -865,6 +943,7 @@ export default function PortalClient({
     if (res.success) {
       setLabSavedIds((prev) => ({ ...prev, [selectedSample.id]: true }));
       setLabSuccess(`Results for sample ${selectedSample.sampleNumber || selectedSample.id} locked & saved.`);
+      setTempUnlock(false);
       router.refresh();
     } else {
       setLabError(res.error || "Failed to submit lab results.");
@@ -1094,20 +1173,23 @@ export default function PortalClient({
         const workbook = XLSX.read(ab, { type: "array" });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
+        const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
         if (rows.length < 2) {
           alert("Invalid Excel/CSV format or empty file.");
           return;
         }
 
-        const headers = rows[0].map((h: any) => String(h || "").trim().toLowerCase());
-        const bhNoIdx = headers.findIndex(h => ["bh_no", "bh no", "bhno", "bh-no", "borehole_no", "borehole"].includes(h));
-        const subStructIdx = headers.findIndex(h => ["sub_structure", "sub structure", "location", "name"].includes(h));
-        const eastingIdx = headers.findIndex(h => ["easting", "longitude", "lng", "lon"].includes(h));
-        const northingIdx = headers.findIndex(h => ["northing", "latitude", "lat"].includes(h));
-        const rlIdx = headers.findIndex(h => ["rl_mamsl", "rl", "rl(m)"].includes(h));
-        const plannedDepthIdx = headers.findIndex(h => ["planned_depth_m", "planned depth", "depth"].includes(h));
+        const headers: string[] = rows[0].map((h: any) => String(h || "").trim().toLowerCase());
+        const bhNoIdx = headers.findIndex((h: string) => ["bh_no", "bh no", "bhno", "bh-no", "borehole_no", "borehole"].includes(h));
+        const subStructIdx = headers.findIndex((h: string) => ["sub_structure", "sub structure", "location", "name"].includes(h));
+        const eastingIdx = headers.findIndex((h: string) => ["easting", "longitude", "lng", "lon"].includes(h));
+        const northingIdx = headers.findIndex((h: string) => ["northing", "latitude", "lat"].includes(h));
+        const rlIdx = headers.findIndex((h: string) => ["rl_mamsl", "rl", "rl(m)"].includes(h));
+        const plannedDepthIdx = headers.findIndex((h: string) => ["planned_depth_m", "planned depth", "depth"].includes(h));
+        const structureTypeIdx = headers.findIndex((h: string) => ["structure_type", "structure type", "structuretype"].includes(h));
+        const chainageIdx = headers.findIndex((h: string) => ["chainage", "chainage_m"].includes(h));
+        const spanIdx = headers.findIndex((h: string) => ["span"].includes(h));
 
         if (bhNoIdx === -1) {
           alert("Missing BH_No/Borehole column in file.");
@@ -1129,6 +1211,9 @@ export default function PortalClient({
           const northingVal = northingIdx !== -1 ? String(cells[northingIdx] || "").trim() : "";
           const rlVal = rlIdx !== -1 ? String(cells[rlIdx] || "").trim() : "";
           const depthVal = plannedDepthIdx !== -1 ? String(cells[plannedDepthIdx] || "").trim() : "";
+          const structTypeVal = structureTypeIdx !== -1 ? String(cells[structureTypeIdx] || "").trim() : "";
+          const chainageVal = chainageIdx !== -1 ? String(cells[chainageIdx] || "").trim() : "";
+          const spanVal = spanIdx !== -1 ? String(cells[spanIdx] || "").trim() : "";
 
           const formData = new FormData();
           formData.append("projectId", proj.id);
@@ -1138,6 +1223,9 @@ export default function PortalClient({
           if (eastingVal) formData.append("longitude", eastingVal);
           if (rlVal) formData.append("groundLevelRL", rlVal);
           if (depthVal) formData.append("plannedDepth", depthVal);
+          if (structTypeVal) formData.append("structureType", structTypeVal);
+          if (chainageVal) formData.append("chainage", chainageVal);
+          if (spanVal) formData.append("span", spanVal);
 
           const res = await createBoreholeAction(formData);
           if (res.success) {
@@ -1213,19 +1301,42 @@ export default function PortalClient({
   const [showAddCrewMemberModal, setShowAddCrewMemberModal] = useState<any>(null); // holds team or null
   const [crewMemberType, setCrewMemberType] = useState<"existing" | "new">("new");
   const [selectedProjectMemberId, setSelectedProjectMemberId] = useState("");
-  const [newWorkerName, setNewWorkerName] = useState("");
-  const [newWorkerRole, setNewWorkerRole] = useState("Field Supervisor");
-  const [newWorkerQual, setNewWorkerQual] = useState("");
-  const [newWorkerStatus, setNewWorkerStatus] = useState("On site");
+  const [newWorkerFirstName, setNewWorkerFirstName] = useState("");
+  const [newWorkerLastName, setNewWorkerLastName] = useState("");
   const [newWorkerMobile, setNewWorkerMobile] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState("");
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [isVerificationSkipped, setIsVerificationSkipped] = useState(false);
+  const [newWorkerEmployeeCode, setNewWorkerEmployeeCode] = useState("");
+  const [newWorkerRoleCode, setNewWorkerRoleCode] = useState("FIELD_WORKER");
   const [crewMemberAddError, setCrewMemberAddError] = useState("");
+  // Post-creation WhatsApp invite panel — shown inside the Add Crew Member modal
+  const [crewInvite, setCrewInvite] = useState<{
+    user: any;
+    mobile: string;
+    oneTimePassword: string | null;
+    isExisting: boolean;
+  } | null>(null);
+  const [inviteMsgCopied, setInviteMsgCopied] = useState(false);
+  const [otpCopied, setOtpCopied] = useState(false);
+  // Post-assignment share panel — notify the assigned team's crew on WhatsApp
+  const [assignShare, setAssignShare] = useState<{
+    teamName: string;
+    boreholeCodes: string[];
+    members: { name: string; mobile: string | null }[];
+    errors: string[]; // per-borehole assignment failures, verbatim from the API
+  } | null>(null);
 
-  const [otpIsMock, setOtpIsMock] = useState(true);
-  const [otpLoading, setOtpLoading] = useState(false);
+  const resetCrewMemberForm = () => {
+    setCrewMemberType("new");
+    setSelectedProjectMemberId("");
+    setNewWorkerFirstName("");
+    setNewWorkerLastName("");
+    setNewWorkerMobile("");
+    setNewWorkerEmployeeCode("");
+    setNewWorkerRoleCode("FIELD_WORKER");
+    setCrewMemberAddError("");
+    setCrewInvite(null);
+    setInviteMsgCopied(false);
+    setOtpCopied(false);
+  };
 
   const [verifyingUser, setVerifyingUser] = useState<any>(null);
   const [verifyRowOtpCode, setVerifyRowOtpCode] = useState("");
@@ -1481,59 +1592,13 @@ export default function PortalClient({
       alert("Mobile number verified successfully!");
       const orgId = (u as any)?.organizationId;
       if (orgId) {
-        const updatedTeams = await fetchOrgTeams(orgId);
+        const updatedTeams = await fetchOrgTeams(orgId, proj.id);
         setLocalTeams(updatedTeams);
       }
       setVerifyingUser(null);
       router.refresh();
     } else {
       setVerifyRowError(res.error || "Failed to verify OTP.");
-    }
-  };
-
-  const handleSendNewWorkerOtp = async () => {
-    if (!newWorkerMobile.trim()) return;
-    setOtpLoading(true);
-    setCrewMemberAddError("");
-    const res = await sendOtpAction({
-      type: "MOBILE",
-      target: newWorkerMobile.trim(),
-    });
-    setOtpLoading(false);
-    if (res.success) {
-      setOtpSent(true);
-      setOtpVerified(false);
-      const isMock = res.data?.isMock ?? true;
-      setOtpIsMock(isMock);
-      alert(
-        isMock
-          ? "OTP sent to mobile number (simulated OTP: 123456)"
-          : "OTP sent successfully to mobile number. Please check your device."
-      );
-    } else {
-      setCrewMemberAddError(res.error || "Failed to send OTP.");
-    }
-  };
-
-  const handleVerifyNewWorkerOtp = async () => {
-    if (!otpCode.trim()) {
-      setCrewMemberAddError("Please enter the verification code.");
-      return;
-    }
-    setOtpLoading(true);
-    setCrewMemberAddError("");
-    const res = await verifyOtpAction({
-      type: "MOBILE",
-      target: newWorkerMobile.trim(),
-      code: otpCode.trim(),
-    });
-    setOtpLoading(false);
-    if (res.success) {
-      setOtpVerified(true);
-      setCrewMemberAddError("");
-      alert("Mobile number verified successfully!");
-    } else {
-      setCrewMemberAddError(res.error || "Failed to verify OTP.");
     }
   };
 
@@ -1553,75 +1618,76 @@ export default function PortalClient({
       setMemberAddLoading(null);
       if (res.success) {
         if (orgId) {
-          const updatedTeams = await fetchOrgTeams(orgId);
+          const updatedTeams = await fetchOrgTeams(orgId, proj.id);
           setLocalTeams(updatedTeams);
+
+          // Trigger WhatsApp notification share
+          const teamObj = updatedTeams.find((t: any) => t.id === teamId);
+          const assignedBhs = mappedBoreholes.filter((bh: any) => bh.teamId === teamId);
+          if (assignedBhs.length > 0 && teamObj) {
+            const codes = assignedBhs.map((b: any) => b.boreholeCode);
+            const shareMembers = (teamObj.members || []).map((tm: any) => {
+              const tmu = tm.user || {};
+              return {
+                name: `${tmu.firstName ?? ""} ${tmu.lastName ?? ""}`.trim() || "—",
+                mobile: (tmu.mobile as string) || null,
+              };
+            });
+            setAssignShare({
+              teamName: teamObj.name,
+              boreholeCodes: codes,
+              members: shareMembers,
+              errors: [],
+            });
+          }
         }
         setShowAddCrewMemberModal(null);
       } else {
         setCrewMemberAddError(res.error || "Failed to add member to team.");
       }
     } else {
-      if (!newWorkerName.trim()) {
-        setCrewMemberAddError("Name is required.");
+      const firstName = newWorkerFirstName.trim();
+      const mobile = newWorkerMobile.trim();
+      if (!firstName) {
+        setCrewMemberAddError("First name is required.");
         return;
       }
-
-      setMemberAddLoading(teamId);
+      const mobileDigits = mobile.replace(/\D/g, "");
+      if (mobileDigits.length !== 10 || !/^[6-9]/.test(mobileDigits)) {
+        setCrewMemberAddError("Enter a valid 10-digit Indian mobile number.");
+        return;
+      }
+      if (!proj?.id) {
+        setCrewMemberAddError("Project could not be identified.");
+        return;
+      }
 
       setMemberAddLoading(teamId);
       setCrewMemberAddError("");
-      
-      if (!orgId) {
-        setCrewMemberAddError("Organization ID could not be determined.");
-        setMemberAddLoading(null);
-        return;
-      }
 
-      // Determine backend roleCode
-      let roleCode = "FIELD_WORKER";
-      const normalizedRole = newWorkerRole.toLowerCase();
-      if (normalizedRole.includes("driller")) {
-        roleCode = "DRILLER";
-      } else if (normalizedRole.includes("engineer")) {
-        roleCode = "GEOTECH_ENGINEER";
-      } else if (normalizedRole.includes("lab")) {
-        roleCode = "LAB_TECHNICIAN";
-      }
+      const autoEmpCode = "GL-W-" + Math.floor(1000 + Math.random() * 9000);
+      const defaultRoleCode = "FIELD_WORKER";
+      const roleLabel = "Field Worker";
 
-      const createRes = await createUserAction({
-        organizationId: orgId,
-        firstName: newWorkerName.trim(),
-        lastName: "",
-        roleCode,
-        designation: newWorkerRole,
-        userType: newWorkerQual.trim() || "ITI",
-        preferredLanguage: newWorkerStatus,
-        mobile: newWorkerMobile.trim() || undefined,
+      // Server action: POST /users (org resolved server-side) + POST /projects/:id/members
+      const createRes = await createCrewMemberAction(proj.id, {
+        firstName,
+        lastName: newWorkerLastName.trim() || undefined,
+        mobile, // stored as entered
+        employeeCode: autoEmpCode,
+        roleCode: defaultRoleCode,
+        designation: roleLabel,
       });
 
-      if (!createRes.success) {
-        setCrewMemberAddError(createRes.error || "Failed to create user.");
+      if (!createRes.success || !createRes.user) {
+        // API errors (e.g. "Project setup is locked") surfaced verbatim
+        setCrewMemberAddError(createRes.error || "Failed to create crew member.");
         setMemberAddLoading(null);
         return;
       }
 
-      const newUser = createRes.data?.user || createRes.data;
-      if (!newUser || !newUser.id) {
-        setCrewMemberAddError("Failed to retrieve new user ID.");
-        setMemberAddLoading(null);
-        return;
-      }
-
-      // Add as project member first (so they are part of the project)
-      const projectMemberRes = await addProjectMemberAction(proj.id, newUser.id);
-      if (!projectMemberRes.success) {
-        setCrewMemberAddError(projectMemberRes.error || "Failed to add user to project.");
-        setMemberAddLoading(null);
-        return;
-      }
-
-      // Add to team members
-      const teamMemberRes = await addTeamMemberAction(teamId, newUser.id);
+      // Add to this drilling team
+      const teamMemberRes = await addTeamMemberAction(teamId, createRes.user.id);
       setMemberAddLoading(null);
       if (!teamMemberRes.success) {
         setCrewMemberAddError(teamMemberRes.error || "Failed to add user to team.");
@@ -1630,26 +1696,36 @@ export default function PortalClient({
 
       // Success: refresh data
       if (orgId) {
-        const updatedTeams = await fetchOrgTeams(orgId);
+        const updatedTeams = await fetchOrgTeams(orgId, proj.id);
         setLocalTeams(updatedTeams);
-      }
-      if (newWorkerMobile.trim() && !newUser.isExisting) {
-        const host = window.location.origin || "http://localhost:3000";
-        const link = `${host}/create-account?mobile=${encodeURIComponent(newWorkerMobile.trim())}`;
-        setActivationLinkModal(link);
-      } else if (newUser.isExisting) {
-        alert("This member is already registered on Groundlense. They have been assigned to this borehole team and can access it immediately on their mobile app.");
-      }
 
+        // Trigger WhatsApp notification share
+        const teamObj = updatedTeams.find((t: any) => t.id === teamId);
+        const assignedBhs = mappedBoreholes.filter((bh: any) => bh.teamId === teamId);
+        if (assignedBhs.length > 0 && teamObj) {
+          const codes = assignedBhs.map((b: any) => b.boreholeCode);
+          const shareMembers = (teamObj.members || []).map((tm: any) => {
+            const tmu = tm.user || {};
+            return {
+              name: `${tmu.firstName ?? ""} ${tmu.lastName ?? ""}`.trim() || "—",
+              mobile: (tmu.mobile as string) || null,
+            };
+          });
+          setAssignShare({
+            teamName: teamObj.name,
+            boreholeCodes: codes,
+            members: shareMembers,
+            errors: [],
+          });
+        }
+      }
+      setCrewInvite({
+        user: createRes.user,
+        mobile,
+        oneTimePassword: createRes.oneTimePassword ?? null,
+        isExisting: createRes.isExisting === true,
+      });
       router.refresh();
-      setShowAddCrewMemberModal(null);
-      setNewWorkerMobile("");
-      setOtpSent(false);
-      setOtpCode("");
-      setOtpVerified(false);
-      setIsVerificationSkipped(false);
-      setNewWorkerName("");
-      setNewWorkerQual("");
     }
   };
 
@@ -1661,8 +1737,9 @@ export default function PortalClient({
     if (!res.success) {
       alert(res.error || "Failed to remove crew member.");
     } else {
+      const orgId = (u as any)?.organizationId;
       if (orgId) {
-        const updatedTeams = await fetchOrgTeams(orgId);
+        const updatedTeams = await fetchOrgTeams(orgId, proj.id);
         setLocalTeams(updatedTeams);
       }
       router.refresh();
@@ -1680,6 +1757,7 @@ export default function PortalClient({
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamDesc, setNewTeamDesc] = useState("");
   const [selectedBoreholeIds, setSelectedBoreholeIds] = useState<string[]>([]);
+  const [selectedBoringLocationIds, setSelectedBoringLocationIds] = useState<string[]>([]);
   const [teamCreateLoading, setTeamCreateLoading] = useState(false);
   const [teamCreateError, setTeamCreateError] = useState("");
   const [memberAddLoading, setMemberAddLoading] = useState<string | null>(null);
@@ -1731,17 +1809,27 @@ export default function PortalClient({
     const res = await createTeamAction(orgId, {
       code: generatedCode,
       name: newTeamName.trim(),
+      projectId: proj.id,
     });
     setTeamCreateLoading(false);
     if (res.success) {
       const newTeamId = res.data?.id;
+      const assignedIds: string[] = [];
+      const assignErrors: string[] = [];
       if (newTeamId && selectedBoreholeIds.length > 0) {
         for (const bhId of selectedBoreholeIds) {
-          await assignBoreholeTeamAction(bhId, newTeamId);
+          const assignRes = await assignBoreholeTeamAction(bhId, newTeamId);
+          if ((assignRes as any).success) {
+            assignedIds.push(bhId);
+          } else {
+            const code = mappedBoreholes.find((b: any) => b.id === bhId)?.boreholeCode ?? bhId;
+            // API 403 messages (e.g. "Project setup is locked") surfaced verbatim
+            assignErrors.push(`${code}: ${(assignRes as any).error || "assignment failed"}`);
+          }
         }
         setLocalBoreholes(prev =>
           prev.map(bh => {
-            if (selectedBoreholeIds.includes(bh.id)) {
+            if (assignedIds.includes(bh.id)) {
               return {
                 ...bh,
                 teamId: newTeamId,
@@ -1754,8 +1842,9 @@ export default function PortalClient({
         );
       }
 
-      const updatedTeams = await fetchOrgTeams(orgId);
+      const updatedTeams = await fetchOrgTeams(orgId, proj.id);
       setLocalTeams(updatedTeams);
+
       setNewTeamName("");
       setSelectedBoreholeIds([]);
       setShowAddTeamModal(false);
@@ -1773,8 +1862,28 @@ export default function PortalClient({
     if (res.success) {
       const orgId = (u as any)?.organizationId;
       if (orgId) {
-        const updatedTeams = await fetchOrgTeams(orgId);
+        const updatedTeams = await fetchOrgTeams(orgId, proj.id);
         setLocalTeams(updatedTeams);
+
+        // Trigger WhatsApp notification share
+        const teamObj = updatedTeams.find((t: any) => t.id === teamId);
+        const assignedBhs = mappedBoreholes.filter((bh: any) => bh.teamId === teamId);
+        if (assignedBhs.length > 0 && teamObj) {
+          const codes = assignedBhs.map((b: any) => b.boreholeCode);
+          const shareMembers = (teamObj.members || []).map((tm: any) => {
+            const tmu = tm.user || {};
+            return {
+              name: `${tmu.firstName ?? ""} ${tmu.lastName ?? ""}`.trim() || "—",
+              mobile: (tmu.mobile as string) || null,
+            };
+          });
+          setAssignShare({
+            teamName: teamObj.name,
+            boreholeCodes: codes,
+            members: shareMembers,
+            errors: [],
+          });
+        }
       }
     } else {
       alert(res.error || "Failed to add member to team.");
@@ -1803,7 +1912,7 @@ export default function PortalClient({
 
       const orgId = (u as any)?.organizationId;
       if (orgId) {
-        const updatedTeams = await fetchOrgTeams(orgId);
+        const updatedTeams = await fetchOrgTeams(orgId, proj.id);
         setLocalTeams(updatedTeams);
       }
       router.refresh();
@@ -1835,6 +1944,9 @@ export default function PortalClient({
   const [showExcelSec, setShowExcelSec] = useState(false);
   // Map expand / zoom / pan state
   const [mapExpanded, setMapExpanded] = useState(false);
+  // Photo lightbox: the clicked site photo + its borehole context, showing
+  // the same geo-tag data that is burned into the image (all from the DB).
+  const [photoView, setPhotoView] = useState<{ med: any; bh: any } | null>(null);
   const [mapZoom, setMapZoom] = useState(1);
   const [mapOffset, setMapOffset] = useState({ x: 0, y: 0 });
   const [mapDragging, setMapDragging] = useState(false);
@@ -2026,7 +2138,7 @@ export default function PortalClient({
         mapPoints.forEach(({ bh }: any) => {
           if (!bh._normalizedCoords) return;
           const marker = L.marker([bh._normalizedCoords.lat, bh._normalizedCoords.lng], { icon: customIcon }).addTo(inlineMap);
-          const statusText = bh.status === "COMPLETED" ? "✅ Completed" : bh.status === "IN_PROGRESS" ? "🔵 In Progress" : "⭕ Pending";
+          const statusText = bh.status === "COMPLETED" ? "✅ Completed" : bh.status === "IN_PROGRESS" ? "🔵 In Progress" : bh.status === "TERMINATED" ? "⏸ Paused (resumable)" : bh.status === "SUSPENDED" ? "❚❚ Suspended" : bh.status === "ABANDONED" ? "✗ Abandoned" : "⭕ Pending";
           marker.bindPopup(
             `<b>BH ID:</b> ${bh.boreholeCode}<br/>` +
             `<b>Location:</b> ${bh.name || "—"}<br/>` +
@@ -2057,7 +2169,7 @@ export default function PortalClient({
           mapPoints.forEach(({ bh }: any) => {
             if (!bh._normalizedCoords) return;
             const marker = L.marker([bh._normalizedCoords.lat, bh._normalizedCoords.lng], { icon: customIcon }).addTo(expandedMap);
-            const statusText = bh.status === "COMPLETED" ? "✅ Completed" : bh.status === "IN_PROGRESS" ? "🔵 In Progress" : "⭕ Pending";
+            const statusText = bh.status === "COMPLETED" ? "✅ Completed" : bh.status === "IN_PROGRESS" ? "🔵 In Progress" : bh.status === "TERMINATED" ? "⏸ Paused (resumable)" : bh.status === "SUSPENDED" ? "❚❚ Suspended" : bh.status === "ABANDONED" ? "✗ Abandoned" : "⭕ Pending";
             marker.bindPopup(
               `<div style="font-family: sans-serif; font-size: 11px; line-height: 1.4;">` +
               `<b style="font-size: 12px; color: #1A1918;">${bh.boreholeCode}</b><br/>` +
@@ -2350,9 +2462,27 @@ export default function PortalClient({
         {/* ⚙ SETUP TAB */}
         {activeTab === "setup" && (
           <div className="animate-fade-in">
-            <div className="ib ib-r shadow-sm">
-              ⚠ Once the first SPT entry is submitted by a field worker, all setup data becomes read-only and cannot be modified by anyone — including the engineer. Ensure all parameters are correct before field work begins.
-            </div>
+            {setupIsLocked ? (
+              <div
+                className="shadow-sm rounded-[7px] mb-3 flex items-center gap-2 font-semibold"
+                style={{
+                  padding: "10px 14px",
+                  fontSize: "11px",
+                  color: "var(--color-amber-d)",
+                  background: "rgba(250, 199, 117, 0.08)",
+                  border: "1px solid var(--color-amber-d)",
+                }}
+              >
+                <RiLock2Line className="text-[14px] shrink-0" />
+                <span>
+                  🔒 Setup locked — fieldwork has started. Boreholes, members and assignments can no longer be changed.
+                </span>
+              </div>
+            ) : (
+              <div className="ib ib-r shadow-sm">
+                ⚠ Once the first SPT entry is submitted by a field worker, all setup data becomes read-only and cannot be modified by anyone — including the engineer. Ensure all parameters are correct before field work begins.
+              </div>
+            )}
 
             {/* Stats row */}
             <div className="grid grid-cols-4 gap-2 mb-3">
@@ -2384,7 +2514,7 @@ export default function PortalClient({
                 <span>📍 Boring Locations</span>
                 <div className="flex gap-2">
                   <span className="ct-lock self-center">🔒 Locked after boring start</span>
-                  {!isBoringStarted && (
+                  {!setupIsLocked && (
                     <span className="ct-action self-center" onClick={() => setShowExcelSec(!showExcelSec)}>
                       {showExcelSec ? "✕ Close Excel tool" : "📂 Excel Import / Export"}
                     </span>
@@ -2444,13 +2574,106 @@ export default function PortalClient({
                 )}
               </div>
 
+              {/* Bulk Team Assignment Bar */}
+              {!setupIsLocked && selectedBoringLocationIds.length > 0 && (
+                <div className="bg-bg-raised border border-border rounded-lg p-2.5 mb-3 flex items-center justify-between text-[11px] animate-fade-down" style={{ background: "var(--color-bg-card)", borderColor: "var(--color-border-mid)" }}>
+                  <div>
+                    Selected <span className="font-semibold text-amber-d">{selectedBoringLocationIds.length}</span> boreholes
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      id="bulk-team-select-box"
+                      className="bg-bg border border-border rounded px-2 py-1 focus:outline-none text-[11px]"
+                      defaultValue=""
+                      style={{ background: "var(--color-bg-card)", borderColor: "var(--color-border-mid)" }}
+                    >
+                      <option value="">— Select Team —</option>
+                      {localTeams.map((team: any) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn btn-p py-1 px-3 text-[11px]"
+                      onClick={async () => {
+                        const selectEl = document.getElementById("bulk-team-select-box") as HTMLSelectElement;
+                        const targetTeamId = selectEl?.value;
+                        if (!targetTeamId) {
+                          alert("Please select a team to assign.");
+                          return;
+                        }
+                        const targetTeamObj = localTeams.find(t => t.id === targetTeamId);
+                        const targetTeamName = targetTeamObj?.name ?? "";
+                        const assignedIds: string[] = [];
+                        for (const bhId of selectedBoringLocationIds) {
+                          const res = await assignBoreholeTeamAction(bhId, targetTeamId);
+                          if ((res as any).success) {
+                            assignedIds.push(bhId);
+                          }
+                        }
+                        
+                        // Update local state
+                        setLocalBoreholes(prev =>
+                          prev.map(bh => {
+                            if (assignedIds.includes(bh.id)) {
+                              return {
+                                ...bh,
+                                teamId: targetTeamId,
+                                teamName: targetTeamName,
+                                team: { id: targetTeamId, name: targetTeamName }
+                              };
+                            }
+                            return bh;
+                          })
+                        );
+                        setSelectedBoringLocationIds([]);
+                        alert(`Successfully assigned ${assignedIds.length} boreholes to ${targetTeamName}.`);
+                      }}
+                    >
+                      Assign
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-w py-1 px-3 text-[11px]"
+                      onClick={() => setSelectedBoringLocationIds([])}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Locations table */}
               <div className="overflow-x-auto">
-                <table className="dt" style={{ minWidth: "760px" }}>
+                <table className="dt" style={{ minWidth: "960px" }}>
                   <thead>
                     <tr>
+                      {!setupIsLocked && (
+                        <th style={{ width: "32px" }}>
+                          <input
+                            type="checkbox"
+                            checked={
+                              mappedBoreholes.length > 0 &&
+                              mappedBoreholes.every(bh => selectedBoringLocationIds.includes(bh.id))
+                            }
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedBoringLocationIds(mappedBoreholes.map(bh => bh.id));
+                              } else {
+                                setSelectedBoringLocationIds([]);
+                              }
+                            }}
+                            className="w-3.5 h-3.5"
+                          />
+                        </th>
+                      )}
                       <th>BH ID</th>
                       <th>Location / Sub-structure</th>
+                      <th>Structure Type</th>
+                      <th>Chainage</th>
+                      <th>Span</th>
                       <th>Team</th>
                       <th>Latitude (raw)</th>
                       <th>Longitude (raw)</th>
@@ -2464,7 +2687,7 @@ export default function PortalClient({
                   <tbody>
                     {mappedBoreholes.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="text-center text-text-ter py-4">
+                        <td colSpan={setupIsLocked ? 13 : 14} className="text-center text-text-ter py-4">
                           No boreholes created yet — they appear here once the project setup adds them.
                         </td>
                       </tr>
@@ -2478,9 +2701,90 @@ export default function PortalClient({
                         );
                         return (
                           <tr key={bh.id}>
+                            {!setupIsLocked && (
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedBoringLocationIds.includes(bh.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedBoringLocationIds([...selectedBoringLocationIds, bh.id]);
+                                    } else {
+                                      setSelectedBoringLocationIds(selectedBoringLocationIds.filter(id => id !== bh.id));
+                                    }
+                                  }}
+                                  className="w-3.5 h-3.5 cursor-pointer"
+                                />
+                              </td>
+                            )}
                             <td className="font-mono text-[9px] text-amber-d">{bh.boreholeCode}</td>
                             <td className="td-p">{bh.name}</td>
-                            <td>{bh.teamName ? <span className="pill p-b" style={{ fontSize: "8px" }}>{bh.teamName}</span> : "—"}</td>
+                            <td>{bh.structureType || "—"}</td>
+                            <td>{bh.chainage || "—"}</td>
+                            <td>{bh.span || "—"}</td>
+                            <td>
+                              {setupIsLocked || bh.status !== "PLANNED" ? (
+                                bh.teamName ? (
+                                  <span className="pill p-b" style={{ fontSize: "8px" }}>
+                                    {bh.teamName}
+                                  </span>
+                                ) : (
+                                  "—"
+                                )
+                              ) : (
+                                <select
+                                  value={bh.teamId || ""}
+                                  onChange={async (e) => {
+                                    const newTeamId = e.target.value;
+                                    const oldTeamId = bh.teamId;
+                                    const oldTeamName = bh.teamName;
+                                    const oldTeamObj = bh.team;
+                                    
+                                    const matchedTeam = localTeams.find(t => t.id === newTeamId);
+                                    const matchedName = matchedTeam?.name ?? "";
+                                    
+                                    setLocalBoreholes(prev =>
+                                      prev.map(item =>
+                                        item.id === bh.id
+                                          ? {
+                                              ...item,
+                                              teamId: newTeamId || null,
+                                              teamName: matchedName || null,
+                                              team: matchedTeam ? { id: newTeamId, name: matchedName } : null,
+                                            }
+                                          : item
+                                      )
+                                    );
+                                    
+                                    const assignRes = await assignBoreholeTeamAction(bh.id, newTeamId);
+                                    if (!(assignRes as any).success) {
+                                      alert(`Failed to assign team: ${(assignRes as any).error || "Unknown error"}`);
+                                      setLocalBoreholes(prev =>
+                                        prev.map(item =>
+                                          item.id === bh.id
+                                            ? {
+                                                ...item,
+                                                teamId: oldTeamId,
+                                                teamName: oldTeamName,
+                                                team: oldTeamObj,
+                                              }
+                                            : item
+                                        )
+                                      );
+                                    }
+                                  }}
+                                  className="text-[10px] bg-bg border border-border rounded px-1 py-0.5 focus:outline-none"
+                                  style={{ background: "var(--color-bg-card)", borderColor: "var(--color-border-mid)" }}
+                                >
+                                  <option value="">— Select Team —</option>
+                                  {localTeams.map((team: any) => (
+                                    <option key={team.id} value={team.id}>
+                                      {team.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </td>
                             <td className="font-mono text-[10px]">{bh.latitude ?? "—"}</td>
                             <td className="font-mono text-[10px]">{bh.longitude ?? "—"}</td>
                             <td className="font-mono text-[10px]">
@@ -2503,7 +2807,7 @@ export default function PortalClient({
                 </table>
               </div>
 
-              {!isBoringStarted ? (
+              {!setupIsLocked ? (
                 <div className="btn-row justify-end mt-3">
                   <button
                     className="btn btn-p"
@@ -2530,7 +2834,7 @@ export default function PortalClient({
                 <span>📋 Project Details</span>
                 {canEditProject && (
                   <div className="flex gap-2">
-                    {!isBoringStarted ? (
+                    {!setupIsLocked ? (
                       isEditingProjectDetails ? (
                         <>
                           <span className="ct-action cursor-pointer text-green-d bg-green-light border-green-d" onClick={handleSaveProjectDetails}>Save</span>
@@ -2672,7 +2976,7 @@ export default function PortalClient({
                 <span>⚙ Investigation Parameters</span>
                 {canEditProject && (
                   <div className="flex gap-2">
-                    {!isBoringStarted ? (
+                    {!setupIsLocked ? (
                       isEditingInvestigationParameters ? (
                         <>
                           <span className="ct-action cursor-pointer text-green-d bg-green-light border-green-d" onClick={() => {
@@ -2795,18 +3099,12 @@ export default function PortalClient({
               </div>
               {canEditProject && (
                 <div className="flex gap-2 mb-3">
-                  {!isBoringStarted ? (
-                    <button
-                      className="btn btn-p btn-sm"
-                      onClick={() => setShowAddTeamModal(true)}
-                    >
-                      + Add Team
-                    </button>
-                  ) : (
-                    <span className="text-[10px] text-text-ter bg-bg-card border border-border px-2 py-1 rounded italic self-center">
-                      🔒 Setup locked (boring started)
-                    </span>
-                  )}
+                  <button
+                    className="btn btn-p btn-sm"
+                    onClick={() => setShowAddTeamModal(true)}
+                  >
+                    + Add Team
+                  </button>
                   <div className="text-[10px] text-text-ter self-center">
                     Create crews/drilling teams and assign project members to them.
                   </div>
@@ -2839,7 +3137,7 @@ export default function PortalClient({
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-[8px] text-text-ter font-mono">ID: {team.id.substring(0, 8)}...</span>
-                                {canEditProject && !isBoringStarted && (
+                                {canEditProject && (
                                   <button
                                     type="button"
                                     className="btn btn-d btn-sm text-[8px] py-0.5 px-1.5"
@@ -2922,24 +3220,13 @@ export default function PortalClient({
                           </div>
 
                           {/* Add Crew Member Action */}
-                          {canEditProject && !isBoringStarted && (
+                          {canEditProject && (
                             <div className="border-t border-dashed border-border pt-2 mt-2 flex justify-end">
                               <button
                                 className="btn btn-p btn-sm text-[9px] py-0.5 px-2"
                                 onClick={() => {
+                                  resetCrewMemberForm();
                                   setShowAddCrewMemberModal(team);
-                                  setCrewMemberType("new");
-                                  setSelectedProjectMemberId("");
-                                  setNewWorkerName("");
-                                  setNewWorkerRole("Field Supervisor");
-                                  setNewWorkerQual("");
-                                  setNewWorkerStatus("On site");
-                                  setCrewMemberAddError("");
-                                  setNewWorkerMobile("");
-                                  setOtpSent(false);
-                                  setOtpCode("");
-                                  setOtpVerified(false);
-                                  setIsVerificationSkipped(false);
                                 }}
                               >
                                 + Add Crew Member
@@ -3032,6 +3319,84 @@ export default function PortalClient({
         )}
 
         {/* ════ Fullscreen Map Modal ════ */}
+        {/* Photo lightbox — geo-tag details for the clicked site photo */}
+        {photoView && (() => {
+          const { med, bh } = photoView;
+          const lat = med.gpsLat != null ? Number(med.gpsLat) : null;
+          const lng = med.gpsLng != null ? Number(med.gpsLng) : null;
+          const hasGps = lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng);
+          const rows: Array<[string, ReactNode]> = [
+            ["Borehole", `${bh.boreholeCode}${bh.name && bh.name !== bh.boreholeCode ? ` · ${bh.name}` : ""}`],
+            ["Structure Type", bh.structureType || "—"],
+            ["Chainage", bh.chainage || "—"],
+            ["Span", bh.span || "—"],
+            ["Interval", med.intervalNo != null ? `#${med.intervalNo}` : "—"],
+            ["Photo Type", med.photoType || "—"],
+            [
+              "GPS (capture point)",
+              hasGps ? (
+                <span>
+                  {Math.abs(lat).toFixed(6)}°{lat >= 0 ? "N" : "S"}, {Math.abs(lng).toFixed(6)}°{lng >= 0 ? "E" : "W"}
+                  {med.accuracyM != null ? ` (±${Math.round(Number(med.accuracyM))} m)` : ""}
+                  {" · "}
+                  <a
+                    href={`https://www.google.com/maps?q=${lat},${lng}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-rust-mid underline"
+                  >
+                    View on map ↗
+                  </a>
+                </span>
+              ) : (
+                "Not captured"
+              ),
+            ],
+            ["Captured (device)", fmtDateTime(med.takenAt)],
+            ["Uploaded (sync)", fmtDateTime(med.createdAt)],
+            ["File", med.fileName || "—"],
+          ];
+          return (
+            <div
+              className="fixed inset-0 z-[1200] bg-black/85 flex items-center justify-center p-4"
+              onClick={() => setPhotoView(null)}
+            >
+              <div
+                className="bg-bg-card border border-border rounded-lg w-full max-w-[820px] max-h-[92vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+                  <div className="text-[12px] font-bold text-text-pri">
+                    📍 {bh.boreholeCode} — site photo
+                  </div>
+                  <button
+                    className="text-text-ter hover:text-text-pri text-[15px] cursor-pointer bg-transparent border-0"
+                    onClick={() => setPhotoView(null)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                {med.mimeType?.startsWith("image/") && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`/api/media/${med.id}`}
+                    alt={med.fileName || "Site photo"}
+                    className="w-full max-h-[58vh] object-contain bg-black"
+                  />
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 p-4">
+                  {rows.map(([label, value]) => (
+                    <div key={label} className="flex justify-between gap-3 border-b border-border/40 pb-1">
+                      <span className="text-[10px] uppercase tracking-wide text-text-ter shrink-0">{label}</span>
+                      <span className="text-[11px] text-text-pri text-right break-all">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {mapExpanded && (
           <div
             className="map-modal-overlay"
@@ -3280,13 +3645,21 @@ export default function PortalClient({
                     <div className="dr"><span className="dr-l">Total depth</span><span className="dr-v">{fmtNum(selectedBorehole.finalDepth, 1, "m")}</span></div>
                     <div className="dr"><span className="dr-l">Latitude</span><span className="dr-v">{selectedBorehole.latitude ?? "—"}</span></div>
                     <div className="dr"><span className="dr-l">Longitude</span><span className="dr-v">{selectedBorehole.longitude ?? "—"}</span></div>
-                    <div className="dr"><span className="dr-l">GPS deviation</span><span className="dr-v" title="Planned-vs-actual GPS comparison is not captured by the field app yet">not recorded</span></div>
+                    <div className="dr"><span className="dr-l">GPS deviation</span>{(() => {
+                      const dev = gpsDeviationM(selectedBorehole);
+                      return dev != null
+                        ? <span className={`dr-v ${dev <= 30 ? "ok" : "warn"}`} title={`Recorded at boring start (±${selectedBorehole.actualAccuracyM ?? "?"}m GPS accuracy)`}>{dev.toFixed(1)} m {dev <= 30 ? "✓" : "⚠"}</span>
+                        : <span className="dr-v" title="Recorded when the worker starts boring with GPS enabled">not recorded</span>;
+                    })()}</div>
                     <div className="dr"><span className="dr-l">RL</span><span className="dr-v">{fmtNum(selectedBorehole.groundLevelRL, 3, "m")}</span></div>
                     <div className="dr"><span className="dr-l">Water table</span><span className={`dr-v ${selectedBorehole.waterTable != null ? "ok" : ""}`}>{fmtNum(selectedBorehole.waterTable, 2, "m")}</span></div>
                     <div className="dr"><span className="dr-l">SPT intervals</span><span className="dr-v">{selectedBorehole.intervals.length}</span></div>
                     <div className="dr"><span className="dr-l">Samples</span><span className="dr-v">{selectedBorehole.samples.length}</span></div>
                     <div className="dr"><span className="dr-l">Photos</span><span className="dr-v">{selectedBorehole.media.length} uploaded</span></div>
                     <div className="dr"><span className="dr-l">Team</span><span className="dr-v">{selectedBorehole.teamName ?? "—"}</span></div>
+                    <div className="dr"><span className="dr-l">Structure Type</span><span className="dr-v">{selectedBorehole.structureType ?? "—"}</span></div>
+                    <div className="dr"><span className="dr-l">Chainage</span><span className="dr-v">{selectedBorehole.chainage ?? "—"}</span></div>
+                    <div className="dr"><span className="dr-l">Span</span><span className="dr-v">{selectedBorehole.span ?? "—"}</span></div>
 
                     {anomaliesForBh(selectedBorehole.id).slice(0, 1).map((a) => (
                       <div key={a.intervalId} className="mt-2 p-2 bg-[rgba(163,45,45,.08)] border border-[rgba(163,45,45,.35)] rounded-md animate-fade-in">
@@ -3323,7 +3696,12 @@ export default function PortalClient({
                     ) : (
                       <div className="photo-grid">
                         {selectedBorehole.media.slice(0, 9).map((med: any) => (
-                          <div key={med.id} className="photo-thumb" title={med.fileName}>
+                          <div
+                            key={med.id}
+                            className="photo-thumb"
+                            title={med.fileName}
+                            onClick={() => setPhotoView({ med, bh: selectedBorehole })}
+                          >
                             {med.mimeType?.startsWith("image/") ? (
                               // Authenticated media proxy
                               // eslint-disable-next-line @next/next/no-img-element
@@ -3774,10 +4152,21 @@ export default function PortalClient({
                 </div>
 
                 {sampleLocked ? (
-                  <div className="ib ib-g">
-                    ✓ Lab results locked & saved for this sample
-                    {selectedSample?.labResult?.reportNumber ? ` · Report ${selectedSample.labResult.reportNumber}` : ""}
-                    {selectedSample?.labResult?.testedOn ? ` · Tested ${new Date(selectedSample.labResult.testedOn).toLocaleDateString("en-IN")}` : ""}.
+                  <div className="ib ib-g flex justify-between items-center">
+                    <div>
+                      ✓ Lab results locked & saved for this sample
+                      {selectedSample?.labResult?.reportNumber ? ` · Report ${selectedSample.labResult.reportNumber}` : ""}
+                      {selectedSample?.labResult?.testedOn ? ` · Tested ${new Date(selectedSample.labResult.testedOn).toLocaleDateString("en-IN")}` : ""}.
+                    </div>
+                    {canEditProject && (
+                      <button
+                        type="button"
+                        className="btn btn-p btn-sm text-[8px] py-0.5 px-1.5 cursor-pointer ml-2"
+                        onClick={() => setTempUnlock(true)}
+                      >
+                        Edit Results
+                      </button>
+                    )}
                   </div>
                 ) : nablLabs.length === 0 ? (
                   <div className="ib ib-a">⚠ No NABL lab registered yet — submission is disabled.</div>
@@ -3790,7 +4179,7 @@ export default function PortalClient({
                 {labSuccess && <div className="ib ib-g">✓ {labSuccess}</div>}
                 {labError && <div className="ib ib-r">✗ {labError}</div>}
 
-                <fieldset disabled={sampleLocked || !isGeotech} className="contents">
+                <fieldset disabled={sampleLocked || !canEditProject} className="contents">
                 {/* Step 1 */}
                 <div className="sl">Step 1 — Grain size analysis (IS 2720 Part 4)</div>
                 <div className="grid3 mb-3">
@@ -4040,7 +4429,7 @@ export default function PortalClient({
                 <div className="btn-row justify-end mt-4">
                   <button 
                     className="btn btn-w" 
-                    disabled={!isGeotech || sampleLocked}
+                    disabled={!canEditProject || sampleLocked}
                     onClick={() => alert("Draft saved successfully!")}
                   >
                     Save Draft
@@ -4050,8 +4439,8 @@ export default function PortalClient({
                     className="btn btn-p flex items-center gap-1 cursor-pointer"
                     disabled={!canSubmitLab}
                     title={
-                      !isGeotech
-                        ? "Only Geotech Contractor personnel can submit lab results"
+                      !canEditProject
+                        ? "Only authorized project personnel can submit lab results"
                         : sampleLocked
                           ? "Results already locked for this sample"
                           : nablLabs.length === 0
@@ -5000,13 +5389,13 @@ export default function PortalClient({
               <div className="fg">
                 <div className="flex justify-between items-center mb-1">
                   <span className="fl">Assign Boreholes</span>
-                  {mappedBoreholes.filter(bh => !bh.teamId).length > 0 && (
+                  {mappedBoreholes.filter(bh => !bh.teamId && bh.status === "PLANNED").length > 0 && (
                     <button
                       type="button"
                       className="text-[9px] hover:underline font-semibold"
                       style={{ color: "var(--color-blue-d)" }}
                       onClick={() => {
-                        const unassignedIds = mappedBoreholes.filter(bh => !bh.teamId).map(bh => bh.id);
+                        const unassignedIds = mappedBoreholes.filter(bh => !bh.teamId && bh.status === "PLANNED").map(bh => bh.id);
                         const allSelected = unassignedIds.every(id => selectedBoreholeIds.includes(id));
                         if (allSelected) {
                           setSelectedBoreholeIds(prev => prev.filter(id => !unassignedIds.includes(id)));
@@ -5015,7 +5404,7 @@ export default function PortalClient({
                         }
                       }}
                     >
-                      {mappedBoreholes.filter(bh => !bh.teamId).every(bh => selectedBoreholeIds.includes(bh.id))
+                      {mappedBoreholes.filter(bh => !bh.teamId && bh.status === "PLANNED").every(bh => selectedBoreholeIds.includes(bh.id))
                         ? "Deselect All"
                         : "Select All"}
                     </button>
@@ -5027,11 +5416,22 @@ export default function PortalClient({
                   ) : (
                     mappedBoreholes.filter(bh => !bh.teamId).map((bh: any) => {
                       const isChecked = selectedBoreholeIds.includes(bh.id);
+                      // PATCH /boreholes/:id/assignment 403s once beyond PLANNED
+                      const bhLocked = bh.status !== "PLANNED";
                       return (
-                        <label key={bh.id} className="flex items-center gap-2 text-[10px] text-text-sec cursor-pointer hover:text-text-pri select-none">
+                        <label
+                          key={bh.id}
+                          className={`flex items-center gap-2 text-[10px] select-none ${
+                            bhLocked
+                              ? "text-text-ter opacity-60 cursor-not-allowed"
+                              : "text-text-sec cursor-pointer hover:text-text-pri"
+                          }`}
+                          title={bhLocked ? "Locked — fieldwork started" : undefined}
+                        >
                           <input
                              type="checkbox"
                              checked={isChecked}
+                             disabled={bhLocked}
                              onChange={() => {
                                if (isChecked) {
                                  setSelectedBoreholeIds(selectedBoreholeIds.filter(id => id !== bh.id));
@@ -5041,7 +5441,10 @@ export default function PortalClient({
                              }}
                              className="accent-rust-mid w-3.5 h-3.5"
                           />
-                          <span>{bh.boreholeCode} · {bh.name || "Unnamed"}</span>
+                          <span>
+                            {bh.boreholeCode} · {bh.name || "Unnamed"}
+                            {bhLocked && <span className="ml-1">🔒</span>}
+                          </span>
                         </label>
                       );
                     })
@@ -5153,7 +5556,7 @@ export default function PortalClient({
       )}
 
       {/* ADD CREW MEMBER MODAL DIALOG */}
-      {showAddCrewMemberModal && (
+      {showAddCrewMemberModal && !crewInvite && (
         <div className="modal-overlay">
           <form className="modal-content" onSubmit={handleAddCrewMemberSubmit}>
             <div className="modal-header">
@@ -5163,18 +5566,14 @@ export default function PortalClient({
                 className="logp-close"
                 onClick={() => {
                   setShowAddCrewMemberModal(null);
-                  setCrewMemberAddError("");
-                  setNewWorkerMobile("");
-                  setOtpSent(false);
-                  setOtpCode("");
-                  setOtpVerified(false);
+                  resetCrewMemberForm();
                 }}
                 aria-label="Close"
               >
                 <RiCloseLine />
               </button>
             </div>
-            
+
             <div className="modal-body bg-bg-raised">
               {crewMemberAddError && (
                 <div className="ib ib-r p-2 text-[10px] font-medium mb-2">
@@ -5183,61 +5582,42 @@ export default function PortalClient({
               )}
 
               <div className="space-y-3">
-                <div className="fg">
-                  <span className="fl">Fieldworker Name</span>
-                  <input
-                    type="text"
-                    className="fi"
-                    value={newWorkerName}
-                    onChange={(e) => setNewWorkerName(e.target.value)}
-                    placeholder="e.g. Ramesh Chandra"
-                    required
-                  />
-                </div>
-                
                 <div className="grid2">
                   <div className="fg">
-                    <span className="fl">Role</span>
-                    <select
-                      className="fs"
-                      value={newWorkerRole}
-                      onChange={(e) => setNewWorkerRole(e.target.value)}
+                    <span className="fl">First Name</span>
+                    <input
+                      type="text"
+                      className="fi"
+                      value={newWorkerFirstName}
+                      onChange={(e) => setNewWorkerFirstName(e.target.value)}
+                      placeholder="e.g. Ramesh"
                       required
-                    >
-                      <option value="Field Supervisor">Field Supervisor</option>
-                      <option value="Driller">Driller</option>
-                      <option value="Helper">Helper</option>
-                      <option value="Geotech Engineer">Geotech Engineer</option>
-                      <option value="Lab Technician">Lab Technician</option>
-                    </select>
+                    />
                   </div>
                   <div className="fg">
-                    <span className="fl">Status</span>
-                    <select
-                      className="fs"
-                      value={newWorkerStatus}
-                      onChange={(e) => setNewWorkerStatus(e.target.value)}
-                      required
-                    >
-                      <option value="On site">On site</option>
-                      <option value="Standby">Standby</option>
-                      <option value="Active">Active</option>
-                      <option value="Lab">Lab</option>
-                    </select>
+                    <span className="fl">Last Name (optional)</span>
+                    <input
+                      type="text"
+                      className="fi"
+                      value={newWorkerLastName}
+                      onChange={(e) => setNewWorkerLastName(e.target.value)}
+                      placeholder="e.g. Chandra"
+                    />
                   </div>
                 </div>
 
                 <div className="fg">
-                  <span className="fl">Mobile Number</span>
+                  <span className="fl">Mobile Number (10-digit, used for app login)</span>
                   <input
                     type="tel"
-                    className="fi"
+                    className="fi font-mono"
                     value={newWorkerMobile}
                     onChange={(e) => setNewWorkerMobile(e.target.value)}
                     placeholder="e.g. 9876543210"
                     required
                   />
                 </div>
+
               </div>
             </div>
 
@@ -5247,12 +5627,7 @@ export default function PortalClient({
                 className="btn btn-w"
                 onClick={() => {
                   setShowAddCrewMemberModal(null);
-                  setCrewMemberAddError("");
-                  setNewWorkerMobile("");
-                  setOtpSent(false);
-                  setOtpCode("");
-                  setOtpVerified(false);
-                  setIsVerificationSkipped(false);
+                  resetCrewMemberForm();
                 }}
                 disabled={memberAddLoading === showAddCrewMemberModal.id}
               >
@@ -5261,14 +5636,7 @@ export default function PortalClient({
               <button
                 type="submit"
                 className="btn btn-p"
-                disabled={
-                  memberAddLoading === showAddCrewMemberModal.id ||
-                  (crewMemberType === "existing" && (() => {
-                    const teamMemberIds = new Set((showAddCrewMemberModal.members || []).map((tm: any) => tm.userId));
-                    const assignableMembers = members.filter((m: any) => !teamMemberIds.has(m.userId));
-                    return assignableMembers.length === 0;
-                  })())
-                }
+                disabled={memberAddLoading === showAddCrewMemberModal.id}
               >
                 {memberAddLoading === showAddCrewMemberModal.id ? "Adding..." : "Add Member"}
               </button>
@@ -5276,6 +5644,116 @@ export default function PortalClient({
           </form>
         </div>
       )}
+
+      {/* CREW INVITE PANEL — WhatsApp onboarding after successful creation */}
+      {showAddCrewMemberModal && crewInvite && (() => {
+        const inviteName = crewInvite.user?.firstName || newWorkerFirstName || "—";
+        const inviteMsg = buildCrewInviteMessage(
+          inviteName,
+          proj?.projectCode ?? "—",
+          proj?.name ?? "—",
+          crewInvite.mobile
+        );
+        const waUrl = waShareUrl(crewInvite.mobile, inviteMsg);
+        const closeInvite = () => {
+          setShowAddCrewMemberModal(null);
+          resetCrewMemberForm();
+        };
+        return (
+          <div className="modal-overlay">
+            <div className="modal-content max-w-[480px]">
+              <div className="modal-header">
+                <span className="modal-title">📨 Invite {inviteName} to the Worker App</span>
+                <button type="button" className="logp-close" onClick={closeInvite} aria-label="Close">
+                  <RiCloseLine />
+                </button>
+              </div>
+
+              <div className="modal-body bg-bg-raised space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-green-d/15 border border-green-d/30 rounded-full flex items-center justify-center shrink-0">
+                    <RiCheckboxCircleLine className="text-[16px] text-green-d" />
+                  </div>
+                  <div className="text-[11px] text-text-sec leading-relaxed">
+                    <b className="text-text-pri">{inviteName}</b> was added to the project and team{" "}
+                    <b className="text-text-pri">{showAddCrewMemberModal.name}</b>.
+                    {crewInvite.isExisting
+                      ? " This mobile number is already activated on GroundLense — they can log in with their existing password."
+                      : " Send them this invite so they can activate their account in the app."}
+                  </div>
+                </div>
+
+                <div className="fg">
+                  <span className="fl">Invite message</span>
+                  <textarea
+                    readOnly
+                    rows={6}
+                    className="fi text-[10px] leading-relaxed"
+                    style={{ resize: "vertical", minHeight: "96px" }}
+                    value={inviteMsg}
+                    onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  {waUrl ? (
+                    <a
+                      href={waUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-s flex-1 flex items-center justify-center gap-1.5 no-underline"
+                    >
+                      <RiWhatsappLine className="text-[13px]" /> Share on WhatsApp
+                    </a>
+                  ) : (
+                    <button type="button" className="btn btn-s flex-1" disabled title="No valid mobile number">
+                      <RiWhatsappLine className="text-[13px]" /> Share on WhatsApp
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-b flex-1 flex items-center justify-center gap-1.5"
+                    onClick={() => {
+                      navigator.clipboard.writeText(inviteMsg);
+                      setInviteMsgCopied(true);
+                      setTimeout(() => setInviteMsgCopied(false), 2000);
+                    }}
+                  >
+                    <RiFileCopyLine className="text-[12px]" /> {inviteMsgCopied ? "Copied ✓" : "Copy message"}
+                  </button>
+                </div>
+
+                {crewInvite.oneTimePassword && (
+                  <div className="bg-bg-card border border-border rounded-md p-2 flex items-center gap-2">
+                    <span className="text-[9px] text-text-ter">
+                      Fallback login code (email/employee-code login) — not needed for mobile activation:
+                    </span>
+                    <span className="font-mono text-[10px] text-amber-d select-all">{crewInvite.oneTimePassword}</span>
+                    <button
+                      type="button"
+                      className="logp-close shrink-0"
+                      title={otpCopied ? "Copied ✓" : "Copy fallback code"}
+                      onClick={() => {
+                        navigator.clipboard.writeText(crewInvite.oneTimePassword as string);
+                        setOtpCopied(true);
+                        setTimeout(() => setOtpCopied(false), 2000);
+                      }}
+                    >
+                      <RiFileCopyLine />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-p" onClick={closeInvite}>
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {/* ROW-LEVEL OTP VERIFICATION MODAL */}
       {verifyingUser && (
         <div className="modal-overlay">
@@ -5386,62 +5864,75 @@ export default function PortalClient({
           </form>
         </div>
       )}
-      {/* ACTIVATION LINK MODAL */}
-      {activationLinkModal && (
-        <div className="modal-overlay">
-          <div className="modal-content max-w-[420px]" style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)", borderRadius: "12px", boxShadow: "0 24px 60px rgba(0,0,0,0.5)" }}>
-            <div className="modal-header">
-              <span className="modal-title">📱 Account Activation Link</span>
-              <button
-                type="button"
-                className="logp-close"
-                onClick={() => setActivationLinkModal(null)}
-              >
-                <RiCloseLine />
-              </button>
-            </div>
-            <div className="modal-body space-y-4">
-              <div className="text-center py-2">
-                <div className="w-12 h-12 bg-green-d/15 border border-green-d/30 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <RiCheckboxCircleLine className="text-2xl text-green-d" />
-                </div>
-                <h3 className="text-xs font-bold text-text-pri uppercase tracking-wider">Crew Member Created!</h3>
-                <p className="text-[11px] text-text-sec mt-1.5 leading-relaxed">
-                  The crew member has been added. Since OTP verification is bypassed, please share this activation link with them to create a password:
-                </p>
-              </div>
-              <div className="fg">
-                <input
-                  type="text"
-                  readOnly
-                  value={activationLinkModal}
-                  className="fi text-xs font-mono select-all bg-bg-card border-white/10"
-                  onClick={(e) => (e.target as HTMLInputElement).select()}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="btn btn-primary flex-1 justify-center text-xs py-2 rounded-lg"
-                  onClick={() => {
-                    navigator.clipboard.writeText(activationLinkModal);
-                    alert("Activation link copied to clipboard!");
-                  }}
-                >
-                  Copy Link
+      {/* "NEW BOREHOLE ASSIGNED" SHARE PANEL — notify the crew on WhatsApp */}
+      {assignShare && (() => {
+        const codes = assignShare.boreholeCodes.join(", ");
+        const shareMsg = buildAssignmentMessage(codes, proj?.projectCode ?? "—");
+        const membersWithMobile = assignShare.members.filter((m) => waPhone(m.mobile));
+        return (
+          <div className="modal-overlay">
+            <div className="modal-content max-w-[440px]">
+              <div className="modal-header">
+                <span className="modal-title">📣 Boreholes Assigned — Notify {assignShare.teamName}</span>
+                <button type="button" className="logp-close" onClick={() => setAssignShare(null)} aria-label="Close">
+                  <RiCloseLine />
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost flex-1 justify-center text-xs py-2 rounded-lg"
-                  onClick={() => setActivationLinkModal(null)}
-                >
+              </div>
+
+              <div className="modal-body bg-bg-raised space-y-3">
+                {assignShare.errors.length > 0 && (
+                  <div className="ib ib-r p-2 text-[10px] font-medium">
+                    {assignShare.errors.map((err, i) => (
+                      <div key={i}>❌ {err}</div>
+                    ))}
+                  </div>
+                )}
+
+                {assignShare.boreholeCodes.length > 0 && (
+                  <>
+                    <div className="text-[11px] text-text-sec leading-relaxed">
+                      Assigned <b className="text-text-pri">{codes}</b> to team{" "}
+                      <b className="text-text-pri">{assignShare.teamName}</b>. Let the crew know on WhatsApp:
+                    </div>
+
+                    <div className="bg-bg-card border border-border rounded-md p-2 text-[10px] text-text-sec leading-relaxed select-all">
+                      {shareMsg}
+                    </div>
+
+                    {membersWithMobile.length === 0 ? (
+                      <div className="empty-state py-3">
+                        No mobile numbers on file for this team.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {membersWithMobile.map((m, i) => (
+                          <div key={i} className="flex items-center justify-between bg-bg-card border border-border rounded-md px-2 py-1.5">
+                            <span className="text-[11px] text-text-pri font-medium">{m.name}</span>
+                            <a
+                              href={waShareUrl(m.mobile, shareMsg) as string}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-s btn-sm text-[9px] py-0.5 px-2 flex items-center gap-1 no-underline"
+                            >
+                              <RiWhatsappLine className="text-[11px]" /> WhatsApp
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-p" onClick={() => setAssignShare(null)}>
                   Done
                 </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

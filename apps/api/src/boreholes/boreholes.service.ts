@@ -9,7 +9,10 @@ import { AssignBoreholeDto } from './dto/assign-borehole.dto';
 import { ActivityLogsService } from 'src/activity-logs/activity-logs.service';
 import { ProjectAccessService } from 'src/common/access/project-access.service';
 import { IntegrityService } from 'src/common/integrity/integrity.service';
-import { BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { BoreholeStatus } from '@prisma/client';
 import { CreateWaterTableDto } from './dto/create-water-table.dto';
 @Injectable()
@@ -20,6 +23,65 @@ export class BoreholesService {
     private readonly access: ProjectAccessService,
     private readonly integrity: IntegrityService,
   ) {}
+
+  /**
+   * Project setup is frozen once fieldwork has started (any borehole beyond
+   * PLANNED): no new boreholes, no member changes. SUPER_ADMIN bypasses.
+   */
+  async assertSetupUnlocked(projectId: string, user: any) {
+    if (this.access.isSuperAdmin(user)) return;
+
+    const started = await this.db.borehole.count({
+      where: {
+        projectId,
+        status: { not: 'PLANNED' },
+      },
+    });
+
+    if (started > 0) {
+      throw new ForbiddenException(
+        'Project setup is locked — fieldwork has already started',
+      );
+    }
+  }
+
+  /** True lock state for the web Setup tab banner (no admin bypass). */
+  async getSetupStatus(projectId: string, user: any) {
+    await this.access.assertProjectAccess(user, projectId);
+
+    const started = await this.db.borehole.count({
+      where: {
+        projectId,
+        status: { not: 'PLANNED' },
+      },
+    });
+
+    return { locked: started > 0 };
+  }
+
+  /**
+   * Boreholes assigned to the calling worker via their team memberships.
+   * Powers the mobile "assigned to you" list and new-assignment notices.
+   */
+  async findAssignedToUser(user: any, projectId?: string) {
+    return this.db.borehole.findMany({
+      where: {
+        ...(projectId ? { projectId } : {}),
+        team: {
+          members: {
+            some: { userId: user.id },
+          },
+        },
+      },
+      include: {
+        team: { select: { id: true, code: true, name: true } },
+        project: {
+          select: { id: true, projectCode: true, name: true },
+        },
+      },
+      orderBy: { boreholeCode: 'asc' },
+    });
+  }
 
   async findByProject(projectId: string, user: any) {
     await this.access.assertProjectAccess(user, projectId);
@@ -52,6 +114,7 @@ export class BoreholesService {
 
   async create(projectId: string, user: any, dto: CreateBoreholeDto) {
     await this.access.assertProjectAccess(user, projectId);
+    await this.assertSetupUnlocked(projectId, user);
 
     const borehole = await this.db.borehole.create({
       data: {
@@ -66,6 +129,10 @@ export class BoreholesService {
         groundLevelRL: dto.groundLevelRL,
 
         plannedDepth: dto.plannedDepth,
+
+        structureType: dto.structureType,
+        chainage: dto.chainage,
+        span: dto.span,
 
         createdByUserId: user.id,
       },
@@ -178,7 +245,21 @@ export class BoreholesService {
   }
 
   async assign(boreholeId: string, user: any, dto: AssignBoreholeDto) {
-    await this.access.assertBoreholeAccess(user, boreholeId);
+    const existing = await this.access.assertBoreholeAccess(
+      user,
+      boreholeId,
+    );
+
+    // A borehole's crew/site can only change while it is still PLANNED —
+    // once fieldwork starts, its setup is frozen.
+    if (
+      existing.status !== 'PLANNED' &&
+      !this.access.isSuperAdmin(user)
+    ) {
+      throw new ForbiddenException(
+        'Assignment is locked — fieldwork on this borehole has started',
+      );
+    }
 
     const borehole = await this.db.borehole.update({
       where: {
@@ -187,6 +268,8 @@ export class BoreholesService {
       data: {
         siteId: dto.siteId,
         teamId: dto.teamId,
+        // Named worker — engineer query threads are raised to this user.
+        assignedWorkerId: dto.assignedWorkerId,
       },
     });
     await this.activityLogsService.log(

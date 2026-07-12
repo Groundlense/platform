@@ -13,6 +13,16 @@ exports.ActivityLogsService = void 0;
 const common_1 = require("@nestjs/common");
 const database_service_1 = require("../database/database.service");
 const project_access_service_1 = require("../common/access/project-access.service");
+const NON_FIELD_ACTIONS = [
+    'LOGIN',
+    'LOGOUT',
+    'REGISTER',
+    'TOKEN_REFRESH',
+    'PASSWORD_RESET',
+    'PASSWORD_CREATED',
+    'OTP_SENT',
+    'OTP_VERIFIED',
+];
 let ActivityLogsService = class ActivityLogsService {
     db;
     access;
@@ -66,7 +76,10 @@ let ActivityLogsService = class ActivityLogsService {
     async findRecent(actor) {
         return this.db.activityLog.findMany({
             take: 20,
-            where: this.orgScopeWhere(actor),
+            where: {
+                ...this.orgScopeWhere(actor),
+                action: { notIn: NON_FIELD_ACTIONS },
+            },
             include: {
                 user: {
                     select: {

@@ -567,10 +567,17 @@ model Borehole {
 
   // ERD Additional Fields
   assignedWorkerId String?
+  // Worker's real GPS at boring start — enables planned-vs-actual deviation
+  actualLat        Decimal?      @db.Decimal(15, 7)
+  actualLng        Decimal?      @db.Decimal(15, 7)
+  actualAccuracyM  Decimal?      @db.Decimal(6, 2)
   method           BoringMethod?
   rigType          String?
   startDepth       Decimal?      @db.Decimal(10, 2)
   lockedAt         DateTime?
+  structureType    String?
+  chainage         String?
+  span             String?
 
   project        Project      @relation(fields: [projectId], references: [id])
   createdBy      User         @relation("BoreholeCreator", fields: [createdByUserId], references: [id])
@@ -712,6 +719,9 @@ model Media {
   gpsLat       Decimal?         @db.Decimal(10, 8)
   gpsLng       Decimal?         @db.Decimal(11, 8)
   accuracyM    Decimal?         @db.Decimal(5, 2)
+  // Device capture time from the mobile photo queue (createdAt is only the
+  // upload/sync time, which can be hours later when the crew was offline).
+  takenAt      DateTime?
   sha256Hash   String?
 
   interval   BoreholeInterval? @relation(fields: [intervalId], references: [id])

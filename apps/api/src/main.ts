@@ -34,6 +34,14 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   await app.listen(process.env.PORT || 8000);
+
+  // Keep sockets open longer than any client-side connection pool (the
+  // mobile app's HTTP stack reuses idle sockets for up to 5 minutes).
+  // Node's 5s default made the server close sockets the app was about to
+  // reuse, surfacing as intermittent "Network Error" on sync.
+  const server = app.getHttpServer();
+  server.keepAliveTimeout = 310_000;
+  server.headersTimeout = 315_000;
 }
 
 bootstrap();

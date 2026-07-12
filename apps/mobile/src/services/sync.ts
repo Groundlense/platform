@@ -1,5 +1,53 @@
 import { api } from './api';
 import { storage, SyncOperation } from './storage';
+import { media, QueuedPhoto } from './media';
+import { API_BASE_URL } from '../config';
+
+export interface SyncResult {
+  success: boolean;
+  processedCount: number;
+  error?: string;
+  /** Photos uploaded to the server during this sync round (additive field). */
+  photosUploaded?: number;
+  /** Photos still queued locally after this sync round (additive field). */
+  photosPending?: number;
+}
+
+/**
+ * Uploads one queued photo to POST /intervals/:serverIntervalId/media.
+ * Uses fetch (NOT the axios client) so React Native handles the multipart
+ * body natively without transformRequest interference.
+ */
+async function uploadQueuedPhoto(
+  photo: QueuedPhoto,
+  serverIntervalId: string,
+  token: string
+): Promise<boolean> {
+  const form = new FormData();
+  form.append('file', {
+    uri: photo.uri,
+    name: photo.fileName,
+    type: photo.mimeType,
+  } as any);
+
+  // Real GPS stamp captured with the photo (omitted when GPS was unavailable)
+  if (photo.gpsLat != null && photo.gpsLng != null) {
+    form.append('gpsLat', String(photo.gpsLat));
+    form.append('gpsLng', String(photo.gpsLng));
+    if (photo.accuracyM != null) form.append('accuracyM', String(photo.accuracyM));
+  }
+  form.append('purpose', photo.purpose);
+  if (photo.takenAt) form.append('takenAt', photo.takenAt);
+
+  const response = await fetch(`${API_BASE_URL}/intervals/${serverIntervalId}/media`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: form,
+  });
+  return response.ok;
+}
 
 /**
  * Returns true if this cached item still has an unsynced operation in the
@@ -64,6 +112,11 @@ function mergeServerWithLocal(
   return merged;
 }
 
+// Dedupes overlapping sync triggers (15s interval, foreground event, manual
+// screen submits): concurrent callers share the same in-flight round instead
+// of racing each other's sockets and queue writes.
+let syncInFlight: Promise<SyncResult> | null = null;
+
 export const syncManager = {
   /**
    * Main sync function: pushes local edits to server, and pulls down fresh data.
@@ -71,7 +124,17 @@ export const syncManager = {
    * queue; FAILED operations stay queued with their error attached, so one
    * bad operation never blocks (or destroys) the rest.
    */
-  async syncWithServer(): Promise<{ success: boolean; processedCount: number; error?: string }> {
+  async syncWithServer(): Promise<SyncResult> {
+    if (syncInFlight) return syncInFlight;
+    const round = this.runSyncRound().finally(() => {
+      syncInFlight = null;
+    });
+    syncInFlight = round;
+    return round;
+  },
+
+  /** One full push+pull+photos round. Call syncWithServer(), which dedupes. */
+  async runSyncRound(): Promise<SyncResult> {
     try {
       // 1. Push the local queue
       const queue = await storage.getSyncQueue();
@@ -173,10 +236,48 @@ export const syncManager = {
         }
       }
 
+      // 3. Upload queued photos. This runs AFTER push+pull so that the
+      // interval cache now holds SERVER interval ids (UUIDs) for anything
+      // that was just upserted by (boreholeId, intervalNo). Photos whose
+      // interval has no server id yet simply stay queued for the next round.
+      let photosUploaded = 0;
+      const photoQueue = await media.getPhotoQueue();
+      if (photoQueue.length > 0) {
+        const token = await storage.getToken();
+        if (token) {
+          for (const photo of photoQueue) {
+            try {
+              const intervals = await storage.getIntervals(photo.boreholeId);
+              const serverInterval = intervals.find(
+                (iv: any) =>
+                  iv.intervalNo === photo.intervalNo &&
+                  typeof iv.id === 'string' &&
+                  iv.id.length > 0 &&
+                  !iv.id.startsWith('interval-')
+              );
+              if (!serverInterval) continue; // not on server yet — keep queued
+              const ok = await uploadQueuedPhoto(photo, serverInterval.id, token);
+              if (ok) {
+                await media.removePhoto(photo.id);
+                photosUploaded++;
+              } else {
+                console.warn(`[Sync] Photo upload rejected for ${photo.fileName}; kept in queue`);
+              }
+            } catch (photoErr) {
+              // Network/IO failure — photo stays queued for the next sync
+              console.warn(`[Sync] Photo upload failed for ${photo.fileName}:`, photoErr);
+            }
+          }
+        }
+      }
+      const photosPending = (await media.getPhotoQueue()).length;
+
       return {
         success: failedCount === 0,
         processedCount,
         error: pushError,
+        photosUploaded,
+        photosPending,
       };
     } catch (error: any) {
       console.error('Sync failed:', error);

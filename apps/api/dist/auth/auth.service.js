@@ -776,6 +776,9 @@ let AuthService = class AuthService {
         if (!user) {
             throw new common_1.NotFoundException('User account with this mobile number not found');
         }
+        if (user.mobileVerified || user.lastLoginAt) {
+            throw new common_1.BadRequestException('Account is already active — use reset password instead');
+        }
         const passwordHash = await bcrypt.hash(password, 10);
         await this.db.user.update({
             where: { id: user.id },

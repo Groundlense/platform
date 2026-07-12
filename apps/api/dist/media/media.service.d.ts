@@ -5,8 +5,15 @@ export declare class MediaService {
     private readonly db;
     private readonly activityLogsService;
     private readonly access;
+    private readonly logger;
     constructor(db: DatabaseService, activityLogsService: ActivityLogsService, access: ProjectAccessService);
-    create(intervalId: string, file: Express.Multer.File, user: any): Promise<{
+    create(intervalId: string, file: Express.Multer.File, user: any, meta?: {
+        gpsLat?: string;
+        gpsLng?: string;
+        accuracyM?: string;
+        purpose?: string;
+        takenAt?: string;
+    }): Promise<{
         id: string;
         createdAt: Date;
         gpsLat: import("@prisma/client/runtime/library").Decimal | null;
@@ -19,10 +26,11 @@ export declare class MediaService {
         filePath: string;
         mimeType: string;
         mediaType: import("@prisma/client").$Enums.MediaType;
+        uploadedByUserId: string;
         photoType: import("@prisma/client").$Enums.PhotoType | null;
         thumbnailUrl: string | null;
         accuracyM: import("@prisma/client/runtime/library").Decimal | null;
-        uploadedByUserId: string;
+        takenAt: Date | null;
     }>;
     getByInterval(intervalId: string, user: any): Promise<{
         id: string;
@@ -37,10 +45,11 @@ export declare class MediaService {
         filePath: string;
         mimeType: string;
         mediaType: import("@prisma/client").$Enums.MediaType;
+        uploadedByUserId: string;
         photoType: import("@prisma/client").$Enums.PhotoType | null;
         thumbnailUrl: string | null;
         accuracyM: import("@prisma/client/runtime/library").Decimal | null;
-        uploadedByUserId: string;
+        takenAt: Date | null;
     }[]>;
     getFile(mediaId: string, user: any): Promise<{
         media: {
@@ -56,10 +65,11 @@ export declare class MediaService {
             filePath: string;
             mimeType: string;
             mediaType: import("@prisma/client").$Enums.MediaType;
+            uploadedByUserId: string;
             photoType: import("@prisma/client").$Enums.PhotoType | null;
             thumbnailUrl: string | null;
             accuracyM: import("@prisma/client/runtime/library").Decimal | null;
-            uploadedByUserId: string;
+            takenAt: Date | null;
         };
         absolutePath: string;
     }>;

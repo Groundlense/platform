@@ -13,7 +13,8 @@ import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
 import { api } from '../services/api';
-import MockCameraModal from '../components/MockCameraModal';
+import { media } from '../services/media';
+import { location, GpsFix } from '../services/location';
 
 const SPT_INTERVAL_M = 1.5;
 
@@ -36,10 +37,7 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
   const [weather, setWeather] = useState('Clear');
   const [starting, setStarting] = useState(false);
   
-  const [cameraVisible, setCameraVisible] = useState(false);
   const [rigPhotoCaptured, setRigPhotoCaptured] = useState(false);
-  const [rigPhotoBase64, setRigPhotoBase64] = useState<string | null>(null);
-  const [rigPhotoFilename, setRigPhotoFilename] = useState<string | null>(null);
 
   // Real resume context — computed from sessions/intervals, never invented
   const [resumeDepth, setResumeDepth] = useState(0);
@@ -51,6 +49,40 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
   const plannedLat = toNum(borehole?.latitude);
   const plannedLng = toNum(borehole?.longitude);
   const hasPlannedCoords = plannedLat !== null && plannedLng !== null;
+
+  // Live GPS tracker — guides the worker to the planned point
+  const [gpsFix, setGpsFix] = useState<GpsFix | null>(null);
+  const [gpsSearching, setGpsSearching] = useState(true);
+
+  useEffect(() => {
+    let watchId: number | null = null;
+    let cancelled = false;
+    (async () => {
+      watchId = await location.watchPosition((fix) => {
+        if (!cancelled) {
+          setGpsFix(fix);
+          setGpsSearching(false);
+        }
+      });
+      if (watchId === null && !cancelled) setGpsSearching(false);
+    })();
+    return () => {
+      cancelled = true;
+      location.clearWatch(watchId);
+    };
+  }, []);
+
+  const distanceM =
+    gpsFix && hasPlannedCoords
+      ? location.distanceMeters(gpsFix.lat, gpsFix.lng, plannedLat!, plannedLng!)
+      : null;
+  const bearing =
+    gpsFix && hasPlannedCoords
+      ? location.bearingDegrees(gpsFix.lat, gpsFix.lng, plannedLat!, plannedLng!)
+      : null;
+  // "Arrived" once within 30 m or within the GPS accuracy radius
+  const arriveRadius = Math.max(30, gpsFix?.accuracyM ?? 0);
+  const atLocation = distanceM !== null && distanceM <= arriveRadius;
 
   useEffect(() => {
     if (borehole?.id) {
@@ -102,9 +134,30 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
   const startDepth = resuming ? resumeDepth : 0;
   const nextIntervalNo = Math.floor(startDepth / SPT_INTERVAL_M) + 1;
 
+  // Real camera capture — queued locally, uploaded on sync once the first
+  // interval of this session exists on the server.
+  const handleRigPhoto = async () => {
+    const shot = await media.capturePhoto('SITE_SETUP');
+    if (!shot) return; // cancelled / unavailable / denied — honest Alert already shown
+    await media.queuePhoto({
+      boreholeId: borehole.id,
+      intervalNo: nextIntervalNo,
+      purpose: 'SITE_SETUP',
+      uri: shot.uri,
+      fileName: shot.fileName,
+      mimeType: shot.type,
+      gpsLat: shot.gpsLat,
+      gpsLng: shot.gpsLng,
+      accuracyM: shot.accuracyM,
+      takenAt: new Date().toISOString(),
+    });
+    setRigPhotoCaptured(true);
+  };
+
   const handleOpenMaps = () => {
     if (!hasPlannedCoords) return;
-    const url = `https://www.google.com/maps/search/?api=1&query=${plannedLat},${plannedLng}`;
+    // Turn-by-turn navigation to the planned point
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${plannedLat},${plannedLng}&travelmode=walking`;
     Linking.openURL(url).catch(() => {
       Alert.alert('Error', 'Could not open Google Maps on this device.');
     });
@@ -112,8 +165,27 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
 
   const handleStartBoring = async () => {
     if (starting) return;
+
+    // Far from the planned point? Confirm before starting — the deviation
+    // is recorded either way, never hidden.
+    if (distanceM !== null && distanceM > 100) {
+      const proceed = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          'Away from planned point / नियोजित स्थान से दूर',
+          `You appear to be ${location.formatDistance(distanceM)} from the planned borehole location. Start anyway? The deviation will be recorded. / आप नियोजित स्थान से ${location.formatDistance(distanceM)} दूर हैं। फिर भी शुरू करें?`,
+          [
+            { text: 'Cancel / रद्द करें', onPress: () => resolve(false) },
+            { text: 'Start anyway / फिर भी शुरू करें', onPress: () => resolve(true) },
+          ],
+        );
+      });
+      if (!proceed) return;
+    }
+
     setStarting(true);
     try {
+      // Freshest available arrival position (watch fix, else one-shot)
+      const arrivalFix = gpsFix ?? (await location.getCurrentPosition({ silent: true }));
       // Try to open a real server session; fall back to a local-only record offline
       let sessionId = `sess-${Date.now()}`;
       try {
@@ -152,35 +224,28 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
       sessions.push(newSession);
       await storage.saveBoringSessions(borehole.id, sessions);
 
-      // Queue sync actions
+      // Queue sync actions — the worker's real arrival GPS travels with the
+      // status update so the portal can show planned-vs-actual deviation.
       await syncManager.queueOperation(
         'BORING',
         borehole.id,
         'UPDATE',
-        { status: 'IN_PROGRESS', weather },
+        {
+          status: 'IN_PROGRESS',
+          weather,
+          ...(arrivalFix
+            ? {
+                actualLat: arrivalFix.lat,
+                actualLng: arrivalFix.lng,
+                actualAccuracyM: arrivalFix.accuracyM ?? undefined,
+              }
+            : {}),
+        },
         sessionId
       );
 
-      // Upload captured rig photo
-      if (rigPhotoBase64 && rigPhotoFilename) {
-        const intervalId = `interval-${borehole.id}-${nextIntervalNo}`;
-        try {
-          await api.uploadMedia(intervalId, rigPhotoBase64, rigPhotoFilename);
-        } catch (apiErr) {
-          await syncManager.queueOperation(
-            'PHOTO',
-            `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            'CREATE',
-            {
-              intervalId,
-              fileName: rigPhotoFilename,
-              mimeType: 'image/jpeg',
-              base64Data: rigPhotoBase64,
-            },
-            sessionId
-          );
-        }
-      }
+      // The rig photo (if captured) is already in the photo queue and
+      // uploads automatically on sync once the first interval syncs.
 
       // Navigate to SPT entry loop screen
       navigation.replace('SPTEntry', {
@@ -311,22 +376,56 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
           </TouchableOpacity>
         </View>
 
-        {/* Honest GPS notice — no GPS module installed in this build */}
-        <View style={styles.infoBoxAmber}>
-          <Text style={styles.infoBoxAmberTitle}>
-            GPS auto-capture coming soon / GPS जल्द आ रहा है
-          </Text>
-          <Text style={styles.infoBoxAmberSub}>
-            GPS auto-capture requires the device app build with location permissions. Use Open
-            Google Maps to navigate to the planned point.
-          </Text>
-        </View>
+        {/* Live GPS tracker — real device position vs the planned point */}
+        {hasPlannedCoords && (
+          <View style={[styles.trackerCard, atLocation && styles.trackerCardOk]}>
+            {gpsFix && distanceM !== null ? (
+              atLocation ? (
+                <>
+                  <Text style={styles.trackerOkTitle}>✓ You are at the borehole location / आप सही स्थान पर हैं</Text>
+                  <Text style={styles.trackerSub}>
+                    {location.formatDistance(distanceM)} from planned point · GPS ±
+                    {gpsFix.accuracyM != null ? Math.round(gpsFix.accuracyM) : '—'}m
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <View style={styles.trackerRow}>
+                    <Text style={styles.trackerArrow}>
+                      {bearing !== null ? location.compassLabel(bearing).arrow : '•'}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.trackerDistance}>
+                        {location.formatDistance(distanceM)} away / दूर
+                      </Text>
+                      {bearing !== null && (
+                        <Text style={styles.trackerDirection}>
+                          Walk {location.compassLabel(bearing).en} / {location.compassLabel(bearing).hi} जाएँ
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                  <Text style={styles.trackerSub}>
+                    You: {gpsFix.lat.toFixed(6)}, {gpsFix.lng.toFixed(6)} · GPS ±
+                    {gpsFix.accuracyM != null ? Math.round(gpsFix.accuracyM) : '—'}m — updates live
+                  </Text>
+                </>
+              )
+            ) : gpsSearching ? (
+              <Text style={styles.trackerSearching}>📡 Getting GPS fix… move to open sky / GPS खोज रहा है…</Text>
+            ) : (
+              <Text style={styles.trackerSearching}>
+                GPS unavailable — allow location permission and move to open sky / GPS उपलब्ध नहीं — लोकेशन अनुमति दें
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Rig photo */}
         <Text style={styles.fieldLabel}>Rig photo / रिग की फोटो</Text>
         <TouchableOpacity
           style={[styles.cameraBtn, rigPhotoCaptured && styles.cameraBtnDone]}
-          onPress={() => setCameraVisible(true)}
+          onPress={handleRigPhoto}
         >
           <Text style={[styles.cameraBtnText, rigPhotoCaptured && styles.cameraBtnTextDone]}>
             {rigPhotoCaptured ? '✓ Rig Photo Captured / फोटो ले लिया गया' : '📷 Capture Rig Photo / रिग की फोटो लें'}
@@ -362,19 +461,6 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Simulated Viewfinder Overlay */}
-      <MockCameraModal
-        visible={cameraVisible}
-        onClose={() => setCameraVisible(false)}
-        onCapture={(base64, filename) => {
-          setRigPhotoCaptured(true);
-          setRigPhotoBase64(base64);
-          setRigPhotoFilename(filename);
-        }}
-        boreholeCode={borehole.boreholeCode}
-        depth={startDepth}
-        photoType="Rig Photo"
-      />
     </View>
   );
 }
@@ -391,11 +477,12 @@ const styles = StyleSheet.create({
   },
   headerTitleRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 19,
+    fontSize: 21,
     fontWeight: '700',
     color: colors.white,
   },
@@ -406,12 +493,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -428,7 +515,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.grayDark,
     textAlign: 'center',
@@ -443,23 +530,24 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   resumeTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.amber,
     marginBottom: 6,
   },
   resumeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 3,
   },
   resumeLbl: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
   },
   resumeVal: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.grayDark,
     flexShrink: 1,
@@ -469,9 +557,60 @@ const styles = StyleSheet.create({
     color: colors.rust,
   },
   resumeAuto: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayMid,
     marginTop: 4,
+  },
+  trackerCard: {
+    backgroundColor: colors.amberLight,
+    borderWidth: 1,
+    borderColor: colors.amber,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  trackerCardOk: {
+    backgroundColor: colors.greenLight,
+    borderColor: colors.greenMid,
+  },
+  trackerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 12,
+  },
+  trackerArrow: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: colors.amber,
+    width: 44,
+    textAlign: 'center',
+  },
+  trackerDistance: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.grayDark,
+  },
+  trackerDirection: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.amber,
+    marginTop: 2,
+  },
+  trackerOkTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.greenDark,
+  },
+  trackerSub: {
+    fontSize: 14,
+    color: colors.grayMid,
+    marginTop: 6,
+  },
+  trackerSearching: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.amber,
   },
   locationCard: {
     backgroundColor: colors.blueLight,
@@ -482,18 +621,18 @@ const styles = StyleSheet.create({
     borderColor: '#85B7EB',
   },
   locationTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.blueDark,
   },
   locationCoords: {
     fontFamily: typography.fontFamilyMono,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.blueDark,
     marginTop: 4,
   },
   locationMissing: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginTop: 4,
   },
@@ -509,7 +648,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.grayBorder,
   },
   mapBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.white,
     fontWeight: '700',
   },
@@ -522,17 +661,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   infoBoxAmberTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.amber,
   },
   infoBoxAmberSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginTop: 2,
   },
   fieldLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginBottom: 4,
     marginTop: 8,
@@ -552,7 +691,7 @@ const styles = StyleSheet.create({
     borderColor: colors.greenMid,
   },
   cameraBtnText: {
-    fontSize: 15,
+    fontSize: 17,
     color: colors.grayDark,
     fontWeight: '700',
   },
@@ -561,6 +700,7 @@ const styles = StyleSheet.create({
   },
   horizontalRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 4,
     marginBottom: 16,
@@ -580,7 +720,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   tileQuarterText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayDark,
     fontWeight: '600',
   },
@@ -599,7 +739,7 @@ const styles = StyleSheet.create({
   },
   startBtnText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
 });

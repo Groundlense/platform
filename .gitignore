@@ -11,7 +11,8 @@ coverage
 .DS_Store
 *.log
 pnpm-lock.yaml
-uploads/*
-!uploads/.gitkeep
+# Field photo uploads (any depth) — evidence files never belong in git
+**/uploads/*
+!**/uploads/.gitkeep
 # database dumps
 backup.sql

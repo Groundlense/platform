@@ -15,6 +15,7 @@ const class_validator_1 = require("class-validator");
 class AssignBoreholeDto {
     siteId;
     teamId;
+    assignedWorkerId;
 }
 exports.AssignBoreholeDto = AssignBoreholeDto;
 __decorate([
@@ -35,4 +36,12 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], AssignBoreholeDto.prototype, "teamId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Field worker responsible for this borehole — receives engineer query threads',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], AssignBoreholeDto.prototype, "assignedWorkerId", void 0);
 //# sourceMappingURL=assign-borehole.dto.js.map

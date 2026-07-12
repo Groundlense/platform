@@ -5,4 +5,7 @@ export declare class CreateBoreholeDto {
     longitude?: string;
     groundLevelRL?: string;
     plannedDepth?: string;
+    structureType?: string;
+    chainage?: string;
+    span?: string;
 }

@@ -202,6 +202,19 @@ export class SyncService {
       }
     }
 
+    // Worker's real GPS at boring start — enables planned-vs-actual
+    // deviation on the portals. Only accepted as a pair.
+    if (
+      Number.isFinite(Number(payload.actualLat)) &&
+      Number.isFinite(Number(payload.actualLng))
+    ) {
+      data.actualLat = Number(payload.actualLat);
+      data.actualLng = Number(payload.actualLng);
+      if (Number.isFinite(Number(payload.actualAccuracyM))) {
+        data.actualAccuracyM = Number(payload.actualAccuracyM);
+      }
+    }
+
     if (Object.keys(data).length === 0) {
       // Nothing materializable (e.g. review-thread replies until that
       // module exists); the payload stays recorded on the operation row.

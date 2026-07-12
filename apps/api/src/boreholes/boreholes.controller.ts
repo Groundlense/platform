@@ -68,6 +68,34 @@ export class BoreholesController {
     return this.boreholesService.findByProject(projectId, user);
   }
 
+  // Boreholes assigned to the calling worker via team membership.
+  // NOTE: registered before 'boreholes/:id' so "assigned" isn't matched as an id.
+  @Permissions('BOREHOLE_VIEW')
+  @Get('boreholes/assigned')
+  findAssigned(
+    @Query('projectId')
+    projectId: string | undefined,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService.findAssignedToUser(user, projectId);
+  }
+
+  // Whether project setup (boreholes/members/assignments) is frozen because
+  // fieldwork has started — drives the web Setup tab lock banner.
+  @Permissions('PROJECT_VIEW')
+  @Get('projects/:projectId/setup-status')
+  getSetupStatus(
+    @Param('projectId')
+    projectId: string,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService.getSetupStatus(projectId, user);
+  }
+
   @Permissions('BOREHOLE_VIEW')
   @Get('boreholes/:id')
   findOne(

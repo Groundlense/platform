@@ -11,8 +11,7 @@ import {
 import { colors } from '../utils/theme';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
-import { api } from '../services/api';
-import MockCameraModal from '../components/MockCameraModal';
+import { media } from '../services/media';
 
 const WEATHERING_GRADES = [
   { key: 'FRESH', en: 'Fresh', hi: 'ताज़ा' },
@@ -32,29 +31,26 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
   const [rqdPieces, setRqdPieces] = useState(''); // sum of pieces >= 10cm in cm
   const [weathering, setWeathering] = useState<string | null>(null);
 
-  const [cameraVisible, setCameraVisible] = useState(false);
   const [photoCaptured, setPhotoCaptured] = useState(false);
 
-  const handleCapturePhoto = async (base64Data: string, filename: string) => {
+  // Real camera capture — photo is queued locally and uploaded on sync
+  // once this interval exists on the server.
+  const handleTakePhoto = async () => {
+    const shot = await media.capturePhoto('CORE_BOX');
+    if (!shot) return; // cancelled / unavailable / denied — honest Alert already shown
+    await media.queuePhoto({
+      boreholeId: borehole.id,
+      intervalNo,
+      purpose: 'CORE_BOX',
+      uri: shot.uri,
+      fileName: shot.fileName,
+      mimeType: shot.type,
+      gpsLat: shot.gpsLat,
+      gpsLng: shot.gpsLng,
+      accuracyM: shot.accuracyM,
+      takenAt: new Date().toISOString(),
+    });
     setPhotoCaptured(true);
-
-    const intervalId = `interval-${borehole.id}-${intervalNo}`;
-    try {
-      await api.uploadMedia(intervalId, base64Data, filename);
-    } catch {
-      await syncManager.queueOperation(
-        'PHOTO',
-        `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        'CREATE',
-        {
-          intervalId,
-          fileName: filename,
-          mimeType: 'image/jpeg',
-          base64Data,
-        },
-        sessionId
-      );
-    }
   };
 
   // Missing navigation params — never fabricate a borehole.
@@ -65,7 +61,7 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
           <Text style={styles.headerTitle}>Rock Coring</Text>
         </View>
         <View style={{ padding: 24 }}>
-          <Text style={{ fontSize: 16, color: colors.redMid, fontWeight: '700' }}>
+          <Text style={{ fontSize: 18, color: colors.redMid, fontWeight: '700' }}>
             Boring data missing — reopen from the boring list. / डेटा नहीं मिला — सूची से दोबारा खोलें।
           </Text>
           <TouchableOpacity style={[styles.saveBtn, { marginTop: 16 }]} onPress={() => navigation.goBack()}>
@@ -106,6 +102,24 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
       return;
     }
 
+    // Never block on the photo when the device has no camera, but if one
+    // exists, ask before saving the run without a core-box photo.
+    if (!photoCaptured && !media.isCameraKnownUnavailable()) {
+      Alert.alert(
+        'No photo attached / फोटो नहीं ली गई',
+        'Take the core box photo before saving this run? / रन सुरक्षित करने से पहले कोर बॉक्स फोटो लें?',
+        [
+          { text: '📷 Take photo / फोटो लें', onPress: () => { handleTakePhoto(); } },
+          { text: 'Continue without photo / बिना फोटो जारी रखें', onPress: () => { performSave(); } },
+        ]
+      );
+      return;
+    }
+
+    await performSave();
+  };
+
+  const performSave = async () => {
     const grade = WEATHERING_GRADES.find((g) => g.key === weathering);
     const runMeters = run / 100;
     const nextDepth = Math.round((currentDepth + runMeters) * 100) / 100;
@@ -261,13 +275,15 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
           />
         </View>
 
-        {/* Core box photo — camera module not yet integrated */}
+        {/* Core box photo — opens the real device camera */}
         <TouchableOpacity
           style={[styles.photoBtn, photoCaptured && styles.photoBtnDone]}
-          onPress={() => setCameraVisible(true)}
+          onPress={handleTakePhoto}
         >
           <Text style={[styles.photoBtnText, photoCaptured && styles.photoBtnTextDone]}>
-            {photoCaptured ? '✓ Core Box Photo Captured / फोटो ले लिया गया' : '📷 Core Box Photo / कोर बॉक्स फोटो'}
+            {photoCaptured
+              ? '✓ Photo captured — uploads on sync / फोटो ली गई'
+              : '📷 Core Box Photo / कोर बॉक्स फोटो'}
           </Text>
         </TouchableOpacity>
 
@@ -291,16 +307,6 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
           <Text style={styles.saveBtnText}>Save Run & Continue / सुरक्षित करें →</Text>
         </TouchableOpacity>
       </ScrollView>
-
-      {/* Simulated Viewfinder Overlay */}
-      <MockCameraModal
-        visible={cameraVisible}
-        onClose={() => setCameraVisible(false)}
-        onCapture={handleCapturePhoto}
-        boreholeCode={borehole.boreholeCode}
-        depth={currentDepth}
-        photoType="Core Box Photo"
-      />
     </View>
   );
 }
@@ -317,11 +323,12 @@ const styles = StyleSheet.create({
   },
   headerTitleRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 19,
+    fontSize: 21,
     fontWeight: '700',
     color: colors.white,
   },
@@ -332,12 +339,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -352,12 +359,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   rockVal: {
-    fontSize: 19,
+    fontSize: 21,
     fontWeight: '700',
     color: '#FAC775',
   },
   rockSub: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayBorder,
     marginTop: 2,
   },
@@ -365,7 +372,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   fieldLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginBottom: 4,
   },
@@ -389,7 +396,7 @@ const styles = StyleSheet.create({
     borderColor: colors.grayDark,
   },
   weatherTileText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.grayDark,
   },
@@ -410,7 +417,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greenLight,
   },
   photoBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.greenMid,
     fontWeight: '700',
   },
@@ -424,7 +431,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 15,
+    fontSize: 17,
     color: colors.grayDark,
   },
   calcResults: {
@@ -437,6 +444,7 @@ const styles = StyleSheet.create({
   },
   calcRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingVertical: 4,
     borderBottomWidth: 0.5,
@@ -446,16 +454,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   calcLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
   },
   calcVal: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.rust,
   },
   ratingVal: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.greenMid,
   },
@@ -470,7 +478,7 @@ const styles = StyleSheet.create({
   },
   saveBtnText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
 });

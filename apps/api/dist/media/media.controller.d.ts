@@ -3,7 +3,13 @@ import { MediaService } from './media.service';
 export declare class MediaController {
     private readonly mediaService;
     constructor(mediaService: MediaService);
-    upload(intervalId: string, file: Express.Multer.File, user: any): Promise<{
+    upload(intervalId: string, file: Express.Multer.File, user: any, body: {
+        gpsLat?: string;
+        gpsLng?: string;
+        accuracyM?: string;
+        purpose?: string;
+        takenAt?: string;
+    }): Promise<{
         id: string;
         createdAt: Date;
         gpsLat: import("@prisma/client/runtime/library").Decimal | null;
@@ -16,10 +22,11 @@ export declare class MediaController {
         filePath: string;
         mimeType: string;
         mediaType: import("@prisma/client").$Enums.MediaType;
+        uploadedByUserId: string;
         photoType: import("@prisma/client").$Enums.PhotoType | null;
         thumbnailUrl: string | null;
         accuracyM: import("@prisma/client/runtime/library").Decimal | null;
-        uploadedByUserId: string;
+        takenAt: Date | null;
     }>;
     getMedia(intervalId: string, user: any): Promise<{
         id: string;
@@ -34,10 +41,11 @@ export declare class MediaController {
         filePath: string;
         mimeType: string;
         mediaType: import("@prisma/client").$Enums.MediaType;
+        uploadedByUserId: string;
         photoType: import("@prisma/client").$Enums.PhotoType | null;
         thumbnailUrl: string | null;
         accuracyM: import("@prisma/client/runtime/library").Decimal | null;
-        uploadedByUserId: string;
+        takenAt: Date | null;
     }[]>;
     getFile(mediaId: string, user: any, res: Response): Promise<void>;
 }

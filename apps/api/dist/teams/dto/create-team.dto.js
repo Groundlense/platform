@@ -16,6 +16,7 @@ class CreateTeamDto {
     code;
     name;
     description;
+    projectId;
 }
 exports.CreateTeamDto = CreateTeamDto;
 __decorate([
@@ -43,4 +44,13 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateTeamDto.prototype, "description", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Associated project ID (optional)',
+        example: 'd9b0f7e1-8a5f-4a6f-a5b6-7c8d9e0f1a2b',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateTeamDto.prototype, "projectId", void 0);
 //# sourceMappingURL=create-team.dto.js.map

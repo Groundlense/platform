@@ -18,7 +18,7 @@ export declare class TeamsController {
         supervisorUserId: string | null;
         notificationSent: boolean;
     }>;
-    getTeams(organizationId: string, user: any): Promise<({
+    getTeams(organizationId: string, projectId: string | undefined, user: any): Promise<({
         members: ({
             user: {
                 firstName: string;

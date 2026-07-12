@@ -232,19 +232,19 @@ const styles = StyleSheet.create({
     maxHeight: '90%',
   },
   popupTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.redMid,
     textAlign: 'center',
   },
   popupSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     textAlign: 'center',
     marginBottom: 10,
   },
   fieldLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginBottom: 4,
     marginTop: 6,
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   tileHalfText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.grayDark,
   },
@@ -279,12 +279,13 @@ const styles = StyleSheet.create({
     color: colors.amber,
   },
   tileHalfSub: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayMid,
     marginTop: 2,
   },
   horizontalRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 6,
     marginBottom: 10,
@@ -309,7 +310,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   tileText: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.grayDark,
     textAlign: 'center',
@@ -327,13 +328,14 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   infoBoxRedTitle: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.redMid,
     textAlign: 'center',
   },
   btnRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginTop: 10,
   },
@@ -347,7 +349,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.grayDark,
   },
   submitBtn: {
@@ -358,7 +360,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.white,
     fontWeight: '700',
   },
