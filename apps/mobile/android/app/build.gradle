@@ -77,15 +77,23 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    externalNativeBuild {
-        cmake {
-            buildStagingDirectory = "C:/tmp/gl-cxx"
+    // Windows only: CMake's generated object paths inside the deep monorepo
+    // checkout exceed the 260-char MAX_PATH limit, so stage the native build
+    // in a short root-level path (auto-created). macOS/Linux have no such
+    // limit and use the default location.
+    if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+        externalNativeBuild {
+            cmake {
+                buildStagingDirectory = "${System.getenv('SystemDrive') ?: 'C:'}/tmp/gl-cxx"
+            }
         }
     }
 
+    // namespace stays com.mobile (source package layout); applicationId is
+    // the Play Store identity and is permanent after first upload.
     namespace "com.mobile"
     defaultConfig {
-        applicationId "com.mobile"
+        applicationId "com.groundlense.worker"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -98,15 +106,29 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            // Upload-key credentials live OUTSIDE the repo in
+            // ~/.gradle/gradle.properties (never commit them). The keystore
+            // file itself is gitignored.
+            if (project.hasProperty('GROUNDLENSE_UPLOAD_STORE_FILE')) {
+                storeFile file(GROUNDLENSE_UPLOAD_STORE_FILE)
+                storePassword GROUNDLENSE_UPLOAD_STORE_PASSWORD
+                keyAlias GROUNDLENSE_UPLOAD_KEY_ALIAS
+                keyPassword GROUNDLENSE_UPLOAD_KEY_PASSWORD
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Falls back to the debug key ONLY when no upload key is
+            // configured (e.g. CI smoke builds) — Play rejects that signature,
+            // so a real store upload cannot happen by accident.
+            signingConfig project.hasProperty('GROUNDLENSE_UPLOAD_STORE_FILE')
+                ? signingConfigs.release
+                : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
