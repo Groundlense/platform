@@ -4,6 +4,19 @@ import { DatabaseService } from '../database/database.service';
 
 import { ProjectAccessService } from '../common/access/project-access.service';
 
+// Auth/session bookkeeping — excluded from the live field feed, which should
+// only show what is actually happening on the ground.
+const NON_FIELD_ACTIONS = [
+  'LOGIN',
+  'LOGOUT',
+  'REGISTER',
+  'TOKEN_REFRESH',
+  'PASSWORD_RESET',
+  'PASSWORD_CREATED',
+  'OTP_SENT',
+  'OTP_VERIFIED',
+];
+
 @Injectable()
 export class ActivityLogsService {
   constructor(
@@ -84,7 +97,10 @@ export class ActivityLogsService {
     return this.db.activityLog.findMany({
       take: 20,
 
-      where: this.orgScopeWhere(actor),
+      where: {
+        ...this.orgScopeWhere(actor),
+        action: { notIn: NON_FIELD_ACTIONS },
+      },
 
       include: {
         user: {

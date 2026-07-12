@@ -12,7 +12,35 @@ const KEYS = {
   WATER_TABLE: (boreholeId: string) => `@water_table:${boreholeId}`,
   SESSIONS: (boreholeId: string) => `@sessions:${boreholeId}`,
   SYNC_QUEUE: '@sync_queue',
+  SEEN_ASSIGNMENTS: '@seen_assignments',
+  CACHE_VERSION: '@cache_version',
 };
+
+/**
+ * Bump this whenever historical builds may have written invalid/mock data
+ * into AsyncStorage. On startup, a version mismatch wipes every cached
+ * domain record (older builds seeded fake projects/boreholes into storage
+ * — that pollution survives reinstalls on the same device/emulator).
+ * Version 2: post no-dummy-data cleanup.
+ */
+const CACHE_VERSION = '2';
+
+// Everything except auth/session/device identity. Includes the queues:
+// legacy queues can hold operations referencing fake records or belong to
+// a different account.
+function isDomainKey(key: string): boolean {
+  return (
+    key === KEYS.PROJECTS ||
+    key === KEYS.SYNC_QUEUE ||
+    key === KEYS.SEEN_ASSIGNMENTS ||
+    key === '@photo_queue' ||
+    key.startsWith('@boreholes:') ||
+    key.startsWith('@intervals:') ||
+    key.startsWith('@samples:') ||
+    key.startsWith('@water_table:') ||
+    key.startsWith('@sessions:')
+  );
+}
 
 export interface SyncOperation {
   deviceId: string;
@@ -180,6 +208,59 @@ export const storage = {
 
   async clearSyncQueue(): Promise<void> {
     await AsyncStorage.removeItem(KEYS.SYNC_QUEUE);
+  },
+
+  // --- Assigned-borehole notices ---
+  /** Borehole ids the worker has already been notified about. */
+  async getSeenAssignments(): Promise<string[]> {
+    const data = await AsyncStorage.getItem(KEYS.SEEN_ASSIGNMENTS);
+    return data ? JSON.parse(data) : [];
+  },
+
+  async addSeenAssignments(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const seen = await this.getSeenAssignments();
+    const merged = Array.from(new Set([...seen, ...ids]));
+    await AsyncStorage.setItem(KEYS.SEEN_ASSIGNMENTS, JSON.stringify(merged));
+  },
+
+  // --- Cache hygiene: main DB is the single source of truth ---
+
+  /**
+   * Wipes every cached domain record (projects, boreholes, intervals,
+   * samples, water table, sessions, queues, seen-assignment notices).
+   * Auth tokens, the current user and the device id survive. The next
+   * successful sync repopulates everything from the server.
+   */
+  async clearDomainData(): Promise<void> {
+    const keys = await AsyncStorage.getAllKeys();
+    await Promise.all(
+      keys.filter(isDomainKey).map((k) => AsyncStorage.removeItem(k)),
+    );
+  },
+
+  /**
+   * One-time purge when the cache schema/trust level changed (e.g. old
+   * builds wrote mock records into storage). Returns true if a wipe ran.
+   */
+  async ensureCacheVersion(): Promise<boolean> {
+    const stored = await AsyncStorage.getItem(KEYS.CACHE_VERSION);
+    if (stored === CACHE_VERSION) return false;
+    await this.clearDomainData();
+    await AsyncStorage.setItem(KEYS.CACHE_VERSION, CACHE_VERSION);
+    return true;
+  },
+
+  /**
+   * Account isolation: when a different user logs in on this device, the
+   * previous account's cached data and queues must never leak into (or be
+   * attributed to) the new session. Returns true if a wipe ran.
+   */
+  async ensureCacheOwner(newUserId: string): Promise<boolean> {
+    const previous = await this.getUser();
+    if (!previous?.id || previous.id === newUserId) return false;
+    await this.clearDomainData();
+    return true;
   },
 
   /**

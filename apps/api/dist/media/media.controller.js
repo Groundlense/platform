@@ -33,8 +33,8 @@ let MediaController = class MediaController {
     constructor(mediaService) {
         this.mediaService = mediaService;
     }
-    upload(intervalId, file, user) {
-        return this.mediaService.create(intervalId, file, user);
+    upload(intervalId, file, user, body) {
+        return this.mediaService.create(intervalId, file, user, body);
     }
     getMedia(intervalId, user) {
         return this.mediaService.getByInterval(intervalId, user);
@@ -68,8 +68,9 @@ __decorate([
     __param(0, (0, common_1.Param)('intervalId')),
     __param(1, (0, common_1.UploadedFile)()),
     __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __param(3, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:paramtypes", [String, Object, Object, Object]),
     __metadata("design:returntype", void 0)
 ], MediaController.prototype, "upload", null);
 __decorate([

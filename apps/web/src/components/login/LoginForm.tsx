@@ -57,6 +57,9 @@ export default function LoginForm({
   const [orgCity, setOrgCity] = useState("");
   const [orgState, setOrgState] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  // Local object-URL of the picked file — previewing via the API origin
+  // breaks on deployed hosts (the browser can't reach it pre-login).
+  const [logoPreview, setLogoPreview] = useState("");
   const [logoUploading, setLogoUploading] = useState(false);
 
   // GST Verification States
@@ -226,6 +229,7 @@ export default function LoginForm({
         setSignupError(res.error);
       } else {
         setLogoUrl(res.url);
+        setLogoPreview(URL.createObjectURL(file));
       }
     } catch {
       setSignupError("Failed to upload company logo.");
@@ -589,9 +593,14 @@ export default function LoginForm({
             <div className="border border-dashed border-border-mid rounded-lg p-[18px] text-center bg-bg-card mb-3 relative overflow-hidden">
               {logoUrl ? (
                 <div className="flex flex-col items-center">
-                  <img src={`http://localhost:8000${logoUrl}`} alt="Logo preview" className="h-[50px] object-contain mb-2" />
+                  {logoPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoPreview} alt="Logo preview" className="h-[50px] object-contain mb-2" />
+                  ) : (
+                    <div className="text-[22px] mb-1">🖼️</div>
+                  )}
                   <span className="text-[10px] text-text-sec">Logo uploaded successfully</span>
-                  <button type="button" onClick={() => setLogoUrl("")} className="text-[10px] text-rust-d hover:underline mt-1">Remove logo</button>
+                  <button type="button" onClick={() => { setLogoUrl(""); setLogoPreview(""); }} className="text-[10px] text-rust-d hover:underline mt-1">Remove logo</button>
                 </div>
               ) : (
                 <div>

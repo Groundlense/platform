@@ -368,11 +368,12 @@ const styles = StyleSheet.create({
   },
   headerTitleRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 19,
+    fontSize: 21,
     fontWeight: '700',
     color: colors.white,
   },
@@ -383,12 +384,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.white,
     opacity: 0.8,
     marginTop: 2,
@@ -400,7 +401,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   backLinkText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.rust,
   },
@@ -422,28 +423,29 @@ const styles = StyleSheet.create({
   },
   threadHeaderRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   threadEngineer: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.grayDark,
   },
   threadBorehole: {
-    fontSize: 11,
+    fontSize: 15,
     fontFamily: typography.fontFamilyMono,
     color: colors.amber,
     marginTop: 2,
   },
   threadPreview: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.grayMid,
     marginTop: 4,
-    lineHeight: 14,
+    lineHeight: 24,
   },
   threadDate: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayMid,
     marginTop: 4,
   },
@@ -456,7 +458,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greenLight,
   },
   chipOpenText: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.greenDark,
   },
@@ -466,7 +468,7 @@ const styles = StyleSheet.create({
     borderColor: colors.grayBorder,
   },
   chipClosedText: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.grayMid,
   },
@@ -479,15 +481,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   queryHeader: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.amber,
   },
   queryText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#633806',
     marginTop: 4,
-    lineHeight: 14,
+    lineHeight: 24,
   },
   msgCardMine: {
     backgroundColor: colors.greenLight,
@@ -499,15 +501,15 @@ const styles = StyleSheet.create({
     marginLeft: 24,
   },
   msgHeaderMine: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.greenDark,
   },
   msgTextMine: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.greenDark,
     marginTop: 4,
-    lineHeight: 14,
+    lineHeight: 24,
   },
   closedNotice: {
     backgroundColor: colors.grayLight,
@@ -517,12 +519,12 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   closedNoticeText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     textAlign: 'center',
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.grayDark,
     marginBottom: 6,
@@ -538,6 +540,7 @@ const styles = StyleSheet.create({
   },
   refRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingVertical: 4,
     borderBottomWidth: 0.5,
@@ -547,16 +550,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   refLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
   },
   refVal: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.grayDark,
   },
   fieldLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginBottom: 4,
   },
@@ -567,7 +570,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.grayDark,
     minHeight: 60,
     textAlignVertical: 'top',
@@ -584,7 +587,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   voiceBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.blueDark,
     fontWeight: '700',
   },
@@ -597,7 +600,7 @@ const styles = StyleSheet.create({
   },
   sendBtnText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
   emptyCard: {
@@ -610,13 +613,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.grayDark,
     textAlign: 'center',
   },
   emptySub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     textAlign: 'center',
     marginBottom: 6,

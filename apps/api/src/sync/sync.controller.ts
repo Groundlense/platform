@@ -14,7 +14,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 export class SyncController {
   constructor(private readonly syncService: SyncService) {}
 
-  @Permissions('BOREHOLE_EDIT')
+  @Permissions('SPT_CREATE')
   @Post('operations')
   syncQueue(@Body() dto: CreateSyncOperationsDto, @CurrentUser() user: any) {
     return this.syncService.syncQueue(dto, user);

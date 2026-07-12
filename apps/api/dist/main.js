@@ -22,6 +22,9 @@ async function bootstrap() {
     const document = swagger_1.SwaggerModule.createDocument(app, config);
     swagger_1.SwaggerModule.setup('api/docs', app, document);
     await app.listen(process.env.PORT || 8000);
+    const server = app.getHttpServer();
+    server.keepAliveTimeout = 310_000;
+    server.headersTimeout = 315_000;
 }
 bootstrap();
 //# sourceMappingURL=main.js.map

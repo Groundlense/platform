@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Delete, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Delete, UseGuards, Query } from '@nestjs/common';
 
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
@@ -37,9 +37,12 @@ export class TeamsController {
     @Param('organizationId')
     organizationId: string,
 
+    @Query('projectId')
+    projectId: string | undefined,
+
     @CurrentUser() user: any,
   ) {
-    return this.teamsService.getTeams(organizationId, user);
+    return this.teamsService.getTeams(organizationId, projectId, user);
   }
 
   @Post('teams/:teamId/members')

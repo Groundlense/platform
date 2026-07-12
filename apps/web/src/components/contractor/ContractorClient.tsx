@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   RiAlertLine,
@@ -27,7 +27,7 @@ const STATUS_LABEL: Record<string, string> = {
   PLANNED: "Planned",
   IN_PROGRESS: "In progress",
   COMPLETED: "Completed",
-  TERMINATED: "Terminated",
+  TERMINATED: "Paused — resumable",
   SUSPENDED: "Suspended",
   ABANDONED: "Abandoned",
 };
@@ -40,6 +40,20 @@ const STATUS_STROKE: Record<string, { stroke: string; dash?: string }> = {
   SUSPENDED: { stroke: "#EF9F27", dash: "4,2" },
   ABANDONED: { stroke: "#A32D2D", dash: "4,2" },
 };
+
+
+/** Planned-vs-actual GPS deviation in meters (haversine); null until the
+ *  field app records an arrival position for the borehole. */
+function gpsDeviationM(bh: any): number | null {
+  const pLat = Number(bh?.latitude), pLng = Number(bh?.longitude);
+  const aLat = Number(bh?.actualLat), aLng = Number(bh?.actualLng);
+  if (![pLat, pLng, aLat, aLng].every(Number.isFinite)) return null;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const h =
+    Math.sin(toRad(aLat - pLat) / 2) ** 2 +
+    Math.cos(toRad(pLat)) * Math.cos(toRad(aLat)) * Math.sin(toRad(aLng - pLng) / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
 
 function num(v: any): number | null {
   if (v === null || v === undefined || v === "") return null;
@@ -152,6 +166,15 @@ export default function ContractorClient({
   reportData,
 }: ContractorClientProps) {
   const router = useRouter();
+
+  // Live updates: field data lands via mobile sync at any moment, so re-pull
+  // the server data every 30s while this tab is visible — no manual reload.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") router.refresh();
+    }, 30000);
+    return () => clearInterval(id);
+  }, [router]);
   const [selectedSiteId, setSelectedSiteId] = useState<string>(sites.length > 0 ? sites[0].id : "");
   const [viewMode, setViewMode] = useState<"site" | "eng">("site");
   const [hoveredBhId, setHoveredBhId] = useState<string | null>(null);
@@ -534,11 +557,21 @@ export default function ContractorClient({
                     </div>
                     {anomalies.length > 0 ? (
                       <div className="hc-dev warn">⚠ {anomalies[0].reason}</div>
-                    ) : (
-                      <div className="hc-dev" style={{ background: "#2C2C2A", color: "#B4B2A9" }}>
-                        GPS deviation: not recorded
-                      </div>
-                    )}
+                    ) : (() => {
+                      const dev = gpsDeviationM(bh);
+                      if (dev == null) {
+                        return (
+                          <div className="hc-dev" style={{ background: "#2C2C2A", color: "#B4B2A9" }}>
+                            GPS deviation: not recorded
+                          </div>
+                        );
+                      }
+                      return dev <= 30 ? (
+                        <div className="hc-dev">✓ GPS within {dev.toFixed(1)}m of planned point</div>
+                      ) : (
+                        <div className="hc-dev warn">⚠ GPS deviation {dev.toFixed(1)}m from planned point</div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -569,7 +602,7 @@ export default function ContractorClient({
 
           let cellClass = "bh-info-cell";
           if (bh.status === "PLANNED") cellClass += " pending";
-          else if (bh.status === "IN_PROGRESS") cellClass += " inprog";
+          else if (["IN_PROGRESS", "TERMINATED", "SUSPENDED"].includes(bh.status)) cellClass += " inprog";
 
           const depthValue = finalDepth ?? deepest;
           const depthLabel =
@@ -604,7 +637,12 @@ export default function ContractorClient({
                 <br />
                 RL {rl != null ? `${rl}m` : "—"}
                 <br />
-                GPS deviation: not recorded
+                {(() => {
+                  const dev = gpsDeviationM(bh);
+                  return dev != null
+                    ? `GPS deviation: ${dev.toFixed(1)}m ${dev <= 30 ? "✓" : "⚠"}`
+                    : "GPS deviation: not recorded";
+                })()}
               </div>
             </div>
           );

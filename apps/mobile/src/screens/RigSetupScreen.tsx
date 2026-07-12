@@ -290,11 +290,12 @@ const styles = StyleSheet.create({
   },
   headerTitleRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 19,
+    fontSize: 21,
     fontWeight: '700',
     color: colors.white,
   },
@@ -305,12 +306,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#A5D6A7',
     marginTop: 2,
   },
@@ -326,17 +327,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   infoBoxGreenTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.greenMid,
   },
   infoBoxGreenSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginTop: 2,
   },
   fieldLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginBottom: 4,
     marginTop: 8,
@@ -363,7 +364,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   tileHalfText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.grayDark,
   },
@@ -371,12 +372,13 @@ const styles = StyleSheet.create({
     color: colors.greenMid,
   },
   tileHalfSub: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayMid,
     marginTop: 2,
   },
   horizontalRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 6,
     marginBottom: 8,
@@ -396,7 +398,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   tileText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.grayDark,
     fontWeight: '600',
   },
@@ -427,7 +429,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 15,
+    fontSize: 17,
     color: colors.grayDark,
   },
   monoText: {
@@ -436,6 +438,7 @@ const styles = StyleSheet.create({
   },
   dateRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     alignItems: 'center',
   },
@@ -445,11 +448,11 @@ const styles = StyleSheet.create({
     color: colors.amber,
   },
   dateHint: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
   },
   microHint: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -458,7 +461,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   errorText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.redMid,
     fontWeight: '700',
     marginTop: 3,
@@ -472,12 +475,12 @@ const styles = StyleSheet.create({
     marginVertical: 12,
   },
   infoBoxAmberTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.amber,
   },
   infoBoxAmberSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -491,7 +494,7 @@ const styles = StyleSheet.create({
   },
   confirmBtnText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
 });

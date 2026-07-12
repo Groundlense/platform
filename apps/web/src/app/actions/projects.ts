@@ -98,6 +98,9 @@ export async function createBoreholeAction(formData: FormData) {
   const latitude = formData.get("latitude") as string;
   const longitude = formData.get("longitude") as string;
   const groundLevelRL = formData.get("groundLevelRL") as string;
+  const structureType = formData.get("structureType") as string;
+  const chainage = formData.get("chainage") as string;
+  const span = formData.get("span") as string;
 
   if (!projectId || !boreholeCode) {
     return { error: "Project ID and borehole code are required." };
@@ -113,6 +116,9 @@ export async function createBoreholeAction(formData: FormData) {
         latitude: latitude || undefined,
         longitude: longitude || undefined,
         groundLevelRL: groundLevelRL || undefined,
+        structureType: structureType || undefined,
+        chainage: chainage || undefined,
+        span: span || undefined,
       },
       token
     );

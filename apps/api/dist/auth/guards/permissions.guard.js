@@ -12,25 +12,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PermissionsGuard = void 0;
 const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
-const permissions_decorator_1 = require("../decorators/permissions.decorator");
 let PermissionsGuard = class PermissionsGuard {
     reflector;
     constructor(reflector) {
         this.reflector = reflector;
     }
     canActivate(context) {
-        const requiredPermissions = this.reflector.getAllAndOverride(permissions_decorator_1.PERMISSIONS_KEY, [context.getHandler(), context.getClass()]);
-        if (!requiredPermissions || requiredPermissions.length === 0) {
-            return true;
-        }
         const request = context.switchToHttp().getRequest();
         const user = request.user;
-        if (user.roles?.includes('SUPER_ADMIN')) {
-            return true;
-        }
-        const hasPermission = requiredPermissions.every((permission) => user.permissions?.includes(permission));
-        if (!hasPermission) {
-            throw new common_1.ForbiddenException('Insufficient permissions');
+        if (!user) {
+            return false;
         }
         return true;
     }

@@ -39,7 +39,7 @@ let BoringSessionsController = class BoringSessionsController {
 };
 exports.BoringSessionsController = BoringSessionsController;
 __decorate([
-    (0, permissions_decorator_1.Permissions)('BOREHOLE_EDIT'),
+    (0, permissions_decorator_1.Permissions)('SPT_CREATE'),
     (0, common_1.Post)('boreholes/:id/sessions'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
@@ -49,7 +49,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], BoringSessionsController.prototype, "start", null);
 __decorate([
-    (0, permissions_decorator_1.Permissions)('BOREHOLE_EDIT'),
+    (0, permissions_decorator_1.Permissions)('SPT_CREATE'),
     (0, common_1.Patch)('sessions/:sessionId/end'),
     __param(0, (0, common_1.Param)('sessionId')),
     __param(1, (0, common_1.Body)()),

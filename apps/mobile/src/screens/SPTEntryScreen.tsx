@@ -12,9 +12,7 @@ import { colors } from '../utils/theme';
 import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { calculateRawN, calculateOverburdenCorrection, applyDilatancyCorrection, getDensityInterpretation } from '../utils/calculations';
-import { api } from '../services/api';
-import { syncManager } from '../services/sync';
-import MockCameraModal from '../components/MockCameraModal';
+import { media } from '../services/media';
 
 export default function SPTEntryScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, sessionId, currentDepth, intervalNo } = route.params ?? {};
@@ -35,7 +33,6 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
   // Real recorded water table (undefined until the worker logs one)
   const [waterTableDepth, setWaterTableDepth] = useState<number | undefined>(undefined);
 
-  const [cameraVisible, setCameraVisible] = useState(false);
   const [photoCaptured, setPhotoCaptured] = useState(false);
 
   useEffect(() => {
@@ -58,7 +55,7 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
           <Text style={styles.headerTitle}>SPT Entry</Text>
         </View>
         <View style={{ padding: 24 }}>
-          <Text style={{ fontSize: 16, color: colors.redMid, fontWeight: '700' }}>
+          <Text style={{ fontSize: 18, color: colors.redMid, fontWeight: '700' }}>
             Boring data missing — reopen from the boring list. / डेटा नहीं मिला — सूची से दोबारा खोलें।
           </Text>
           <TouchableOpacity style={[styles.nextBtn, { marginTop: 16 }]} onPress={() => navigation.goBack()}>
@@ -101,30 +98,24 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
     if (activeInterval === 3) setBlow45(p => Math.max(0, p - 1));
   };
 
-  const handleTakePhoto = () => {
-    setCameraVisible(true);
-  };
-
-  const handleCapturePhoto = async (base64Data: string, filename: string) => {
+  // Real camera capture — photo is queued locally and uploaded on sync
+  // once this interval exists on the server.
+  const handleTakePhoto = async () => {
+    const shot = await media.capturePhoto('SPT');
+    if (!shot) return; // cancelled / unavailable / denied — honest Alert already shown
+    await media.queuePhoto({
+      boreholeId: borehole.id,
+      intervalNo,
+      purpose: 'SPT',
+      uri: shot.uri,
+      fileName: shot.fileName,
+      mimeType: shot.type,
+      gpsLat: shot.gpsLat,
+      gpsLng: shot.gpsLng,
+      accuracyM: shot.accuracyM,
+      takenAt: new Date().toISOString(),
+    });
     setPhotoCaptured(true);
-
-    const intervalId = `interval-${borehole.id}-${intervalNo}`;
-    try {
-      await api.uploadMedia(intervalId, base64Data, filename);
-    } catch {
-      await syncManager.queueOperation(
-        'PHOTO',
-        `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        'CREATE',
-        {
-          intervalId,
-          fileName: filename,
-          mimeType: 'image/jpeg',
-          base64Data,
-        },
-        sessionId
-      );
-    }
   };
 
   const handleNext = () => {
@@ -144,24 +135,42 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
       }
     }
 
-    // Pass data forward to SoilDescription screen
-    navigation.navigate('SoilDescription', {
-      borehole,
-      projectId,
-      sessionId,
-      currentDepth,
-      intervalNo,
-      sptData: {
-        blow1: blow15,
-        blow2: blow30,
-        blow3: blow45,
-        rawN,
-        correctedN: finalCorrectedN,
-        isRefusal,
-        penetrationMm: isRefusal ? parseInt(penetrationMm, 10) : undefined,
-        dilatancyApplied: isBelowWaterTable,
-      },
-    });
+    const goToSoilDescription = () => {
+      // Pass data forward to SoilDescription screen
+      navigation.navigate('SoilDescription', {
+        borehole,
+        projectId,
+        sessionId,
+        currentDepth,
+        intervalNo,
+        sptData: {
+          blow1: blow15,
+          blow2: blow30,
+          blow3: blow45,
+          rawN,
+          correctedN: finalCorrectedN,
+          isRefusal,
+          penetrationMm: isRefusal ? parseInt(penetrationMm, 10) : undefined,
+          dilatancyApplied: isBelowWaterTable,
+        },
+      });
+    };
+
+    // Never block on the photo when the device has no camera, but if one
+    // exists, ask before moving on without the split spoon photo.
+    if (!photoCaptured && !media.isCameraKnownUnavailable()) {
+      Alert.alert(
+        'No photo attached / फोटो नहीं ली गई',
+        'Take the split spoon photo before continuing? / आगे बढ़ने से पहले स्प्लिट स्पून फोटो लें?',
+        [
+          { text: '📷 Take photo / फोटो लें', onPress: () => { handleTakePhoto(); } },
+          { text: 'Continue without photo / बिना फोटो जारी रखें', onPress: goToSoilDescription },
+        ]
+      );
+      return;
+    }
+
+    goToSoilDescription();
   };
 
   const handleWaterTable = () => {
@@ -346,13 +355,15 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
           </View>
         )}
 
-        {/* Photo Button — camera module not yet integrated, honest state */}
+        {/* Photo Button — opens the real device camera */}
         <TouchableOpacity
           style={[styles.photoBtn, photoCaptured && styles.photoBtnDone]}
           onPress={handleTakePhoto}
         >
           <Text style={[styles.photoBtnText, photoCaptured && styles.photoBtnTextDone]}>
-            {photoCaptured ? '✓ Split Spoon Photo Captured / फोटो ले लिया गया' : `📷 ${t('splitSpoonPhoto', lang)}`}
+            {photoCaptured
+              ? '✓ Photo captured — uploads on sync / फोटो ली गई'
+              : `📷 ${t('splitSpoonPhoto', lang)}`}
           </Text>
         </TouchableOpacity>
 
@@ -371,16 +382,6 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
           <Text style={styles.nextBtnText}>{t('next', lang)} → Soil description</Text>
         </TouchableOpacity>
       </ScrollView>
-
-      {/* Simulated Viewfinder Overlay */}
-      <MockCameraModal
-        visible={cameraVisible}
-        onClose={() => setCameraVisible(false)}
-        onCapture={handleCapturePhoto}
-        boreholeCode={borehole.boreholeCode}
-        depth={currentDepth}
-        photoType="Split Spoon Photo"
-      />
     </View>
   );
 }
@@ -397,11 +398,12 @@ const styles = StyleSheet.create({
   },
   headerTitleRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 19,
+    fontSize: 21,
     fontWeight: '700',
     color: colors.white,
   },
@@ -412,12 +414,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -431,17 +433,19 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 6,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
   },
   loopText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.amber,
   },
   loopDots: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 4,
   },
   loopDot: {
@@ -469,17 +473,18 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   depthSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#F5C4B3',
     marginTop: 2,
   },
   fieldLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginBottom: 4,
   },
   blowGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 6,
     marginBottom: 12,
@@ -499,11 +504,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   blowLabel: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayMid,
   },
   blowNum: {
-    fontSize: 19,
+    fontSize: 21,
     fontWeight: '700',
     color: colors.grayDark,
     marginTop: 2,
@@ -522,13 +527,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   editTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.rustMid,
     textTransform: 'uppercase',
   },
   keypadRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 24,
@@ -563,17 +569,18 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 8,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
   },
   calcLeft: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.amber,
     fontWeight: '700',
   },
   calcRight: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.greenMid,
   },
@@ -584,17 +591,19 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 8,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
   },
   promptText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.blueDark,
     fontWeight: '600',
   },
   promptAction: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 4,
   },
   promptBtn: {
@@ -610,7 +619,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.grayMid,
   },
   promptBtnText: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayDark,
   },
   promptBtnTextActive: {
@@ -630,7 +639,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.redMid,
   },
   refusalToggleBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.redMid,
   },
@@ -646,12 +655,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   refusalTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.redMid,
   },
   refusalInputRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
     marginTop: 4,
@@ -664,16 +674,16 @@ const styles = StyleSheet.create({
     width: 60,
     paddingVertical: 4,
     paddingHorizontal: 8,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.redMid,
   },
   refusalUnit: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
   },
   refusalSub: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.redMid,
     marginTop: 3,
   },
@@ -691,7 +701,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greenLight,
   },
   photoBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.greenMid,
     fontWeight: '700',
   },
@@ -700,6 +710,7 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
     marginBottom: 12,
   },
@@ -713,7 +724,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionBtnSecText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.grayDark,
     fontWeight: '600',
   },
@@ -727,7 +738,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionBtnTermText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.redMid,
     fontWeight: '600',
   },
@@ -741,7 +752,7 @@ const styles = StyleSheet.create({
   },
   nextBtnText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
 });

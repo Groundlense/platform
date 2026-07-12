@@ -150,7 +150,7 @@ export async function fetchSampleLabResult(sampleId: string): Promise<any | null
 
 export async function createTeamAction(
   organizationId: string,
-  payload: { code: string; name: string; description?: string }
+  payload: { code: string; name: string; description?: string; projectId?: string }
 ): Promise<PortalActionResult<any>> {
   const token = await getToken();
   if (!token) return { success: false, error: "Not authenticated — please log in again." };
@@ -176,11 +176,12 @@ export async function addTeamMemberAction(
   }
 }
 
-export async function fetchOrgTeams(organizationId: string): Promise<any[]> {
+export async function fetchOrgTeams(organizationId: string, projectId?: string): Promise<any[]> {
   const token = await getToken();
   if (!token) return [];
   try {
-    const teams = await apiGet<any[]>(`/organizations/${organizationId}/teams`, token);
+    const query = projectId ? `?projectId=${projectId}` : "";
+    const teams = await apiGet<any[]>(`/organizations/${organizationId}/teams${query}`, token);
     return Array.isArray(teams) ? teams : [];
   } catch {
     return [];

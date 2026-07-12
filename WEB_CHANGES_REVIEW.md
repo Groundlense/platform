@@ -177,3 +177,12 @@ Backend gaps were closed and wired in (verified: `tsc --noEmit` + `next build` c
 Known follow-ups: project-company invite/respond UI (endpoints exist, no UI yet),
 sample-dispatch UI in the Lab tab, Razorpay checkout, PDF report rendering, and the
 register role mapping for IE firms (currently registers as GEOTECH_CONTRACTOR).
+
+---
+
+## Update — 2026-07-08
+
+- **Crew onboarding**: "+ Add Crew Member" on the Setup tab creates the worker (name, mobile, role), adds them to the project/team, and opens an invite panel: bilingual WhatsApp message (wa.me) with the app link and their activation steps (enter mobile → set password in the app). Existing/active accounts get a no-code notice. Set `NEXT_PUBLIC_WORKER_APP_URL` for the download link.
+- **Assignment share**: after assigning boreholes to a team, a share panel offers per-member WhatsApp messages: "New borehole assigned: <codes>… tap Sync to see it."
+- **Setup lock**: `GET /projects/:id/setup-status` drives an amber "Setup locked — fieldwork has started" banner; all setup mutations (add team/member/borehole, edits, per-borehole assignment of non-PLANNED holes) are disabled, and server 403s surface verbatim.
+- **Live feed**: verified clean — renders the server feed, which now excludes login/logout.

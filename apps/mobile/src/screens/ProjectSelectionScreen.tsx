@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
@@ -51,6 +52,27 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
     }
   };
 
+  // After a successful sync, tell the worker about any borehole newly
+  // assigned to them (across all projects). Each id is announced only once
+  // — a persisted seen-set prevents repeat alerts.
+  const checkNewAssignments = async () => {
+    try {
+      const assigned = await api.getAssignedBoreholes();
+      if (!Array.isArray(assigned)) return;
+      const seen = new Set(await storage.getSeenAssignments());
+      const fresh = assigned.filter((bh: any) => bh.id && !seen.has(bh.id));
+      if (fresh.length === 0) return;
+      await storage.addSeenAssignments(fresh.map((bh: any) => bh.id));
+      Alert.alert(
+        'New borehole assigned / नई बोरिंग सौंपी गई',
+        fresh.map((bh: any) => bh.boreholeCode || bh.name || bh.id).join(', ')
+      );
+    } catch (err) {
+      // Offline or endpoint error — no notice, never fabricate one.
+      console.warn('Assignment check failed:', err);
+    }
+  };
+
   const handleSync = async () => {
     setSyncing(true);
     setSyncError(null);
@@ -60,6 +82,8 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
       setProjects(cachedProjects);
       if (!result.success) {
         setSyncError(result.error || 'Sync failed / सिंक विफल');
+      } else {
+        await checkNewAssignments();
       }
     } catch (err: any) {
       console.warn('Sync failed:', err);
@@ -361,6 +385,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -370,12 +395,13 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   userInfo: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#F5C4B3',
     marginTop: 2,
   },
   headerActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
   },
   syncBtn: {
@@ -387,7 +413,7 @@ const styles = StyleSheet.create({
   },
   syncBtnText: {
     color: colors.white,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
   },
   logoutBtn: {
@@ -398,7 +424,7 @@ const styles = StyleSheet.create({
   },
   logoutBtnText: {
     color: colors.white,
-    fontSize: 14,
+    fontSize: 16,
   },
   listContainer: {
     padding: 16,
@@ -412,7 +438,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   syncErrorText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.amber,
   },
@@ -431,6 +457,7 @@ const styles = StyleSheet.create({
   },
   searchRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
   searchInput: {
@@ -441,7 +468,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     fontFamily: typography.fontFamilyMono,
     color: colors.grayDark,
@@ -455,7 +482,7 @@ const styles = StyleSheet.create({
   },
   searchBtnText: {
     color: colors.white,
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
   },
   searchResultCard: {
@@ -483,37 +510,37 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   srCode: {
-    fontSize: 12,
+    fontSize: 14,
     fontFamily: typography.fontFamilyMono,
     fontWeight: '700',
     color: colors.blueDark,
   },
   srCodeWarn: {
-    fontSize: 12,
+    fontSize: 14,
     fontFamily: typography.fontFamilyMono,
     fontWeight: '700',
     color: colors.amber,
   },
   srName: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: '#0C447C',
     marginTop: 4,
   },
   srNameWarn: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.amber,
     marginTop: 4,
   },
   srCodeError: {
-    fontSize: 12,
+    fontSize: 14,
     fontFamily: typography.fontFamilyMono,
     fontWeight: '700',
     color: colors.redMid,
   },
   srNameError: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.redMid,
     marginTop: 4,
@@ -530,12 +557,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   queryInboxBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.blueDark,
     fontWeight: '700',
   },
   srSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -548,11 +575,11 @@ const styles = StyleSheet.create({
   },
   srOpenBtnText: {
     color: colors.white,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.grayDark,
     marginBottom: 8,
@@ -571,13 +598,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.grayDark,
     textAlign: 'center',
   },
   emptySub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginTop: 4,
     textAlign: 'center',
@@ -592,7 +619,7 @@ const styles = StyleSheet.create({
   },
   emptySyncBtnText: {
     color: colors.white,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
   },
   projectCard: {
@@ -604,23 +631,24 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   projCode: {
-    fontSize: 11,
+    fontSize: 15,
     fontFamily: typography.fontFamilyMono,
     color: colors.amber,
   },
   projName: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.grayDark,
     marginTop: 2,
   },
   projSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginTop: 2,
   },
   chipRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     marginTop: 6,
     gap: 4,
   },
@@ -638,11 +666,11 @@ const styles = StyleSheet.create({
     borderColor: colors.grayBorder,
   },
   chipTextRust: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.rust,
   },
   chipTextGray: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayMid,
   },
   projectCardOld: {
@@ -655,12 +683,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   projCodeOld: {
-    fontSize: 11,
+    fontSize: 15,
     fontFamily: typography.fontFamilyMono,
     color: colors.grayMid,
   },
   projNameOld: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '600',
     color: colors.grayMid,
     marginTop: 2,

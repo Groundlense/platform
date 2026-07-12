@@ -12,8 +12,7 @@ import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
-import { api } from '../services/api';
-import MockCameraModal from '../components/MockCameraModal';
+import { media } from '../services/media';
 
 export default function SampleCollectionScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, sessionId, currentDepth, intervalNo, sptData, soilData } = route.params;
@@ -66,35 +65,30 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
       ? Math.round((recoveryCm / penetrationCm) * 100)
       : null;
 
-  const [cameraVisible, setCameraVisible] = useState(false);
-  const [activePhotoType, setActivePhotoType] = useState<string>('Slate Board Photo');
   const [slatePhotoCaptured, setSlatePhotoCaptured] = useState(false);
   const [sealedPhotoCaptured, setSealedPhotoCaptured] = useState(false);
 
-  const handleCapturePhoto = async (base64Data: string, filename: string) => {
-    if (activePhotoType === 'Slate Board Photo') {
+  // Real camera capture — photo is queued locally and uploaded on sync
+  // once this interval exists on the server.
+  const handleCapturePhoto = async (photoType: 'Slate Board Photo' | 'Sealed Tube Photo') => {
+    const shot = await media.capturePhoto('SAMPLE');
+    if (!shot) return; // cancelled / unavailable / denied — honest Alert already shown
+    await media.queuePhoto({
+      boreholeId: borehole.id,
+      intervalNo,
+      purpose: 'SAMPLE',
+      uri: shot.uri,
+      fileName: shot.fileName,
+      mimeType: shot.type,
+      gpsLat: shot.gpsLat,
+      gpsLng: shot.gpsLng,
+      accuracyM: shot.accuracyM,
+      takenAt: new Date().toISOString(),
+    });
+    if (photoType === 'Slate Board Photo') {
       setSlatePhotoCaptured(true);
     } else {
       setSealedPhotoCaptured(true);
-    }
-
-    const intervalId = `interval-${borehole.id}-${intervalNo}`;
-    try {
-      await api.uploadMedia(intervalId, base64Data, filename);
-    } catch (err) {
-      // Offline fallback: queue sync operation
-      await syncManager.queueOperation(
-        'PHOTO',
-        `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        'CREATE',
-        {
-          intervalId,
-          fileName: filename,
-          mimeType: 'image/jpeg',
-          base64Data,
-        },
-        sessionId
-      );
     }
   };
 
@@ -365,7 +359,7 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
           </View>
         ) : null}
 
-        {/* Slate board instructions — photo capture honestly unavailable */}
+        {/* Slate board photo — real capture, uploads on sync */}
         <View style={styles.slateContainer}>
           <Text style={styles.slateTitle}>📋 Slate board photo required / स्लेट बोर्ड फोटो जरूरी</Text>
           <Text style={styles.slateSub}>
@@ -373,10 +367,7 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
           </Text>
           <TouchableOpacity
             style={[styles.cameraBtn, slatePhotoCaptured && styles.cameraBtnDone]}
-            onPress={() => {
-              setActivePhotoType('Slate Board Photo');
-              setCameraVisible(true);
-            }}
+            onPress={() => handleCapturePhoto('Slate Board Photo')}
           >
             <Text style={[styles.cameraText, slatePhotoCaptured && styles.cameraTextDone]}>
               {slatePhotoCaptured ? '✓ Slate Board Photo Captured / फोटो ले लिया गया' : '📷 Capture Slate Photo / स्लेट फोटो लें'}
@@ -384,13 +375,10 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
           </TouchableOpacity>
         </View>
 
-        {/* Sealed tube photo — honestly unavailable, does not block */}
+        {/* Sealed tube photo — real capture, uploads on sync */}
         <TouchableOpacity
           style={[styles.cameraBtnWide, sealedPhotoCaptured && styles.cameraBtnDone]}
-          onPress={() => {
-            setActivePhotoType('Sealed Tube Photo');
-            setCameraVisible(true);
-          }}
+          onPress={() => handleCapturePhoto('Sealed Tube Photo')}
         >
           <Text style={[styles.cameraTextWide, sealedPhotoCaptured && styles.cameraTextDone]}>
             {sealedPhotoCaptured ? '✓ Sealed Tube Photo Captured / फोटो ले लिया गया' : `📷 ${t('sealedPhoto', lang)} / सील ट्यूब फोटो`}
@@ -458,15 +446,6 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
         ) : null}
       </ScrollView>
 
-      {/* Simulated Viewfinder Overlay */}
-      <MockCameraModal
-        visible={cameraVisible}
-        onClose={() => setCameraVisible(false)}
-        onCapture={handleCapturePhoto}
-        boreholeCode={borehole.boreholeCode}
-        depth={currentDepth}
-        photoType={activePhotoType}
-      />
     </View>
   );
 }
@@ -489,11 +468,12 @@ const styles = StyleSheet.create({
   },
   headerTitleRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 19,
+    fontSize: 21,
     fontWeight: '700',
     color: colors.white,
   },
@@ -504,12 +484,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -525,19 +505,20 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   loopText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.amber,
     textAlign: 'center',
   },
   fieldLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginBottom: 4,
     marginTop: 4,
   },
   horizontalRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
     marginBottom: 12,
   },
@@ -561,7 +542,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   tileText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.grayDark,
     textAlign: 'center',
@@ -583,12 +564,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   udsCareTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.blueDark,
   },
   udsCareSub: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -603,7 +584,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blueDark,
   },
   sampleIdLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#A5D6A7',
     marginBottom: 4,
   },
@@ -618,12 +599,13 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   sampleIdHint: {
-    fontSize: 11,
+    fontSize: 15,
     color: '#C8E6C9',
     marginTop: 4,
   },
   udsInputRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 8,
   },
@@ -637,7 +619,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 15,
+    fontSize: 17,
     color: colors.grayDark,
   },
   recoveryRow: {
@@ -646,16 +628,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
   recoveryLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
   },
   recoveryVal: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.blueDark,
   },
@@ -668,12 +651,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   slateTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.amber,
   },
   slateSub: {
-    fontSize: 11,
+    fontSize: 15,
     color: '#633806',
     marginTop: 2,
   },
@@ -701,12 +684,12 @@ const styles = StyleSheet.create({
     borderColor: colors.greenMid,
   },
   cameraText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayDark,
     fontWeight: '700',
   },
   cameraTextWide: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayDark,
     fontWeight: '700',
   },
@@ -727,7 +710,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greenLight,
   },
   confirmText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.greenMid,
     fontWeight: '700',
   },
@@ -743,17 +726,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   udsVerificationTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.redMid,
   },
   udsVerificationSub: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayMid,
     marginTop: 2,
   },
   checkRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
     marginBottom: 12,
   },
@@ -773,7 +757,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   checkTileText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayDark,
     fontWeight: '600',
     textAlign: 'center',
@@ -791,12 +775,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   timerTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.amber,
   },
   timerSub: {
-    fontSize: 11,
+    fontSize: 15,
     color: '#633806',
     marginTop: 2,
   },
@@ -817,11 +801,11 @@ const styles = StyleSheet.create({
   },
   nextBtnText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
   blockHint: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.redMid,
     textAlign: 'center',
     marginBottom: 24,

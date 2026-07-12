@@ -196,11 +196,6 @@ export class UsersService {
       }
     }
 
-    let mobileVerified = false;
-    if (dto.mobile) {
-      mobileVerified = true;
-    }
-
     const user = await this.db.user.create({
       data: {
         organizationId,
@@ -208,7 +203,10 @@ export class UsersService {
         lastName: dto.lastName,
         email: dto.email,
         mobile: dto.mobile,
-        mobileVerified,
+        // The worker verifies the mobile themself during app activation
+        // (POST /auth/create-password) — never pre-verified by the admin,
+        // otherwise activation would be blocked as "already active".
+        mobileVerified: false,
         employeeCode,
         passwordHash,
         designation: dto.designation,

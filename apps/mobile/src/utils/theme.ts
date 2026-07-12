@@ -24,11 +24,15 @@ export const colors = {
   transparent: 'transparent',
 };
 
+/**
+ * Sunlight-readable scale: field workers use the app outdoors in bright
+ * light, so nothing renders below 14 and body text is 18.
+ */
 export const typography = {
   fontFamilyMono: 'monospace',
-  fontSizeTitle: 32,
-  fontSizeSubtitle: 19,
-  fontSizeBody: 16,
-  fontSizeCaption: 14,
-  fontSizeMicro: 11,
+  fontSizeTitle: 34,
+  fontSizeSubtitle: 21,
+  fontSizeBody: 18,
+  fontSizeCaption: 16,
+  fontSizeMicro: 14,
 };

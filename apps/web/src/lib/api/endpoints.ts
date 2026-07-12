@@ -69,6 +69,11 @@ export async function getProjectMembers(projectId: string, token: string) {
   return apiGet<any[]>(`/projects/${projectId}/members`, token);
 }
 
+/** Whether project setup (boreholes/members/assignments) is frozen because fieldwork started. */
+export async function getProjectSetupStatus(projectId: string, token: string) {
+  return apiGet<{ locked: boolean }>(`/projects/${projectId}/setup-status`, token);
+}
+
 export async function addProjectMember(projectId: string, userId: string, token: string) {
   return apiPost(`/projects/${projectId}/members`, { userId }, token);
 }
@@ -172,8 +177,9 @@ export async function getBoreholesSessions(boreholeId: string, token: string) {
 // ═══════════════════════════════════════
 // TEAMS
 // ═══════════════════════════════════════
-export async function getOrgTeams(organizationId: string, token: string) {
-  return apiGet<any[]>(`/organizations/${organizationId}/teams`, token);
+export async function getOrgTeams(organizationId: string, token: string, projectId?: string) {
+  const query = projectId ? `?projectId=${projectId}` : "";
+  return apiGet<any[]>(`/organizations/${organizationId}/teams${query}`, token);
 }
 
 export async function createTeam(organizationId: string, data: Record<string, unknown>, token: string) {

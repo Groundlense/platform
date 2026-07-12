@@ -27,6 +27,48 @@ let BoreholesService = class BoreholesService {
         this.access = access;
         this.integrity = integrity;
     }
+    async assertSetupUnlocked(projectId, user) {
+        if (this.access.isSuperAdmin(user))
+            return;
+        const started = await this.db.borehole.count({
+            where: {
+                projectId,
+                status: { not: 'PLANNED' },
+            },
+        });
+        if (started > 0) {
+            throw new common_2.ForbiddenException('Project setup is locked — fieldwork has already started');
+        }
+    }
+    async getSetupStatus(projectId, user) {
+        await this.access.assertProjectAccess(user, projectId);
+        const started = await this.db.borehole.count({
+            where: {
+                projectId,
+                status: { not: 'PLANNED' },
+            },
+        });
+        return { locked: started > 0 };
+    }
+    async findAssignedToUser(user, projectId) {
+        return this.db.borehole.findMany({
+            where: {
+                ...(projectId ? { projectId } : {}),
+                team: {
+                    members: {
+                        some: { userId: user.id },
+                    },
+                },
+            },
+            include: {
+                team: { select: { id: true, code: true, name: true } },
+                project: {
+                    select: { id: true, projectCode: true, name: true },
+                },
+            },
+            orderBy: { boreholeCode: 'asc' },
+        });
+    }
     async findByProject(projectId, user) {
         await this.access.assertProjectAccess(user, projectId);
         return this.db.borehole.findMany({
@@ -54,6 +96,7 @@ let BoreholesService = class BoreholesService {
     }
     async create(projectId, user, dto) {
         await this.access.assertProjectAccess(user, projectId);
+        await this.assertSetupUnlocked(projectId, user);
         const borehole = await this.db.borehole.create({
             data: {
                 projectId,
@@ -63,6 +106,9 @@ let BoreholesService = class BoreholesService {
                 longitude: dto.longitude,
                 groundLevelRL: dto.groundLevelRL,
                 plannedDepth: dto.plannedDepth,
+                structureType: dto.structureType,
+                chainage: dto.chainage,
+                span: dto.span,
                 createdByUserId: user.id,
             },
         });
@@ -128,7 +174,11 @@ let BoreholesService = class BoreholesService {
         });
     }
     async assign(boreholeId, user, dto) {
-        await this.access.assertBoreholeAccess(user, boreholeId);
+        const existing = await this.access.assertBoreholeAccess(user, boreholeId);
+        if (existing.status !== 'PLANNED' &&
+            !this.access.isSuperAdmin(user)) {
+            throw new common_2.ForbiddenException('Assignment is locked — fieldwork on this borehole has started');
+        }
         const borehole = await this.db.borehole.update({
             where: {
                 id: boreholeId,
@@ -136,6 +186,7 @@ let BoreholesService = class BoreholesService {
             data: {
                 siteId: dto.siteId,
                 teamId: dto.teamId,
+                assignedWorkerId: dto.assignedWorkerId,
             },
         });
         await this.activityLogsService.log(user.id, 'BOREHOLE_ASSIGNED', 'BOREHOLE', borehole.id, {

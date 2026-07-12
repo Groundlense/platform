@@ -1,4 +1,5 @@
 import {
+  Body,
   BadRequestException,
   Controller,
   Get,
@@ -81,8 +82,19 @@ export class MediaController {
 
     @CurrentUser()
     user: any,
+
+    // Multipart text fields: real GPS stamp + capture context from the
+    // mobile photo queue (all optional; older clients send only the file).
+    @Body()
+    body: {
+      gpsLat?: string;
+      gpsLng?: string;
+      accuracyM?: string;
+      purpose?: string;
+      takenAt?: string;
+    },
   ) {
-    return this.mediaService.create(intervalId, file, user);
+    return this.mediaService.create(intervalId, file, user, body);
   }
 
   @Get('intervals/:intervalId/media')

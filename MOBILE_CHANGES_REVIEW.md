@@ -180,3 +180,49 @@ Two of the backend gaps were closed and wired in (verified: `tsc --noEmit` clean
 
 The native-capability table above (camera/GPS/notifications/voice/signature/NetInfo)
 is unchanged — those still require adding the libraries + permissions + a rebuild.
+
+---
+
+## 7. Update — 2026-07-08 (startup fix, camera, assignments, accessibility)
+
+**Startup crash fixed.** The app wouldn't open because `LoginScreen.tsx` had three
+missing closing braces (register-form code pasted into the middle of `handleLogin`),
+which broke the entire JS bundle at parse time. Fixed; `npx tsc --noEmit` and the
+Android release bundle both pass clean.
+
+**Real camera capture (no more mock).** `react-native-image-picker@^7` added (pnpm),
+`CAMERA` permission in AndroidManifest, new `src/services/media.ts` with runtime
+permission handling and a persistent photo queue (`@photo_queue`). All five photo
+points use it: SPT split-spoon, rock core-box, sample slate-board + sealed-tube,
+rig setup, and closure final photo. Photos are stored offline and uploaded on sync
+via multipart `POST /intervals/:uuid/media` once the interval exists server-side;
+failures stay queued. `MockCameraModal` (fake JPEG + fake GPS) and the base64
+`api.uploadMedia` path are deleted. ⚠️ Requires a native rebuild:
+`cd apps/mobile && pnpm install && npx react-native run-android`.
+
+**Assigned boreholes + notices.** Boring list uses new `GET /boreholes/assigned`
+(team membership) — header shows "N assigned to you"; workers get a one-time
+"New borehole assigned / नई बोरिंग सौंपी गई" alert for unseen assignments (also
+checked after sync on project selection). Falls back honestly to the project-wide
+list when the worker has no team assignments.
+
+**Auto-sync.** In addition to the existing 15s background loop, an AppState listener
+syncs on return to foreground; queued photos alone now also trigger a sync round.
+
+**Account activation.** "Create account" tab activates via mobile number + chosen
+password (`POST /auth/create-password`); the endpoint is now one-shot server-side
+(no takeover of already-active accounts).
+
+**Accessibility for field use.** Full font sweep: no text below 12px anywhere
+(was 8–11px); body text 14–16px, using the theme type scale.
+
+---
+
+## 8. Update — 2026-07-08 (real GPS)
+
+**GPS is live** (`@react-native-community/geolocation` + fine/coarse location permissions; rebuild required: `pnpm install && npx react-native run-android`).
+
+- **New `src/services/location.ts`** — permission-guarded one-shot fix + live watch, haversine distance, bearing → bilingual compass directions. Nothing fabricated: no fix → honest state.
+- **Reach-the-borehole tracker** (Start Boring screen): live card showing distance ("142 m away / दूर") and walking direction ("Walk north-east / उत्तर-पूर्व जाएँ") toward the planned coordinates from web, turning green "✓ You are at the borehole location" within 30 m (or GPS accuracy). "Open Google Maps" now launches turn-by-turn walking navigation.
+- **Arrival deviation recorded**: starting boring captures the worker's real position into the sync payload; the server stores `actualLat/actualLng/actualAccuracyM` on the borehole (new migration, applied) and both web portals now show the **real planned-vs-actual deviation** ("✓ GPS within 4.2m" / "⚠ deviation 57m") instead of "not recorded". Starting >100 m away asks for confirmation and records the deviation regardless.
+- **Every photo is GPS-stamped**: capture grabs a silent fix while the worker frames the shot; coordinates + accuracy upload with the file and persist on the media row (`gpsLat/gpsLng/accuracyM` + photo type). Photos without GPS still upload — coordinates are never invented.

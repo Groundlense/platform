@@ -23,7 +23,7 @@ import { EndBoringSessionDto } from './dto/end-boring-session.dto';
 export class BoringSessionsController {
   constructor(private readonly boringSessionsService: BoringSessionsService) {}
 
-  @Permissions('BOREHOLE_EDIT')
+  @Permissions('SPT_CREATE')
   @Post('boreholes/:id/sessions')
   start(
     @Param('id') boreholeId: string,
@@ -33,7 +33,7 @@ export class BoringSessionsController {
     return this.boringSessionsService.start(boreholeId, user.id, dto);
   }
 
-  @Permissions('BOREHOLE_EDIT')
+  @Permissions('SPT_CREATE')
   @Patch('sessions/:sessionId/end')
   end(@Param('sessionId') sessionId: string, @Body() dto: EndBoringSessionDto) {
     return this.boringSessionsService.end(sessionId, dto);

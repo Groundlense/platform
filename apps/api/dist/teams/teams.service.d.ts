@@ -20,7 +20,7 @@ export declare class TeamsService {
         supervisorUserId: string | null;
         notificationSent: boolean;
     }>;
-    getTeams(organizationId: string, actor: any): Promise<({
+    getTeams(organizationId: string, projectId: string | undefined, actor: any): Promise<({
         members: ({
             user: {
                 firstName: string;

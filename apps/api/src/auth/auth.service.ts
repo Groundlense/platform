@@ -925,6 +925,15 @@ export class AuthService {
       throw new NotFoundException('User account with this mobile number not found');
     }
 
+    // One-shot activation only: once the account has been activated (or has
+    // ever logged in), this route must not overwrite credentials — otherwise
+    // anyone who knows a worker's mobile number could take over the account.
+    if (user.mobileVerified || user.lastLoginAt) {
+      throw new BadRequestException(
+        'Account is already active — use reset password instead',
+      );
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
 
     await this.db.user.update({

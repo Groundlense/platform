@@ -237,3 +237,32 @@ edit history UI, demo-user seed cleanup, `apps/api/generated/prisma` dedup.
 - [ ] Remove demo users from `prisma/seed.ts` (keep roles/permissions only) and delete
       `apps/api/backup.sql`; deduplicate `apps/api/generated/prisma/schema.prisma`.
 - [ ] IS 1892 PDF report generation / CSV-JSON export endpoints.
+
+---
+
+## Update — 2026-07-08
+
+- **Live feed filter**: `GET /activity-logs/recent` excludes auth actions (LOGIN/LOGOUT/OTP/…) — ground activity only.
+- **`GET /boreholes/assigned`** (+ optional `?projectId=`): worker's boreholes via team membership, powering the mobile assigned list and notices.
+- **Setup freeze**: once any borehole is beyond PLANNED — borehole create and project member-add return 403; per-borehole assignment locks once that hole starts. `GET /projects/:id/setup-status` reports the lock. SUPER_ADMIN bypasses.
+- **Activation hardened**: `POST /auth/create-password` is one-shot — refuses once the account is active (was an account-takeover hole via known mobile number).
+
+## E2E validation — 2026-07-08
+
+Automated lifecycle suite (`apps/api/test/e2e-lifecycle.mjs`) run against a live instance: **54/54 PASS**. Three real bugs found and fixed:
+
+1. **FIELD_WORKER blocked from syncing** — sessions + `/sync/operations` required `BOREHOLE_EDIT`; now `SPT_CREATE` (workers hold it).
+2. **Activation always failed** — `createUser` pre-set `mobileVerified: true`, tripping the one-shot guard; verification now happens only at worker activation.
+3. **Query threads unreachable** — `assignedWorkerId` was never settable; `PATCH /boreholes/:id/assignment` now accepts it and threads route to that worker.
+
+See `E2E_TEST_GUIDE.md` for the full checklist and manual UI walk-through. Restart any running dev API to pick up these fixes.
+
+## Geo-tagged photo stamping — 2026-07-12
+
+Field photos now carry a burned-in geo-tag banner (like GPS map cameras), applied server-side at upload (`src/media/photo-stamp.ts`, wired into `MediaService.create`):
+
+- **Content**: GroundLense wordmark + pin mark, borehole ID + sub-structure (abutment/pier from `Borehole.name`), Structure Type | Chainage | Span, GPS coordinates ±accuracy from the device fix, capture date/time in IST.
+- **Honest by construction**: every value comes from the DB record or the device; missing fields are omitted and missing GPS prints "GPS: not captured" — nothing fabricated.
+- **Robust**: EXIF orientation normalized before compositing; a stamping failure logs a warning and keeps the unstamped upload (field evidence is never lost).
+- **Infra**: `sharp` added to the API; docker-compose api container now installs `fontconfig` + `ttf-dejavu` (alpine ships no fonts, and SVG text needs them).
+- Applies to image/jpeg, image/png, image/webp; PDFs pass through untouched. No mobile changes needed — the app already sends gpsLat/gpsLng/accuracyM/takenAt with each photo.

@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
@@ -40,6 +41,17 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
         throw new Error('Invalid response from server');
       }
       const profile = await api.getProfile();
+
+      // Account isolation: a different worker on this device must never see
+      // (or sync as) the previous account's cached projects/queues.
+      const wiped = await storage.ensureCacheOwner(profile?.id);
+      if (wiped) {
+        Alert.alert(
+          'Fresh start / नया खाता',
+          'Cached data from the previous account was cleared. Your projects will load from the server. / पिछले खाते का डेटा हटा दिया गया।'
+        );
+      }
+
       await storage.saveUser(profile);
       navigation.replace('ProjectSelection');
     } catch (err: any) {
@@ -74,6 +86,9 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
       }
     } finally {
       setLoggingIn(false);
+    }
+  };
+
   // Register inputs
   const [regMobile, setRegMobile] = useState('');
   const [regPassword, setRegPassword] = useState('');
@@ -104,7 +119,10 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
       setRegMobile('');
       setRegPassword('');
       setRegConfirmPassword('');
-      alert('Account activated successfully! Please log in now. / खाता सफलतापूर्वक सक्रिय हो गया! कृपया अब लॉगिन करें।');
+      Alert.alert(
+        'Account activated / खाता सक्रिय',
+        'Account activated successfully! Please log in now. / खाता सफलतापूर्वक सक्रिय हो गया! कृपया अब लॉगिन करें।'
+      );
       setActiveTab('login');
     } catch (err: any) {
       const serverMsg = err.response?.data?.message;
@@ -228,7 +246,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
         ) : (
           /* REGISTER VIEW — active password activation form */
           <View style={styles.formCard}>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.rust, marginBottom: 12, textAlign: 'center' }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.rust, marginBottom: 12, textAlign: 'center' }}>
               Activate Account / खाता सक्रिय करें
             </Text>
             
@@ -376,6 +394,7 @@ const styles = StyleSheet.create({
   },
   tabContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     borderWidth: 1,
     borderColor: colors.rustMid,
     borderRadius: 8,
@@ -394,7 +413,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.rustMid,
   },
   tabBtnText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     color: colors.rust,
   },
@@ -429,7 +448,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    fontSize: 16,
+    fontSize: 18,
     color: colors.grayDark,
   },
   primaryBtn: {
@@ -445,7 +464,7 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
   secondaryBtn: {
@@ -460,7 +479,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: {
     color: colors.rust,
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '600',
   },
   divider: {
@@ -477,7 +496,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   errorBoxText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.redMid,
   },
@@ -489,12 +508,12 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   infoBoxBlueTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.blueDark,
   },
   infoBoxBlueSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -506,14 +525,14 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   infoBoxAmberTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.amber,
   },
   infoBoxAmberSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginTop: 4,
-    lineHeight: 14,
+    lineHeight: 24,
   },
 });

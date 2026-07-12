@@ -53,4 +53,28 @@ export class CreateBoreholeDto {
   @IsOptional()
   @IsNumberString()
   plannedDepth?: string;
+
+  @ApiPropertyOptional({
+    description: 'Structure type of the boring location',
+    example: 'VUP',
+  })
+  @IsOptional()
+  @IsString()
+  structureType?: string;
+
+  @ApiPropertyOptional({
+    description: 'Chainage of the boring location',
+    example: '134+550',
+  })
+  @IsOptional()
+  @IsString()
+  chainage?: string;
+
+  @ApiPropertyOptional({
+    description: 'Span details of the structure',
+    example: '1x20',
+  })
+  @IsOptional()
+  @IsString()
+  span?: string;
 }

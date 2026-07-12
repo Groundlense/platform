@@ -60,12 +60,12 @@ export declare class SitesController {
             status: import("@prisma/client").$Enums.BoreholeStatus;
             createdAt: Date;
             updatedAt: Date;
+            teamId: string | null;
+            projectId: string;
             createdByUserId: string;
             lockedAt: Date | null;
-            projectId: string;
             siteId: string | null;
             boreholeCode: string;
-            teamId: string | null;
             latitude: import("@prisma/client/runtime/library").Decimal | null;
             longitude: import("@prisma/client/runtime/library").Decimal | null;
             groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
@@ -74,9 +74,15 @@ export declare class SitesController {
             startedAt: Date | null;
             completedAt: Date | null;
             assignedWorkerId: string | null;
+            actualLat: import("@prisma/client/runtime/library").Decimal | null;
+            actualLng: import("@prisma/client/runtime/library").Decimal | null;
+            actualAccuracyM: import("@prisma/client/runtime/library").Decimal | null;
             method: import("@prisma/client").$Enums.BoringMethod | null;
             rigType: string | null;
             startDepth: import("@prisma/client/runtime/library").Decimal | null;
+            structureType: string | null;
+            chainage: string | null;
+            span: string | null;
         }[];
     } & {
         name: string;

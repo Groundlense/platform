@@ -183,19 +183,20 @@ const styles = StyleSheet.create({
     fontSize: 38,
   },
   popupTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.blueDark,
     textAlign: 'center',
   },
   popupSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     textAlign: 'center',
     marginBottom: 10,
   },
   toggleRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
     marginBottom: 10,
   },
@@ -213,7 +214,7 @@ const styles = StyleSheet.create({
     borderColor: colors.blueDark,
   },
   toggleBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayDark,
     fontWeight: '600',
   },
@@ -230,12 +231,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   infoBoxBlueTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.blueDark,
   },
   infoBoxBlueSub: {
-    fontSize: 11,
+    fontSize: 15,
     color: colors.grayMid,
     marginTop: 2,
   },
@@ -243,7 +244,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   fieldLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginBottom: 4,
   },
@@ -254,7 +255,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    fontSize: 15,
+    fontSize: 17,
     color: colors.grayDark,
   },
   largeInput: {
@@ -266,6 +267,7 @@ const styles = StyleSheet.create({
   },
   btnRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginTop: 12,
   },
@@ -279,7 +281,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.grayDark,
   },
   submitBtn: {
@@ -290,7 +292,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.white,
     fontWeight: '700',
   },

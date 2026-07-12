@@ -3,17 +3,29 @@ services:
     image: node:24-alpine
     container_name: groundlense-api
     working_dir: /app
+    # --filter=api... installs ONLY the api workspace: installing other
+    # workspaces here would write Linux symlinks into the host's bind-mounted
+    # node_modules (Windows sees broken junctions and everything corrupts).
+    # fontconfig + ttf-dejavu: the geo-tag photo stamp renders SVG text via
+    # sharp/libvips, which needs system fonts (alpine ships none).
     command: >
-      sh -c "corepack enable &&
-             pnpm install &&
+      sh -c "apk add --no-cache fontconfig ttf-dejavu &&
+             corepack enable &&
+             pnpm install --prefer-offline --filter=api... &&
              pnpm --filter api prisma:generate &&
              pnpm --filter api exec prisma migrate deploy &&
-             pnpm --filter api exec prisma db seed &&
              pnpm --filter api start:dev"
     environment:
       NODE_ENV: development
+      # Docker-on-Windows IPv6 lookups stall registry fetches — force IPv4
+      NODE_OPTIONS: --dns-result-order=ipv4first
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      npm_config_fetch_retries: "5"
+      npm_config_fetch_retry_mintimeout: "2000"
+      npm_config_fetch_timeout: "120000"
       PORT: 8000
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/groundlense?schema=public
+      # Main DB from root .env (Neon). Falls back to the bundled local Postgres.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/groundlense?schema=public}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_ACCESS_SECRET: change-me-access-secret
@@ -34,7 +46,10 @@ services:
       - api_node_modules:/app/node_modules
       - api_app_node_modules:/app/apps/api/node_modules
       - api_uploads:/app/apps/api/uploads
+      # Shield every other workspace's node_modules from container writes —
+      # a container symlink landing on the Windows host breaks the host tree.
       - /app/apps/mobile/node_modules
+      - /app/apps/web/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,12 +61,18 @@ services:
     image: node:24-alpine
     container_name: groundlense-web
     working_dir: /app
+    # --filter=web... only — see the api service note on host corruption.
     command: >
       sh -c "corepack enable &&
-             pnpm install &&
+             pnpm install --prefer-offline --filter=web... &&
              pnpm --filter web dev"
     environment:
       NODE_ENV: development
+      NODE_OPTIONS: --dns-result-order=ipv4first
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      npm_config_fetch_retries: "5"
+      npm_config_fetch_retry_mintimeout: "2000"
+      npm_config_fetch_timeout: "120000"
       API_URL: http://api:8000/api/v1
       NEXT_PUBLIC_APP_NAME: GroundLense
     ports:
@@ -62,7 +83,9 @@ services:
       - web_node_modules:/app/node_modules
       - web_app_node_modules:/app/apps/web/node_modules
       - web_next:/app/apps/web/.next
+      # Shield every other workspace's node_modules from container writes.
       - /app/apps/mobile/node_modules
+      - /app/apps/api/node_modules
     depends_on:
       - api
     restart: unless-stopped
@@ -71,13 +94,20 @@ services:
     image: node:24-alpine
     container_name: groundlense-prisma-studio
     working_dir: /app
+    # Only needs the api workspace (prisma) — not web, not mobile.
     command: >
       sh -c "corepack enable &&
-             pnpm install &&
+             pnpm install --prefer-offline --filter=api... &&
              pnpm --filter api prisma:generate &&
              pnpm --filter api exec prisma studio --port 5555 --hostname 0.0.0.0 --browser none"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/groundlense?schema=public
+      NODE_OPTIONS: --dns-result-order=ipv4first
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      npm_config_fetch_retries: "5"
+      npm_config_fetch_retry_mintimeout: "2000"
+      npm_config_fetch_timeout: "120000"
+      # Main DB from root .env (Neon). Falls back to the bundled local Postgres.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/groundlense?schema=public}
     ports:
       - "5555:5555"
     volumes:
@@ -85,7 +115,9 @@ services:
       - pnpm_store:/root/.local/share/pnpm/store
       - studio_node_modules:/app/node_modules
       - studio_app_node_modules:/app/apps/api/node_modules
+      # Shield every other workspace's node_modules from container writes.
       - /app/apps/mobile/node_modules
+      - /app/apps/web/node_modules
     depends_on:
       postgres:
         condition: service_healthy

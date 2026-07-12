@@ -272,6 +272,19 @@ export class ProjectsService {
   async addMember(projectId: string, userId: string, actor: any) {
     await this.access.assertProjectAccess(actor, projectId);
 
+    // Setup freeze: once any borehole is beyond PLANNED, the member list on
+    // the setup page is immutable (SUPER_ADMIN excepted).
+    if (!this.access.isSuperAdmin(actor)) {
+      const started = await this.db.borehole.count({
+        where: { projectId, status: { not: 'PLANNED' } },
+      });
+      if (started > 0) {
+        throw new ForbiddenException(
+          'Project setup is locked — fieldwork has already started',
+        );
+      }
+    }
+
     const existing = await this.db.projectMember.findFirst({
       where: { projectId, userId },
     });

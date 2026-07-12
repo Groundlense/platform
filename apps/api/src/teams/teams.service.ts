@@ -48,6 +48,7 @@ export class TeamsService {
     return this.db.team.create({
       data: {
         organizationId,
+        projectId: dto.projectId,
 
         code: dto.code,
         name: dto.name,
@@ -57,12 +58,13 @@ export class TeamsService {
     });
   }
 
-  async getTeams(organizationId: string, actor: any) {
+  async getTeams(organizationId: string, projectId: string | undefined, actor: any) {
     this.access.assertSameOrganization(actor, organizationId);
 
     return this.db.team.findMany({
       where: {
         organizationId,
+        ...(projectId ? { projectId } : {}),
       },
       include: {
         members: {

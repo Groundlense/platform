@@ -19,6 +19,9 @@ class CreateBoreholeDto {
     longitude;
     groundLevelRL;
     plannedDepth;
+    structureType;
+    chainage;
+    span;
 }
 exports.CreateBoreholeDto = CreateBoreholeDto;
 __decorate([
@@ -74,4 +77,31 @@ __decorate([
     (0, class_validator_1.IsNumberString)(),
     __metadata("design:type", String)
 ], CreateBoreholeDto.prototype, "plannedDepth", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Structure type of the boring location',
+        example: 'VUP',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateBoreholeDto.prototype, "structureType", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Chainage of the boring location',
+        example: '134+550',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateBoreholeDto.prototype, "chainage", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Span details of the structure',
+        example: '1x20',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateBoreholeDto.prototype, "span", void 0);
 //# sourceMappingURL=create-borehole.dto.js.map

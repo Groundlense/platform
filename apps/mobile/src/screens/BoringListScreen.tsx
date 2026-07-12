@@ -5,6 +5,7 @@ import {
   View,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
@@ -18,6 +19,9 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
   const [boreholes, setBoreholes] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [offline, setOffline] = useState(false);
+  // True when the list comes from the worker's real team assignments
+  // (GET /boreholes/assigned) rather than the project-wide fallback.
+  const [assignedMode, setAssignedMode] = useState(false);
 
   useEffect(() => {
     if (projectId) {
@@ -25,17 +29,50 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
     }
   }, [projectId]);
 
+  // Alert once per newly assigned borehole id (persisted seen-set).
+  const notifyNewAssignments = async (assigned: any[]) => {
+    try {
+      const seen = new Set(await storage.getSeenAssignments());
+      const fresh = assigned.filter((bh: any) => bh.id && !seen.has(bh.id));
+      if (fresh.length === 0) return;
+      await storage.addSeenAssignments(fresh.map((bh: any) => bh.id));
+      Alert.alert(
+        'New borehole assigned / नई बोरिंग सौंपी गई',
+        fresh.map((bh: any) => bh.boreholeCode || bh.name || bh.id).join(', ')
+      );
+    } catch (err) {
+      console.warn('Assignment notice failed:', err);
+    }
+  };
+
   const loadBoreholes = async () => {
     setLoading(true);
     setOffline(false);
     try {
-      // Try the live API first; cache the result for offline use
-      const fresh = await api.getProjectBoreholes(projectId);
-      if (Array.isArray(fresh)) {
-        await storage.saveBoreholes(projectId, fresh);
-        setBoreholes(fresh);
-      } else {
-        setBoreholes([]);
+      // Prefer the worker's real team assignments for this project.
+      let fresh: any[] | null = null;
+      let fromAssignments = false;
+      try {
+        const assigned = await api.getAssignedBoreholes(projectId);
+        if (Array.isArray(assigned) && assigned.length > 0) {
+          fresh = assigned;
+          fromAssignments = true;
+        }
+      } catch (assignErr) {
+        console.warn('Assigned-borehole fetch failed, falling back to project list:', assignErr);
+      }
+
+      // No team assignments (or endpoint failed) — project-wide list as before.
+      if (!fresh) {
+        const projectWide = await api.getProjectBoreholes(projectId);
+        fresh = Array.isArray(projectWide) ? projectWide : [];
+      }
+
+      await storage.saveBoreholes(projectId, fresh);
+      setBoreholes(fresh);
+      setAssignedMode(fromAssignments);
+      if (fromAssignments) {
+        await notifyNewAssignments(fresh);
       }
     } catch (err) {
       // Offline (or server error) — fall back to whatever is cached.
@@ -187,7 +224,9 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
             <Text style={styles.projName}>{projectName || projectCode || projectId}</Text>
             <Text style={styles.projSub}>
               {total > 0
-                ? `${total} boring${total === 1 ? '' : 's'} assigned to you / आपको सौंपे गए`
+                ? assignedMode
+                  ? `${total} assigned to you / आपको सौंपी गई`
+                  : `${total} boring${total === 1 ? '' : 's'} in this project / इस प्रोजेक्ट में`
                 : 'No borings assigned yet / अभी कोई बोरिंग नहीं'}
             </Text>
           </View>
@@ -307,6 +346,7 @@ const styles = StyleSheet.create({
   },
   headerTitleRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -322,12 +362,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   langText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.white,
     fontWeight: '700',
   },
   headerSub: {
-    fontSize: 15,
+    fontSize: 17,
     color: '#F5C4B3',
     marginTop: 2,
   },
@@ -341,6 +381,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 10,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
@@ -349,17 +390,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   projCode: {
-    fontSize: 11,
+    fontSize: 15,
     fontFamily: typography.fontFamilyMono,
     color: colors.amber,
   },
   projName: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.rust,
   },
   projSub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.rustMid,
     marginTop: 2,
   },
@@ -372,7 +413,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   changeBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.rust,
     fontWeight: '600',
   },
@@ -385,12 +426,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   offlineText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.amber,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.grayMid,
     marginBottom: 8,
@@ -405,13 +446,13 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.grayDark,
     textAlign: 'center',
   },
   emptySub: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     textAlign: 'center',
     marginTop: 6,
@@ -422,6 +463,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 6,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderLeftWidth: 3,
@@ -447,28 +489,28 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.grayBorder,
   },
   bhCode: {
-    fontSize: 11,
+    fontSize: 15,
     fontFamily: typography.fontFamilyMono,
     color: colors.grayMid,
   },
   bhName: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.grayDark,
     marginTop: 2,
   },
   bhStatus: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginTop: 2,
   },
   bhCoordinates: {
-    fontSize: 10.5,
+    fontSize: 15,
     color: colors.grayMid,
     marginTop: 3,
   },
   bhCoordinatesNoGps: {
-    fontSize: 10.5,
+    fontSize: 15,
     color: colors.amber,
     marginTop: 3,
   },
@@ -508,7 +550,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.rustMid,
   },
   progressText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.grayMid,
     marginTop: 6,
   },
@@ -523,7 +565,7 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
 });
