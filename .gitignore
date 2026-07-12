@@ -16,3 +16,8 @@ pnpm-lock.yaml
 !**/uploads/.gitkeep
 # database dumps
 backup.sql
+# Android release signing — the upload keystore must NEVER be committed
+# (the checked-in debug.keystore is the public RN debug key and is fine)
+*.keystore
+*.jks
+!**/debug.keystore
