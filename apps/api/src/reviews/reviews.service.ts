@@ -8,9 +8,30 @@ import { ReviewStatus } from '@prisma/client';
 import { DatabaseService } from '../database/database.service';
 import { ProjectAccessService } from '../common/access/project-access.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
-import { CreateReviewDto, ReviewAction } from './dto/create-review.dto';
+import { IntegrityService } from '../common/integrity/integrity.service';
+import {
+  CreateReviewDto,
+  EDITABLE_INTERVAL_FIELDS,
+  EditableIntervalField,
+  ReviewAction,
+} from './dto/create-review.dto';
+import { BulkReviewDto } from './dto/bulk-review.dto';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { CreateMessageDto } from './dto/create-message.dto';
+
+const INT_INTERVAL_FIELDS = new Set([
+  'blow1',
+  'blow2',
+  'blow3',
+  'nValue',
+  'nCorrected',
+]);
+
+// Prefixes each field-correction audit line appended to
+// BoreholeInterval.remarks — lets the web portal reliably recover the
+// original-vs-corrected value for any field across page reloads, without a
+// dedicated audit column (mirrors the existing "N modified X→Y" convention).
+const DIFF_MARKER = '##DIFF##';
 
 const USER_SUMMARY_SELECT = {
   id: true,
@@ -37,10 +58,38 @@ export class ReviewsService {
     private readonly db: DatabaseService,
     private readonly access: ProjectAccessService,
     private readonly activityLogs: ActivityLogsService,
+    private readonly integrity: IntegrityService,
   ) {}
 
   private intervalTag(intervalId: string): string {
     return `[interval:${intervalId}]`;
+  }
+
+  /** Parses the raw string a MODIFY_FIELD request sends into the right type. */
+  private parseFieldValue(
+    field: EditableIntervalField,
+    raw: string,
+  ): number | string {
+    if (field === 'soilDescription') {
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        throw new BadRequestException('fieldValueNew cannot be empty');
+      }
+      return trimmed;
+    }
+
+    const n = Number(raw);
+    if (!Number.isFinite(n)) {
+      throw new BadRequestException(
+        `fieldValueNew must be a valid number for field "${field}"`,
+      );
+    }
+    if (INT_INTERVAL_FIELDS.has(field) && !Number.isInteger(n)) {
+      throw new BadRequestException(
+        `fieldValueNew must be a whole number for field "${field}"`,
+      );
+    }
+    return n;
   }
 
   private hasReviewPermission(user: any): boolean {
@@ -61,49 +110,93 @@ export class ReviewsService {
   ) {
     const interval = await this.access.assertIntervalAccess(user, intervalId);
 
-    if (dto.action === ReviewAction.MODIFY_N) {
-      // IS-code justification is mandatory for any N-value change.
-      if (dto.nValueNew === undefined || dto.nValueNew === null) {
+    const isFieldEdit =
+      dto.action === ReviewAction.MODIFY_N ||
+      dto.action === ReviewAction.MODIFY_FIELD;
+
+    // MODIFY_N is the legacy N-only shape; normalize it onto the same
+    // generic field-edit path as MODIFY_FIELD so both share one audit format.
+    const field: EditableIntervalField | null =
+      dto.action === ReviewAction.MODIFY_N
+        ? 'nValue'
+        : dto.action === ReviewAction.MODIFY_FIELD
+          ? (dto.fieldName ?? null)
+          : null;
+
+    let newFieldValue: number | string | null = null;
+
+    if (isFieldEdit) {
+      if (!field || !(EDITABLE_INTERVAL_FIELDS as readonly string[]).includes(field)) {
         throw new BadRequestException(
-          'nValueNew is required when action is MODIFY_N',
+          `fieldName must be one of: ${EDITABLE_INTERVAL_FIELDS.join(', ')}`,
         );
       }
       if (!dto.isCodeReason?.trim()) {
         throw new BadRequestException(
-          'isCodeReason (IS-code justification) is required when action is MODIFY_N',
+          `isCodeReason (IS-code justification) is required when action is ${dto.action}`,
         );
+      }
+
+      if (dto.action === ReviewAction.MODIFY_N) {
+        if (dto.nValueNew === undefined || dto.nValueNew === null) {
+          throw new BadRequestException(
+            'nValueNew is required when action is MODIFY_N',
+          );
+        }
+        newFieldValue = dto.nValueNew;
+      } else {
+        if (dto.fieldValueNew === undefined || dto.fieldValueNew === null) {
+          throw new BadRequestException(
+            'fieldValueNew is required when action is MODIFY_FIELD',
+          );
+        }
+        newFieldValue = this.parseFieldValue(field, dto.fieldValueNew);
       }
     }
 
     const statusByAction: Record<ReviewAction, ReviewStatus> = {
       [ReviewAction.APPROVE]: ReviewStatus.APPROVED,
       [ReviewAction.REJECT]: ReviewStatus.REJECTED,
-      // ReviewStatus has no MODIFIED value; a corrected N-value closes the
-      // finding, so MODIFY_N maps to RESOLVED.
+      // ReviewStatus has no MODIFIED value; a corrected field closes the
+      // finding, so both modify actions map to RESOLVED.
       [ReviewAction.MODIFY_N]: ReviewStatus.RESOLVED,
+      [ReviewAction.MODIFY_FIELD]: ReviewStatus.RESOLVED,
     };
 
     const commentParts = [this.intervalTag(intervalId)];
     let oldValue: any = null;
     let newValue: any = null;
+    let newRemarks: string | null = null;
 
-    if (dto.action === ReviewAction.MODIFY_N) {
-      const modificationNote = `N modified ${interval.nValue ?? 'null'}→${dto.nValueNew} per ${dto.isCodeReason}`;
+    if (isFieldEdit && field) {
+      // Decimal columns (fromDepth/toDepth) come back as Prisma Decimal
+      // instances — normalize to a plain number so both the JSON diff line
+      // and the activity-log Json column hold serializable values.
+      const rawOld = (interval as any)[field];
+      const oldFieldValue =
+        rawOld == null
+          ? null
+          : typeof rawOld === 'object' && typeof rawOld.toNumber === 'function'
+            ? rawOld.toNumber()
+            : rawOld;
+      const modificationNote = `${field} modified ${oldFieldValue ?? 'null'}→${newFieldValue} per ${dto.isCodeReason}`;
       commentParts.push(modificationNote);
 
-      oldValue = {
-        nValue: interval.nValue,
-        remarks: interval.remarks,
-      };
+      const diffLine = `${DIFF_MARKER}${JSON.stringify({
+        field,
+        old: oldFieldValue,
+        new: newFieldValue,
+        clause: dto.isCodeReason,
+        comment: dto.comments ?? null,
+        byUserId: user.id,
+        at: new Date().toISOString(),
+      })}`;
 
-      const newRemarks = interval.remarks
-        ? `${interval.remarks}\n${modificationNote}`
-        : modificationNote;
-
-      newValue = {
-        nValue: dto.nValueNew,
-        remarks: newRemarks,
-      };
+      oldValue = { [field]: oldFieldValue, remarks: interval.remarks };
+      newRemarks = interval.remarks
+        ? `${interval.remarks}\n${diffLine}`
+        : diffLine;
+      newValue = { [field]: newFieldValue, remarks: newRemarks };
     } else {
       oldValue = { reviewStatus: null };
       newValue = { reviewStatus: statusByAction[dto.action] };
@@ -114,13 +207,13 @@ export class ReviewsService {
     }
 
     const review = await this.db.$transaction(async (tx) => {
-      if (dto.action === ReviewAction.MODIFY_N) {
+      if (isFieldEdit && field) {
         await tx.boreholeInterval.update({
           where: { id: intervalId },
           data: {
-            nValue: dto.nValueNew,
-            remarks: newValue.remarks,
-          },
+            [field]: newFieldValue,
+            remarks: newRemarks,
+          } as any,
         });
       }
 
@@ -131,16 +224,22 @@ export class ReviewsService {
           reviewType: 'ENGINEER_REVIEW',
           status: statusByAction[dto.action],
           comments: commentParts.join(' '),
-          isCodeReason:
-            dto.action === ReviewAction.MODIFY_N
-              ? dto.isCodeReason
-              : (dto.isCodeReason ?? null),
+          isCodeReason: isFieldEdit
+            ? dto.isCodeReason
+            : (dto.isCodeReason ?? null),
         },
         include: {
           reviewedBy: { select: USER_SUMMARY_SELECT },
         },
       });
     });
+
+    if (isFieldEdit) {
+      // The edited field is part of the tamper-evidence hash payload —
+      // recompute this interval's hash and cascade through the rest of the
+      // chain, same as a direct PATCH /intervals/:id edit would.
+      await this.integrity.rehashChain(interval.boreholeId, interval.intervalNo);
+    }
 
     await this.activityLogs.log(
       user.id,
@@ -161,6 +260,62 @@ export class ReviewsService {
     );
 
     return review;
+  }
+
+  /**
+   * APPROVE/REJECT every interval of a borehole in one call — one DB
+   * transaction instead of the N (one per interval) separate HTTP round
+   * trips "Approve Boring"/"Reject Boring" used to make, which got very
+   * slow on boreholes with many intervals.
+   */
+  async createBulkBoreholeReview(
+    user: any,
+    boreholeId: string,
+    dto: BulkReviewDto,
+  ) {
+    const borehole = await this.access.assertBoreholeAccess(user, boreholeId);
+
+    const intervals = await this.db.boreholeInterval.findMany({
+      where: { boreholeId },
+      select: { id: true },
+    });
+
+    if (intervals.length === 0) {
+      return { count: 0 };
+    }
+
+    const status =
+      dto.action === 'APPROVE' ? ReviewStatus.APPROVED : ReviewStatus.REJECTED;
+    const noteText =
+      dto.comments?.trim() ||
+      (dto.action === 'APPROVE'
+        ? 'Boring approved by engineer review'
+        : 'Boring rejected by engineer review');
+
+    await this.db.$transaction(
+      intervals.map((iv) =>
+        this.db.engineerReview.create({
+          data: {
+            boreholeId,
+            reviewedByUserId: user.id,
+            reviewType: 'ENGINEER_REVIEW',
+            status,
+            comments: `${this.intervalTag(iv.id)} ${noteText}`,
+          },
+        }),
+      ),
+    );
+
+    await this.activityLogs.log(
+      user.id,
+      `REVIEW_BULK_${dto.action}`,
+      'Borehole',
+      boreholeId,
+      { boreholeId: borehole.id, intervalCount: intervals.length },
+      { newValue: { status }, actorCompanyId: user.organizationId },
+    );
+
+    return { count: intervals.length };
   }
 
   async findReviewsByBorehole(user: any, boreholeId: string) {

@@ -1,5 +1,6 @@
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
 import { InviteProjectCompanyDto } from './dto/invite-project-company.dto';
 import { RespondProjectCompanyDto } from './dto/respond-project-company.dto';
@@ -8,6 +9,32 @@ export declare class ProjectsController {
     private readonly projectsService;
     constructor(projectsService: ProjectsService);
     create(dto: CreateProjectDto, user: any): Promise<{
+        name: string;
+        description: string | null;
+        id: string;
+        status: import("@prisma/client").$Enums.ProjectStatus;
+        createdAt: Date;
+        updatedAt: Date;
+        state: string | null;
+        geotechOrganizationId: string | null;
+        epcOrganizationId: string | null;
+        projectCode: string;
+        tenderId: string | null;
+        createdByUserId: string;
+        startDate: Date | null;
+        endDate: Date | null;
+        projectType: string | null;
+        district: string | null;
+        chainageFrom: import("@prisma/client/runtime/library").Decimal | null;
+        chainageTo: import("@prisma/client/runtime/library").Decimal | null;
+        initiatedByCompanyId: string | null;
+        initiatedByUserId: string | null;
+        billingCompanyId: string | null;
+        totalBoringsPlanned: number | null;
+        targetCompletionDate: Date | null;
+        lockedAt: Date | null;
+    }>;
+    update(projectId: string, dto: UpdateProjectDto, user: any): Promise<{
         name: string;
         description: string | null;
         id: string;

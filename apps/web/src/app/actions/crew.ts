@@ -96,6 +96,31 @@ export async function createCrewMemberAction(
   return { success: true, user, oneTimePassword, isExisting };
 }
 
+export interface MobileLookupResult {
+  found: boolean;
+  user?: { id: string; firstName: string; lastName: string | null; employeeCode: string | null } | null;
+  error?: string;
+}
+
+/**
+ * Read-only mobile-number check for the Add Crew Member form, so the UI can
+ * autofill first/last name before the user submits (POST /users would
+ * otherwise reject a mismatched name for an already-registered mobile).
+ */
+export async function findUserByMobileAction(mobile: string): Promise<MobileLookupResult> {
+  const token = await getToken();
+  if (!token) return { found: false, error: "Not authenticated — please log in again." };
+  try {
+    const res = await apiGet<{ found: boolean; user: any | null }>(
+      `/users/by-mobile/${encodeURIComponent(mobile)}`,
+      token
+    );
+    return { found: res.found, user: res.user };
+  } catch (err) {
+    return { found: false, error: toErrorMessage(err, "Failed to look up mobile number.") };
+  }
+}
+
 /**
  * Members of one team (with user details incl. mobile) — [] on failure,
  * for honest empty states in the borehole-assignment share panel.

@@ -15,6 +15,8 @@ import { syncManager } from '../services/sync';
 import { api } from '../services/api';
 import { media } from '../services/media';
 import { location, GpsFix } from '../services/location';
+import { rawDecimalCoords } from '../utils/geo';
+import PhotoGallery from '../components/PhotoGallery';
 
 const SPT_INTERVAL_M = 1.5;
 
@@ -46,9 +48,14 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
 
   const resuming = !!isResuming || borehole?.status === 'TERMINATED';
 
-  const plannedLat = toNum(borehole?.latitude);
-  const plannedLng = toNum(borehole?.longitude);
-  const hasPlannedCoords = plannedLat !== null && plannedLng !== null;
+  // Original coordinates as uploaded only — never a UTM-guessed conversion.
+  // A wrong guess here would walk the worker to the wrong physical spot, so
+  // if the value isn't already valid decimal degrees, guidance is disabled
+  // (below) rather than risking a plausible-looking but wrong location.
+  const plannedCoords = rawDecimalCoords(borehole?.latitude, borehole?.longitude);
+  const plannedLat = plannedCoords?.lat ?? null;
+  const plannedLng = plannedCoords?.lng ?? null;
+  const hasPlannedCoords = plannedCoords !== null;
 
   // Live GPS tracker — guides the worker to the planned point
   const [gpsFix, setGpsFix] = useState<GpsFix | null>(null);
@@ -226,6 +233,8 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
 
       // Queue sync actions — the worker's real arrival GPS travels with the
       // status update so the portal can show planned-vs-actual deviation.
+      // startedAt is the actual moment boring began (not the RigSetup date,
+      // which only carries a date with no time) — overwrites that placeholder.
       await syncManager.queueOperation(
         'BORING',
         borehole.id,
@@ -233,6 +242,7 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
         {
           status: 'IN_PROGRESS',
           weather,
+          startedAt: newSession.startedAt,
           ...(arrivalFix
             ? {
                 actualLat: arrivalFix.lat,
@@ -453,6 +463,9 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
             );
           })}
         </View>
+
+        {/* Photos of this borehole — queued + synced, tap for geo-tag details */}
+        <PhotoGallery borehole={borehole} />
 
         <TouchableOpacity style={styles.startBtn} onPress={handleStartBoring} disabled={starting}>
           <Text style={styles.startBtnText}>

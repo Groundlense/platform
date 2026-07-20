@@ -47,6 +47,27 @@ export declare class UsersService {
         inviteExpiresAt: Date | null;
         profilePhotoUrl: string | null;
     }) | null>;
+    findByMobile(mobile: string): Promise<{
+        found: boolean;
+        user: {
+            organizationId: string;
+            firstName: string;
+            lastName: string | null;
+            email: string | null;
+            employeeCode: string | null;
+            designation: string | null;
+            userType: string | null;
+            preferredLanguage: string | null;
+            mobile: string | null;
+            id: string;
+            mobileVerified: boolean;
+            status: import("@prisma/client").$Enums.UserStatus;
+            lastLoginAt: Date | null;
+            createdAt: Date;
+            updatedAt: Date;
+            profilePhotoUrl: string | null;
+        } | null;
+    }>;
     findAll(actor: any): Promise<{
         organizationId: string;
         firstName: string;

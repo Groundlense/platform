@@ -21,6 +21,7 @@ const permissions_decorator_1 = require("../auth/decorators/permissions.decorato
 const current_user_decorator_1 = require("../auth/decorators/current-user.decorator");
 const reviews_service_1 = require("./reviews.service");
 const create_review_dto_1 = require("./dto/create-review.dto");
+const bulk_review_dto_1 = require("./dto/bulk-review.dto");
 const create_thread_dto_1 = require("./dto/create-thread.dto");
 const create_message_dto_1 = require("./dto/create-message.dto");
 let ReviewsController = class ReviewsController {
@@ -30,6 +31,9 @@ let ReviewsController = class ReviewsController {
     }
     createIntervalReview(intervalId, dto, user) {
         return this.reviewsService.createIntervalReview(user, intervalId, dto);
+    }
+    createBulkBoreholeReview(boreholeId, dto, user) {
+        return this.reviewsService.createBulkBoreholeReview(user, boreholeId, dto);
     }
     findReviewsByBorehole(boreholeId, user) {
         return this.reviewsService.findReviewsByBorehole(user, boreholeId);
@@ -67,6 +71,19 @@ __decorate([
     __metadata("design:paramtypes", [String, create_review_dto_1.CreateReviewDto, Object]),
     __metadata("design:returntype", void 0)
 ], ReviewsController.prototype, "createIntervalReview", null);
+__decorate([
+    (0, swagger_1.ApiOperation)({
+        summary: 'Bulk-approve or bulk-reject every interval of a borehole in one call',
+    }),
+    (0, permissions_decorator_1.Permissions)('REVIEW_CREATE'),
+    (0, common_1.Post)('boreholes/:boreholeId/reviews/bulk'),
+    __param(0, (0, common_1.Param)('boreholeId')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, bulk_review_dto_1.BulkReviewDto, Object]),
+    __metadata("design:returntype", void 0)
+], ReviewsController.prototype, "createBulkBoreholeReview", null);
 __decorate([
     (0, swagger_1.ApiOperation)({
         summary: 'List all engineer reviews for a borehole',

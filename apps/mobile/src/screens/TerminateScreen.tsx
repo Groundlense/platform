@@ -92,6 +92,11 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
       // Permanent stop: no COMPLETED queued here — BoringClosure queues
       // { status: 'COMPLETED' } once the worker locks and submits the closure.
 
+      // Push everything recorded so far (intervals, samples, session end,
+      // queued photos) right now if there's network — a stopped boring must
+      // never sit on the phone. Fire-and-forget: offline it stays queued.
+      syncManager.syncWithServer().catch(() => {});
+
       Alert.alert(
         willResume ? 'Boring Paused' : 'Session Ended',
         willResume

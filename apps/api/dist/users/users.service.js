@@ -105,6 +105,13 @@ let UsersService = class UsersService {
             },
         });
     }
+    async findByMobile(mobile) {
+        const user = await this.db.user.findUnique({
+            where: { mobile },
+            select: SAFE_USER_SELECT,
+        });
+        return { found: !!user, user: user ?? null };
+    }
     async findAll(actor) {
         return this.db.user.findMany({
             where: this.isSuperAdmin(actor)

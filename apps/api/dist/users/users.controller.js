@@ -34,6 +34,9 @@ let UsersController = class UsersController {
     findAll(user) {
         return this.usersService.findAll(user);
     }
+    findByMobile(mobile) {
+        return this.usersService.findByMobile(mobile);
+    }
     createUser(dto, user) {
         return this.usersService.createUser(dto, user);
     }
@@ -59,6 +62,14 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], UsersController.prototype, "findAll", null);
+__decorate([
+    (0, permissions_decorator_1.Permissions)('USER_VIEW'),
+    (0, common_1.Get)('by-mobile/:mobile'),
+    __param(0, (0, common_3.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], UsersController.prototype, "findByMobile", null);
 __decorate([
     (0, permissions_decorator_1.Permissions)('USER_MANAGE'),
     (0, common_2.Post)(),

@@ -15,18 +15,32 @@ function toErrorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
-export type ReviewActionType = "APPROVE" | "REJECT" | "MODIFY_N";
+export type ReviewActionType = "APPROVE" | "REJECT" | "MODIFY_N" | "MODIFY_FIELD";
+
+export type EditableIntervalField =
+  | "fromDepth"
+  | "toDepth"
+  | "blow1"
+  | "blow2"
+  | "blow3"
+  | "nValue"
+  | "nCorrected"
+  | "soilDescription";
 
 /**
  * Engineer review on an interval — POST /intervals/:id/reviews.
- * APPROVE / REJECT persist the decision; MODIFY_N updates the interval's
- * nValue server-side (mandatory isCodeReason) and appends an audit remark.
+ * APPROVE / REJECT persist the decision; MODIFY_FIELD corrects any editable
+ * interval field server-side (mandatory isCodeReason) and appends an audit
+ * remark original→corrected can be recovered from on every reload.
+ * MODIFY_N is the legacy N-only shape, kept for compatibility.
  */
 export async function createIntervalReview(
   intervalId: string,
   payload: {
     action: ReviewActionType;
     nValueNew?: number;
+    fieldName?: EditableIntervalField;
+    fieldValueNew?: string;
     isCodeReason?: string;
     comments?: string;
   }
@@ -38,6 +52,48 @@ export async function createIntervalReview(
     return { success: true, data: review };
   } catch (err) {
     return { success: false, error: toErrorMessage(err, "Failed to submit review.") };
+  }
+}
+
+/**
+ * Bulk APPROVE/REJECT every interval of a borehole in one call — replaces
+ * firing createIntervalReview once per interval (was one HTTP round trip
+ * per interval; very slow on boreholes with many intervals).
+ */
+export async function createBulkBoreholeReview(
+  boreholeId: string,
+  payload: { action: "APPROVE" | "REJECT"; comments?: string }
+): Promise<PortalActionResult<{ count: number }>> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const res = await apiPost<{ count: number }>(`/boreholes/${boreholeId}/reviews/bulk`, payload, token);
+    return { success: true, data: res };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to submit bulk review.") };
+  }
+}
+
+/**
+ * Assigns a team to many boreholes in one call — replaces looping
+ * assignBoreholeTeamAction once per borehole (sequential, one at a time).
+ */
+export async function bulkAssignTeamAction(
+  projectId: string,
+  boreholeIds: string[],
+  teamId: string
+): Promise<PortalActionResult<{ assignedIds: string[]; lockedCodes: string[] }>> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const res = await apiPatch<{ assignedIds: string[]; lockedCodes: string[] }>(
+      `/projects/${projectId}/boreholes/bulk-assign-team`,
+      { boreholeIds, teamId },
+      token
+    );
+    return { success: true, data: res };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to assign boreholes to team.") };
   }
 }
 

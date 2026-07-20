@@ -11,9 +11,15 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BoreholesController = void 0;
 const common_1 = require("@nestjs/common");
+const fs_1 = require("fs");
+const path_1 = require("path");
+const archiver_1 = __importDefault(require("archiver"));
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 const permissions_guard_1 = require("../auth/guards/permissions.guard");
 const permissions_decorator_1 = require("../auth/decorators/permissions.decorator");
@@ -23,6 +29,8 @@ const create_borehole_dto_1 = require("./dto/create-borehole.dto");
 const update_interval_dto_1 = require("./dto/update-interval.dto");
 const create_sample_dto_1 = require("./dto/create-sample.dto");
 const assign_borehole_dto_1 = require("./dto/assign-borehole.dto");
+const bulk_assign_team_dto_1 = require("./dto/bulk-assign-team.dto");
+const update_borehole_location_dto_1 = require("./dto/update-borehole-location.dto");
 const swagger_1 = require("@nestjs/swagger");
 const update_borehole_status_dto_1 = require("./dto/update-borehole-status.dto");
 const create_water_table_dto_1 = require("./dto/create-water-table.dto");
@@ -37,6 +45,9 @@ let BoreholesController = class BoreholesController {
     }
     findByProject(projectId, user) {
         return this.boreholesService.findByProject(projectId, user);
+    }
+    getProjectReportData(projectId, user) {
+        return this.boreholesService.getProjectReportData(projectId, user);
     }
     findAssigned(projectId, user) {
         return this.boreholesService.findAssignedToUser(user, projectId);
@@ -61,6 +72,12 @@ let BoreholesController = class BoreholesController {
     }
     assign(boreholeId, dto, user) {
         return this.boreholesService.assign(boreholeId, user, dto);
+    }
+    updateLocation(boreholeId, dto, user) {
+        return this.boreholesService.updateLocation(boreholeId, user, dto);
+    }
+    bulkAssignTeam(projectId, dto, user) {
+        return this.boreholesService.bulkAssignTeam(projectId, user, dto);
     }
     updateStatus(boreholeId, dto, user) {
         return this.boreholesService.updateStatus(boreholeId, dto.status, user);
@@ -92,6 +109,25 @@ let BoreholesController = class BoreholesController {
     exportProject(projectId, _query, user) {
         return this.boreholesService.exportProject(projectId, user);
     }
+    async downloadProjectPhotosZip(projectId, user, res) {
+        const media = await this.boreholesService.listProjectMediaForZip(projectId, user);
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="site-photos-${projectId}.zip"`);
+        const archive = (0, archiver_1.default)('zip', { zlib: { level: 6 } });
+        archive.on('error', (err) => res.destroy(err));
+        archive.pipe(res);
+        for (const m of media) {
+            if (!m.mimeType?.startsWith('image/'))
+                continue;
+            const absolutePath = (0, path_1.join)(process.cwd(), 'uploads', m.filePath);
+            if (!(0, fs_1.existsSync)(absolutePath))
+                continue;
+            archive.file(absolutePath, {
+                name: `${m.boreholeCode}/${m.fileName || m.id}`,
+            });
+        }
+        await archive.finalize();
+    }
 };
 exports.BoreholesController = BoreholesController;
 __decorate([
@@ -113,6 +149,15 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], BoreholesController.prototype, "findByProject", null);
+__decorate([
+    (0, permissions_decorator_1.Permissions)('REPORT_VIEW'),
+    (0, common_1.Get)('projects/:projectId/report-data'),
+    __param(0, (0, common_1.Param)('projectId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], BoreholesController.prototype, "getProjectReportData", null);
 __decorate([
     (0, permissions_decorator_1.Permissions)('BOREHOLE_VIEW'),
     (0, common_1.Get)('boreholes/assigned'),
@@ -189,6 +234,26 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], BoreholesController.prototype, "assign", null);
 __decorate([
+    (0, permissions_decorator_1.Permissions)('WORKER_ASSIGN'),
+    (0, common_1.Patch)('boreholes/:id/location'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_borehole_location_dto_1.UpdateBoreholeLocationDto, Object]),
+    __metadata("design:returntype", void 0)
+], BoreholesController.prototype, "updateLocation", null);
+__decorate([
+    (0, permissions_decorator_1.Permissions)('WORKER_ASSIGN'),
+    (0, common_1.Patch)('projects/:projectId/boreholes/bulk-assign-team'),
+    __param(0, (0, common_1.Param)('projectId')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, bulk_assign_team_dto_1.BulkAssignTeamDto, Object]),
+    __metadata("design:returntype", void 0)
+], BoreholesController.prototype, "bulkAssignTeam", null);
+__decorate([
     (0, permissions_decorator_1.Permissions)('BOREHOLE_EDIT'),
     (0, common_1.Patch)('boreholes/:id/status'),
     __param(0, (0, common_1.Param)('id')),
@@ -256,6 +321,16 @@ __decorate([
     __metadata("design:paramtypes", [String, export_query_dto_1.ExportProjectQueryDto, Object]),
     __metadata("design:returntype", void 0)
 ], BoreholesController.prototype, "exportProject", null);
+__decorate([
+    (0, permissions_decorator_1.Permissions)('REPORT_VIEW'),
+    (0, common_1.Get)('projects/:projectId/photos/zip'),
+    __param(0, (0, common_1.Param)('projectId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], BoreholesController.prototype, "downloadProjectPhotosZip", null);
 exports.BoreholesController = BoreholesController = __decorate([
     (0, swagger_1.ApiTags)('Boreholes'),
     (0, swagger_1.ApiBearerAuth)(),

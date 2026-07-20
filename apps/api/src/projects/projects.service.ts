@@ -10,6 +10,7 @@ import { DatabaseService } from '../database/database.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { ProjectAccessService } from '../common/access/project-access.service';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
 import { InviteProjectCompanyDto } from './dto/invite-project-company.dto';
 import { AssignProjectRoleDto } from './dto/assign-project-role.dto';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -171,6 +172,54 @@ export class ProjectsService {
     return project;
   }
 
+  /**
+   * Project Details card on the Setup tab — name/state/dates. Frozen once
+   * fieldwork has started, same rule as boreholes/members (SUPER_ADMIN
+   * bypasses). endDate and targetCompletionDate are kept in sync since the
+   * web UI only exposes a single "Expected Completion" field for both.
+   */
+  async update(projectId: string, dto: UpdateProjectDto, actor: any) {
+    await this.access.assertProjectAccess(actor, projectId);
+
+    if (!this.access.isSuperAdmin(actor)) {
+      const started = await this.db.borehole.count({
+        where: { projectId, status: { not: 'PLANNED' } },
+      });
+      if (started > 0) {
+        throw new ForbiddenException(
+          'Project setup is locked — fieldwork has already started',
+        );
+      }
+    }
+
+    const data: Record<string, unknown> = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.state !== undefined) data.state = dto.state;
+    if (dto.startDate !== undefined) {
+      data.startDate = dto.startDate ? new Date(dto.startDate) : null;
+    }
+    if (dto.endDate !== undefined) {
+      const endDate = dto.endDate ? new Date(dto.endDate) : null;
+      data.endDate = endDate;
+      data.targetCompletionDate = endDate;
+    }
+
+    const project = await this.db.project.update({
+      where: { id: projectId },
+      data,
+    });
+
+    await this.activityLogsService.log(
+      actor.id,
+      'PROJECT_UPDATED',
+      'PROJECT',
+      project.id,
+      data,
+    );
+
+    return project;
+  }
+
   async findAll(user: any) {
     const projects = await this.db.project.findMany({
       where: this.access.projectScopeWhere(user),
@@ -272,19 +321,10 @@ export class ProjectsService {
   async addMember(projectId: string, userId: string, actor: any) {
     await this.access.assertProjectAccess(actor, projectId);
 
-    // Setup freeze: once any borehole is beyond PLANNED, the member list on
-    // the setup page is immutable (SUPER_ADMIN excepted).
-    if (!this.access.isSuperAdmin(actor)) {
-      const started = await this.db.borehole.count({
-        where: { projectId, status: { not: 'PLANNED' } },
-      });
-      if (started > 0) {
-        throw new ForbiddenException(
-          'Project setup is locked — fieldwork has already started',
-        );
-      }
-    }
-
+    // Unlike boreholes/project-detail edits, crew staffing (adding a
+    // worker/member) stays open after fieldwork starts — new hires still
+    // need to join teams working still-PLANNED boreholes. Per-borehole
+    // reassignment remains frozen via BoreholesService#assign.
     const existing = await this.db.projectMember.findFirst({
       where: { projectId, userId },
     });

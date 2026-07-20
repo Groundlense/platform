@@ -195,6 +195,46 @@ let BoreholesService = class BoreholesService {
         });
         return borehole;
     }
+    async updateLocation(boreholeId, user, dto) {
+        const existing = await this.access.assertBoreholeAccess(user, boreholeId);
+        if (existing.status !== 'PLANNED' && !this.access.isSuperAdmin(user)) {
+            throw new common_2.ForbiddenException('Location is locked — fieldwork on this borehole has started');
+        }
+        const lat = Number(dto.latitude);
+        const lng = Number(dto.longitude);
+        if (!Number.isFinite(lat) || lat < -90 || lat > 90 ||
+            !Number.isFinite(lng) || lng < -180 || lng > 180) {
+            throw new common_2.BadRequestException('latitude/longitude must be valid decimal degrees');
+        }
+        const borehole = await this.db.borehole.update({
+            where: { id: boreholeId },
+            data: { latitude: dto.latitude, longitude: dto.longitude },
+        });
+        await this.activityLogsService.log(user.id, 'BOREHOLE_LOCATION_UPDATED', 'BOREHOLE', borehole.id, { latitude: dto.latitude, longitude: dto.longitude });
+        return borehole;
+    }
+    async bulkAssignTeam(projectId, user, dto) {
+        await this.access.assertProjectAccess(user, projectId);
+        const boreholes = await this.db.borehole.findMany({
+            where: { id: { in: dto.boreholeIds }, projectId },
+            select: { id: true, status: true, boreholeCode: true },
+        });
+        const isSuperAdmin = this.access.isSuperAdmin(user);
+        const assignable = boreholes.filter((b) => b.status === 'PLANNED' || isSuperAdmin);
+        const locked = boreholes.filter((b) => b.status !== 'PLANNED' && !isSuperAdmin);
+        const assignableIds = assignable.map((b) => b.id);
+        if (assignableIds.length > 0) {
+            await this.db.borehole.updateMany({
+                where: { id: { in: assignableIds } },
+                data: { teamId: dto.teamId },
+            });
+            await this.activityLogsService.log(user.id, 'BOREHOLE_BULK_ASSIGNED', 'PROJECT', projectId, { boreholeIds: assignableIds, teamId: dto.teamId });
+        }
+        return {
+            assignedIds: assignableIds,
+            lockedCodes: locked.map((b) => b.boreholeCode),
+        };
+    }
     async updateStatus(boreholeId, status, user) {
         const borehole = await this.access.assertBoreholeAccess(user, boreholeId);
         const current = borehole.status;
@@ -235,6 +275,24 @@ let BoreholesService = class BoreholesService {
                 intervals: {
                     include: {
                         samples: true,
+                        media: true,
+                    },
+                },
+                waterTableObservations: true,
+            },
+        });
+    }
+    async getProjectReportData(projectId, user) {
+        await this.access.assertProjectAccess(user, projectId);
+        return this.db.borehole.findMany({
+            where: { projectId },
+            orderBy: { boreholeCode: 'asc' },
+            include: {
+                site: true,
+                team: true,
+                intervals: {
+                    include: {
+                        samples: { include: { labResult: true } },
                         media: true,
                     },
                 },
@@ -385,6 +443,24 @@ let BoreholesService = class BoreholesService {
             project,
             integrity,
         };
+    }
+    async listProjectMediaForZip(projectId, user) {
+        await this.access.assertProjectAccess(user, projectId);
+        const boreholes = await this.db.borehole.findMany({
+            where: { projectId },
+            select: {
+                boreholeCode: true,
+                intervals: {
+                    select: {
+                        media: {
+                            select: { id: true, fileName: true, filePath: true, mimeType: true },
+                        },
+                    },
+                },
+            },
+            orderBy: { boreholeCode: 'asc' },
+        });
+        return boreholes.flatMap((bh) => bh.intervals.flatMap((iv) => iv.media.map((m) => ({ ...m, boreholeCode: bh.boreholeCode }))));
     }
     async computeIntegritySummary(boreholeId) {
         const intervals = await this.db.boreholeInterval.findMany({

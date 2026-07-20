@@ -78,6 +78,21 @@ export class UsersService {
     });
   }
 
+  /**
+   * Lookup-only mobile check for the Add Crew Member form — lets the web UI
+   * autofill first/last name before submitting POST /users, whose own
+   * mobile-match logic (see createUser) requires an exact name match.
+   * mobile is globally unique, so no organization scoping is needed.
+   */
+  async findByMobile(mobile: string) {
+    const user = await this.db.user.findUnique({
+      where: { mobile },
+      select: SAFE_USER_SELECT,
+    });
+
+    return { found: !!user, user: user ?? null };
+  }
+
   async findAll(actor: any) {
     return this.db.user.findMany({
       where: this.isSuperAdmin(actor)

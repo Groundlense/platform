@@ -12,6 +12,7 @@ import { t } from '../utils/translations';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
 import { media } from '../services/media';
+import PhotoGallery from '../components/PhotoGallery';
 
 function formatDate(iso?: string | null): string {
   if (!iso) return '—';
@@ -351,6 +352,9 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
               : '📷 Final Borehole Photo / बोरहोल फोटो'}
           </Text>
         </TouchableOpacity>
+
+        {/* Photos of this borehole — queued + synced, tap for geo-tag details */}
+        <PhotoGallery borehole={borehole} />
 
         {/* Signature Box — real logged-in worker, typed-name confirmation */}
         <TouchableOpacity

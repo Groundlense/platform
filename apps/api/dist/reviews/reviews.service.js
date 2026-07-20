@@ -15,7 +15,16 @@ const client_1 = require("@prisma/client");
 const database_service_1 = require("../database/database.service");
 const project_access_service_1 = require("../common/access/project-access.service");
 const activity_logs_service_1 = require("../activity-logs/activity-logs.service");
+const integrity_service_1 = require("../common/integrity/integrity.service");
 const create_review_dto_1 = require("./dto/create-review.dto");
+const INT_INTERVAL_FIELDS = new Set([
+    'blow1',
+    'blow2',
+    'blow3',
+    'nValue',
+    'nCorrected',
+]);
+const DIFF_MARKER = '##DIFF##';
 const USER_SUMMARY_SELECT = {
     id: true,
     firstName: true,
@@ -25,13 +34,32 @@ let ReviewsService = class ReviewsService {
     db;
     access;
     activityLogs;
-    constructor(db, access, activityLogs) {
+    integrity;
+    constructor(db, access, activityLogs, integrity) {
         this.db = db;
         this.access = access;
         this.activityLogs = activityLogs;
+        this.integrity = integrity;
     }
     intervalTag(intervalId) {
         return `[interval:${intervalId}]`;
+    }
+    parseFieldValue(field, raw) {
+        if (field === 'soilDescription') {
+            const trimmed = raw.trim();
+            if (!trimmed) {
+                throw new common_1.BadRequestException('fieldValueNew cannot be empty');
+            }
+            return trimmed;
+        }
+        const n = Number(raw);
+        if (!Number.isFinite(n)) {
+            throw new common_1.BadRequestException(`fieldValueNew must be a valid number for field "${field}"`);
+        }
+        if (INT_INTERVAL_FIELDS.has(field) && !Number.isInteger(n)) {
+            throw new common_1.BadRequestException(`fieldValueNew must be a whole number for field "${field}"`);
+        }
+        return n;
     }
     hasReviewPermission(user) {
         return (this.access.isSuperAdmin(user) ||
@@ -39,36 +67,67 @@ let ReviewsService = class ReviewsService {
     }
     async createIntervalReview(user, intervalId, dto) {
         const interval = await this.access.assertIntervalAccess(user, intervalId);
-        if (dto.action === create_review_dto_1.ReviewAction.MODIFY_N) {
-            if (dto.nValueNew === undefined || dto.nValueNew === null) {
-                throw new common_1.BadRequestException('nValueNew is required when action is MODIFY_N');
+        const isFieldEdit = dto.action === create_review_dto_1.ReviewAction.MODIFY_N ||
+            dto.action === create_review_dto_1.ReviewAction.MODIFY_FIELD;
+        const field = dto.action === create_review_dto_1.ReviewAction.MODIFY_N
+            ? 'nValue'
+            : dto.action === create_review_dto_1.ReviewAction.MODIFY_FIELD
+                ? (dto.fieldName ?? null)
+                : null;
+        let newFieldValue = null;
+        if (isFieldEdit) {
+            if (!field || !create_review_dto_1.EDITABLE_INTERVAL_FIELDS.includes(field)) {
+                throw new common_1.BadRequestException(`fieldName must be one of: ${create_review_dto_1.EDITABLE_INTERVAL_FIELDS.join(', ')}`);
             }
             if (!dto.isCodeReason?.trim()) {
-                throw new common_1.BadRequestException('isCodeReason (IS-code justification) is required when action is MODIFY_N');
+                throw new common_1.BadRequestException(`isCodeReason (IS-code justification) is required when action is ${dto.action}`);
+            }
+            if (dto.action === create_review_dto_1.ReviewAction.MODIFY_N) {
+                if (dto.nValueNew === undefined || dto.nValueNew === null) {
+                    throw new common_1.BadRequestException('nValueNew is required when action is MODIFY_N');
+                }
+                newFieldValue = dto.nValueNew;
+            }
+            else {
+                if (dto.fieldValueNew === undefined || dto.fieldValueNew === null) {
+                    throw new common_1.BadRequestException('fieldValueNew is required when action is MODIFY_FIELD');
+                }
+                newFieldValue = this.parseFieldValue(field, dto.fieldValueNew);
             }
         }
         const statusByAction = {
             [create_review_dto_1.ReviewAction.APPROVE]: client_1.ReviewStatus.APPROVED,
             [create_review_dto_1.ReviewAction.REJECT]: client_1.ReviewStatus.REJECTED,
             [create_review_dto_1.ReviewAction.MODIFY_N]: client_1.ReviewStatus.RESOLVED,
+            [create_review_dto_1.ReviewAction.MODIFY_FIELD]: client_1.ReviewStatus.RESOLVED,
         };
         const commentParts = [this.intervalTag(intervalId)];
         let oldValue = null;
         let newValue = null;
-        if (dto.action === create_review_dto_1.ReviewAction.MODIFY_N) {
-            const modificationNote = `N modified ${interval.nValue ?? 'null'}→${dto.nValueNew} per ${dto.isCodeReason}`;
+        let newRemarks = null;
+        if (isFieldEdit && field) {
+            const rawOld = interval[field];
+            const oldFieldValue = rawOld == null
+                ? null
+                : typeof rawOld === 'object' && typeof rawOld.toNumber === 'function'
+                    ? rawOld.toNumber()
+                    : rawOld;
+            const modificationNote = `${field} modified ${oldFieldValue ?? 'null'}→${newFieldValue} per ${dto.isCodeReason}`;
             commentParts.push(modificationNote);
-            oldValue = {
-                nValue: interval.nValue,
-                remarks: interval.remarks,
-            };
-            const newRemarks = interval.remarks
-                ? `${interval.remarks}\n${modificationNote}`
-                : modificationNote;
-            newValue = {
-                nValue: dto.nValueNew,
-                remarks: newRemarks,
-            };
+            const diffLine = `${DIFF_MARKER}${JSON.stringify({
+                field,
+                old: oldFieldValue,
+                new: newFieldValue,
+                clause: dto.isCodeReason,
+                comment: dto.comments ?? null,
+                byUserId: user.id,
+                at: new Date().toISOString(),
+            })}`;
+            oldValue = { [field]: oldFieldValue, remarks: interval.remarks };
+            newRemarks = interval.remarks
+                ? `${interval.remarks}\n${diffLine}`
+                : diffLine;
+            newValue = { [field]: newFieldValue, remarks: newRemarks };
         }
         else {
             oldValue = { reviewStatus: null };
@@ -78,12 +137,12 @@ let ReviewsService = class ReviewsService {
             commentParts.push(dto.comments);
         }
         const review = await this.db.$transaction(async (tx) => {
-            if (dto.action === create_review_dto_1.ReviewAction.MODIFY_N) {
+            if (isFieldEdit && field) {
                 await tx.boreholeInterval.update({
                     where: { id: intervalId },
                     data: {
-                        nValue: dto.nValueNew,
-                        remarks: newValue.remarks,
+                        [field]: newFieldValue,
+                        remarks: newRemarks,
                     },
                 });
             }
@@ -94,7 +153,7 @@ let ReviewsService = class ReviewsService {
                     reviewType: 'ENGINEER_REVIEW',
                     status: statusByAction[dto.action],
                     comments: commentParts.join(' '),
-                    isCodeReason: dto.action === create_review_dto_1.ReviewAction.MODIFY_N
+                    isCodeReason: isFieldEdit
                         ? dto.isCodeReason
                         : (dto.isCodeReason ?? null),
                 },
@@ -103,6 +162,9 @@ let ReviewsService = class ReviewsService {
                 },
             });
         });
+        if (isFieldEdit) {
+            await this.integrity.rehashChain(interval.boreholeId, interval.intervalNo);
+        }
         await this.activityLogs.log(user.id, `REVIEW_${dto.action}`, 'BoreholeInterval', intervalId, {
             boreholeId: interval.boreholeId,
             reviewId: review.id,
@@ -114,6 +176,32 @@ let ReviewsService = class ReviewsService {
             isCodeReason: dto.isCodeReason,
         });
         return review;
+    }
+    async createBulkBoreholeReview(user, boreholeId, dto) {
+        const borehole = await this.access.assertBoreholeAccess(user, boreholeId);
+        const intervals = await this.db.boreholeInterval.findMany({
+            where: { boreholeId },
+            select: { id: true },
+        });
+        if (intervals.length === 0) {
+            return { count: 0 };
+        }
+        const status = dto.action === 'APPROVE' ? client_1.ReviewStatus.APPROVED : client_1.ReviewStatus.REJECTED;
+        const noteText = dto.comments?.trim() ||
+            (dto.action === 'APPROVE'
+                ? 'Boring approved by engineer review'
+                : 'Boring rejected by engineer review');
+        await this.db.$transaction(intervals.map((iv) => this.db.engineerReview.create({
+            data: {
+                boreholeId,
+                reviewedByUserId: user.id,
+                reviewType: 'ENGINEER_REVIEW',
+                status,
+                comments: `${this.intervalTag(iv.id)} ${noteText}`,
+            },
+        })));
+        await this.activityLogs.log(user.id, `REVIEW_BULK_${dto.action}`, 'Borehole', boreholeId, { boreholeId: borehole.id, intervalCount: intervals.length }, { newValue: { status }, actorCompanyId: user.organizationId });
+        return { count: intervals.length };
     }
     async findReviewsByBorehole(user, boreholeId) {
         await this.access.assertBoreholeAccess(user, boreholeId);
@@ -307,6 +395,7 @@ exports.ReviewsService = ReviewsService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [database_service_1.DatabaseService,
         project_access_service_1.ProjectAccessService,
-        activity_logs_service_1.ActivityLogsService])
+        activity_logs_service_1.ActivityLogsService,
+        integrity_service_1.IntegrityService])
 ], ReviewsService);
 //# sourceMappingURL=reviews.service.js.map

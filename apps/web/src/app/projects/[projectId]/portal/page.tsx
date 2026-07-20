@@ -4,12 +4,11 @@ import {
   getProjects,
   getProjectBoreholes,
   getProjectSites,
-  getBoreholeReportData,
+  getProjectReportData,
   getProjectMembers,
   getNablLabs,
   getRecentLogs,
   getProjectDashboard,
-  getLabResult,
   getOrgTeams,
   getUsers,
   getPendingProjectJoinRequests,
@@ -81,38 +80,16 @@ export default async function PortalPage({ params }: { params: Promise<{ project
         }
       }
 
-      // Phase 3: Fetch full report data for each borehole (includes intervals, samples, labResults, media, waterTable)
+      // Phase 3: Full report data for every borehole in one batched call
+      // (intervals, samples incl. labResult, media, waterTable) — replaces
+      // what used to be a separate HTTP round trip per borehole plus another
+      // per sample, which got very heavy on projects with many boreholes and
+      // re-ran on every 30s background poll.
       if (boreholes.length > 0) {
-        const reportResults = await Promise.allSettled(
-          boreholes.map((bh: any) => getBoreholeReportData(bh.id, token))
-        );
-        boreholeReportData = reportResults
-          .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled" && r.value != null)
-          .map((r) => r.value);
-
-        // Phase 4: attach real lab results to each sample (404 → no result yet)
-        const sampleIds: string[] = boreholeReportData.flatMap((bh: any) =>
-          (bh.intervals || []).flatMap((iv: any) => (iv.samples || []).map((s: any) => s.id))
-        );
-        if (sampleIds.length > 0) {
-          const labResultsRes = await Promise.allSettled(
-            sampleIds.map((id) => getLabResult(id, token))
-          );
-          const resultsBySample = new Map<string, any>();
-          sampleIds.forEach((id, i) => {
-            const r = labResultsRes[i];
-            if (r.status === "fulfilled" && r.value != null) resultsBySample.set(id, r.value);
-          });
-          boreholeReportData = boreholeReportData.map((bh: any) => ({
-            ...bh,
-            intervals: (bh.intervals || []).map((iv: any) => ({
-              ...iv,
-              samples: (iv.samples || []).map((s: any) => ({
-                ...s,
-                labResult: resultsBySample.get(s.id) ?? null,
-              })),
-            })),
-          }));
+        try {
+          boreholeReportData = await getProjectReportData(projectId, token);
+        } catch (err) {
+          console.warn("Failed to fetch project report data:", err);
         }
       }
     } catch (err) {

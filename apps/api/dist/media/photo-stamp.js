@@ -12,17 +12,29 @@ const STAMPABLE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 function isStampable(mimeType) {
     return !!mimeType && STAMPABLE_MIME_TYPES.includes(mimeType);
 }
-function logoPath() {
-    return (process.env.STAMP_LOGO_PATH ??
-        (0, path_1.join)(process.cwd(), 'assets', 'Groundlense_logo.jpeg'));
+function logoCandidatePaths() {
+    const names = ['groundlense-logo.png', 'Groundlense_logo.jpeg'];
+    const roots = [
+        (0, path_1.join)(__dirname, '..', '..', 'assets'),
+        (0, path_1.join)(process.cwd(), 'assets'),
+        (0, path_1.join)(process.cwd(), 'apps', 'api', 'assets'),
+    ];
+    const candidates = [process.env.STAMP_LOGO_PATH];
+    for (const name of names) {
+        for (const root of roots)
+            candidates.push((0, path_1.join)(root, name));
+    }
+    return candidates.filter((p) => !!p);
 }
 async function loadLogo() {
-    try {
-        return await (0, promises_1.readFile)(logoPath());
+    for (const path of logoCandidatePaths()) {
+        try {
+            return await (0, promises_1.readFile)(path);
+        }
+        catch {
+        }
     }
-    catch {
-        return null;
-    }
+    return null;
 }
 function esc(v) {
     return v
