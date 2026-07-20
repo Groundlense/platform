@@ -65,6 +65,10 @@ export async function createProject(data: Record<string, unknown>, token: string
   return apiPost<any>("/projects", data, token);
 }
 
+export async function updateProject(projectId: string, data: Record<string, unknown>, token: string) {
+  return apiPatch<any>(`/projects/${projectId}`, data, token);
+}
+
 export async function getProjectMembers(projectId: string, token: string) {
   return apiGet<any[]>(`/projects/${projectId}/members`, token);
 }
@@ -101,8 +105,19 @@ export async function assignBorehole(id: string, data: Record<string, unknown>, 
   return apiPatch(`/boreholes/${id}/assignment`, data, token);
 }
 
+/** Corrects a borehole's coordinates in place (already-converted decimal degrees). */
+export async function updateBoreholeLocation(id: string, data: { latitude: string; longitude: string }, token: string) {
+  return apiPatch(`/boreholes/${id}/location`, data, token);
+}
+
 export async function getBoreholeReportData(id: string, token: string) {
   return apiGet<any>(`/boreholes/${id}/report-data`, token);
+}
+
+/** Batched report data for every borehole in a project (one call, includes
+ *  labResult per sample) — use instead of getBoreholeReportData per-borehole. */
+export async function getProjectReportData(projectId: string, token: string) {
+  return apiGet<any[]>(`/projects/${projectId}/report-data`, token);
 }
 
 // ═══════════════════════════════════════
@@ -252,6 +267,11 @@ export async function getUsers(token: string) {
 
 export async function createUser(data: Record<string, unknown>, token: string) {
   return apiPost("/users", data, token);
+}
+
+/** Lookup-only check used to autofill name fields before creating a crew member. */
+export async function findUserByMobile(mobile: string, token: string) {
+  return apiGet<{ found: boolean; user: any | null }>(`/users/by-mobile/${encodeURIComponent(mobile)}`, token);
 }
 
 // ═══════════════════════════════════════

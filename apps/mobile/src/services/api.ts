@@ -227,4 +227,15 @@ export const api = {
 
   // Media upload lives in services/media.ts (photo queue → multipart fetch
   // on sync); no base64 upload path remains.
+
+  /**
+   * Photos already synced to the server for one interval.
+   * Rows: { id, fileName, mimeType, photoType, gpsLat, gpsLng, accuracyM,
+   * takenAt, createdAt } — the image itself is served (with auth) from
+   * GET /media/:id/file.
+   */
+  async getIntervalMedia(intervalId: string) {
+    const response = await apiClient.get(`/intervals/${intervalId}/media`);
+    return response.data;
+  },
 };

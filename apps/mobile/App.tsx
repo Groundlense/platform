@@ -24,6 +24,7 @@ import EngineerQueryScreen from './src/screens/EngineerQueryScreen';
 import { syncManager } from './src/services/sync';
 import { storage } from './src/services/storage';
 import { media } from './src/services/media';
+import BrandHeader from './src/components/BrandHeader';
 
 // Initialize Navigation Stack
 const Stack = createNativeStackNavigator();
@@ -104,10 +105,17 @@ function App() {
             <Stack.Navigator
               initialRouteName="Login"
               screenOptions={{
-                headerShown: false,
+                // Brand bar (logo + wordmark) on every screen; the login
+                // screen and transparent popups opt out below.
+                headerShown: true,
+                header: () => <BrandHeader />,
               }}
             >
-              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen
+                name="Login"
+                component={LoginScreen}
+                options={{ headerShown: false }}
+              />
               <Stack.Screen name="ProjectSelection" component={ProjectSelectionScreen} />
               <Stack.Screen name="BoringList" component={BoringListScreen} />
               <Stack.Screen name="RigSetup" component={RigSetupScreen} />
@@ -117,15 +125,15 @@ function App() {
               <Stack.Screen name="SampleCollection" component={SampleCollectionScreen} />
               
               {/* Popups & Modals */}
-              <Stack.Screen 
-                name="WaterTable" 
-                component={WaterTableScreen} 
-                options={{ presentation: 'transparentModal', animation: 'fade' }}
+              <Stack.Screen
+                name="WaterTable"
+                component={WaterTableScreen}
+                options={{ presentation: 'transparentModal', animation: 'fade', headerShown: false }}
               />
-              <Stack.Screen 
-                name="Terminate" 
-                component={TerminateScreen} 
-                options={{ presentation: 'transparentModal', animation: 'fade' }}
+              <Stack.Screen
+                name="Terminate"
+                component={TerminateScreen}
+                options={{ presentation: 'transparentModal', animation: 'fade', headerShown: false }}
               />
               <Stack.Screen name="RockCoring" component={RockCoringScreen} />
               <Stack.Screen name="BoringClosure" component={BoringClosureScreen} />

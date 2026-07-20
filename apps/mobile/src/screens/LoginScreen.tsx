@@ -3,6 +3,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Image,
   TextInput,
   TouchableOpacity,
   ScrollView,
@@ -155,9 +156,11 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
 
         {/* Brand Header */}
         <View style={styles.header}>
-          <View style={styles.logoIcon}>
-            <Text style={styles.logoIconText}>⛏</Text>
-          </View>
+          <Image
+            source={require('../assets/groundlense-logo.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <Text style={styles.logoTitle}>{t('appTitle', lang)}</Text>
           <Text style={styles.logoSub}>{t('fieldSupervisorApp', lang)}</Text>
         </View>
@@ -366,19 +369,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  logoIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: colors.rustLight,
-    borderWidth: 1.5,
-    borderColor: colors.rustMid,
-    justifyContent: 'center',
-    alignItems: 'center',
+  logoImage: {
+    width: 84,
+    height: 84,
+    borderRadius: 16,
     marginBottom: 8,
-  },
-  logoIconText: {
-    fontSize: 27,
   },
   logoTitle: {
     fontSize: 24,

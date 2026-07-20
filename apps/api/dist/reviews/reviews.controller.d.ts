@@ -1,5 +1,6 @@
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { BulkReviewDto } from './dto/bulk-review.dto';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { CreateMessageDto } from './dto/create-message.dto';
 export declare class ReviewsController {
@@ -20,6 +21,9 @@ export declare class ReviewsController {
         reviewedByUserId: string;
         reviewType: import("@prisma/client").$Enums.ReviewType;
         reviewedAt: Date;
+    }>;
+    createBulkBoreholeReview(boreholeId: string, dto: BulkReviewDto, user: any): Promise<{
+        count: number;
     }>;
     findReviewsByBorehole(boreholeId: string, user: any): Promise<({
         reviewedBy: {

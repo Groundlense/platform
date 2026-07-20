@@ -1,7 +1,7 @@
 "use server";
 
 import { getToken } from "@/lib/session";
-import { createProject, createBorehole, createPayment, assignBorehole, globalSearchProjects, requestJoinProject, getPendingProjectJoinRequests, approveProjectJoinRequest, rejectProjectJoinRequest } from "@/lib/api/endpoints";
+import { createProject, updateProject, createBorehole, createPayment, assignBorehole, updateBoreholeLocation, globalSearchProjects, requestJoinProject, getPendingProjectJoinRequests, approveProjectJoinRequest, rejectProjectJoinRequest } from "@/lib/api/endpoints";
 import { revalidatePath } from "next/cache";
 
 export async function createProjectAction(formData: FormData) {
@@ -48,6 +48,23 @@ export async function createProjectAction(formData: FormData) {
     return { success: true, project };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to create project";
+    return { error: message };
+  }
+}
+
+export async function updateProjectAction(
+  projectId: string,
+  data: { name?: string; state?: string; startDate?: string; endDate?: string }
+) {
+  const token = await getToken();
+  if (!token) return { error: "Not authenticated" };
+
+  try {
+    const project = await updateProject(projectId, data, token);
+    revalidatePath(`/projects/${projectId}/portal`);
+    return { success: true, project };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to update project";
     return { error: message };
   }
 }
@@ -138,6 +155,17 @@ export async function assignBoreholeTeamAction(boreholeId: string, teamId: strin
     return { success: true, data: res };
   } catch (err: any) {
     return { error: err.message || "Failed to assign team to borehole" };
+  }
+}
+
+export async function updateBoreholeLocationAction(boreholeId: string, latitude: string, longitude: string) {
+  const token = await getToken();
+  if (!token) return { error: "Not authenticated" };
+  try {
+    const res = await updateBoreholeLocation(boreholeId, { latitude, longitude }, token);
+    return { success: true, data: res };
+  } catch (err: any) {
+    return { error: err.message || "Failed to update borehole location" };
   }
 }
 

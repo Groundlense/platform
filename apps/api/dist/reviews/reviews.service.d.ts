@@ -1,15 +1,19 @@
 import { DatabaseService } from '../database/database.service';
 import { ProjectAccessService } from '../common/access/project-access.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
+import { IntegrityService } from '../common/integrity/integrity.service';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { BulkReviewDto } from './dto/bulk-review.dto';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { CreateMessageDto } from './dto/create-message.dto';
 export declare class ReviewsService {
     private readonly db;
     private readonly access;
     private readonly activityLogs;
-    constructor(db: DatabaseService, access: ProjectAccessService, activityLogs: ActivityLogsService);
+    private readonly integrity;
+    constructor(db: DatabaseService, access: ProjectAccessService, activityLogs: ActivityLogsService, integrity: IntegrityService);
     private intervalTag;
+    private parseFieldValue;
     private hasReviewPermission;
     createIntervalReview(user: any, intervalId: string, dto: CreateReviewDto): Promise<{
         reviewedBy: {
@@ -26,6 +30,9 @@ export declare class ReviewsService {
         reviewedByUserId: string;
         reviewType: import("@prisma/client").$Enums.ReviewType;
         reviewedAt: Date;
+    }>;
+    createBulkBoreholeReview(user: any, boreholeId: string, dto: BulkReviewDto): Promise<{
+        count: number;
     }>;
     findReviewsByBorehole(user: any, boreholeId: string): Promise<({
         reviewedBy: {

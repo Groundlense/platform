@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   RiAlertLine,
@@ -109,7 +110,7 @@ interface AnomalyFlag {
 }
 
 /**
- * Real anomaly detection: refusal intervals, or an N-value >= 30 that is also
+ * Real anomaly detection: refusal intervals, or an N-value that is
  * >= 2.5x the median of the previous (up to 3) intervals' N-values.
  */
 function computeAnomalies(intervals: any[]): AnomalyFlag[] {
@@ -124,7 +125,7 @@ function computeAnomalies(intervals: any[]): AnomalyFlag[] {
       return;
     }
     const n = num(iv.nValue);
-    if (n != null && n >= 30) {
+    if (n != null) {
       const prevNs = intervals
         .slice(Math.max(0, idx - 3), idx)
         .map((p: any) => num(p.nValue))
@@ -175,15 +176,48 @@ export default function ContractorClient({
     }, 30000);
     return () => clearInterval(id);
   }, [router]);
-  const [selectedSiteId, setSelectedSiteId] = useState<string>(sites.length > 0 ? sites[0].id : "");
+  const [selectedGroupKey, setSelectedGroupKey] = useState<string>("__all__");
   const [viewMode, setViewMode] = useState<"site" | "eng">("site");
   const [hoveredBhId, setHoveredBhId] = useState<string | null>(null);
+  // Anchor rect for the hover tooltip, captured on mouseenter — the tooltip
+  // is portaled to document.body and positioned via position:fixed off this,
+  // so it can never get clipped by an ancestor's overflow/scroll container.
+  const [hoverRect, setHoverRect] = useState<DOMRect | null>(null);
+  const [expandedPhoto, setExpandedPhoto] = useState<any>(null);
+  // Media ids whose <img> failed to load — most likely the file is missing
+  // on disk (e.g. Render's ephemeral /uploads wiped on redeploy) rather than
+  // a rendering bug, so we say so instead of showing a silent broken icon.
+  const [brokenPhotoIds, setBrokenPhotoIds] = useState<Set<string>>(new Set());
 
-  // Boreholes for the selected structure. No fabricated fallback — empty stays empty.
-  const displayBoreholes = useMemo(
-    () => (sites.length > 0 ? boreholes.filter((b: any) => b.siteId === selectedSiteId) : boreholes),
-    [boreholes, sites.length, selectedSiteId]
-  );
+  // Boreholes grouped by real per-borehole structureType + chainage (the
+  // ProjectSite/siteId mechanism is unused by every borehole-creation path
+  // in the app, so it was never a usable grouping key).
+  const structureGroups = useMemo(() => {
+    const map = new Map<string, { key: string; structureType: string; chainage: string; boreholeIds: Set<string> }>();
+    boreholes.forEach((b: any) => {
+      const structureType = (b.structureType || "").trim();
+      const chainage = (b.chainage || "").trim();
+      const key = structureType || chainage ? `${structureType}||${chainage}` : "__ungrouped__";
+      if (!map.has(key)) {
+        map.set(key, { key, structureType, chainage, boreholeIds: new Set() });
+      }
+      map.get(key)!.boreholeIds.add(b.id);
+    });
+    return Array.from(map.values());
+  }, [boreholes]);
+
+  const groupLabel = (g: { key: string; structureType: string; chainage: string }) => {
+    if (g.key === "__ungrouped__") return "Ungrouped boreholes";
+    const parts = [g.structureType, g.chainage ? `Ch ${g.chainage}` : ""].filter(Boolean);
+    return parts.join(" · ") || "Unnamed structure";
+  };
+
+  // Boreholes for the selected structure group. No fabricated fallback — empty stays empty.
+  const displayBoreholes = useMemo(() => {
+    if (selectedGroupKey === "__all__") return boreholes;
+    const group = structureGroups.find((g) => g.key === selectedGroupKey);
+    return group ? boreholes.filter((b: any) => group.boreholeIds.has(b.id)) : boreholes;
+  }, [boreholes, structureGroups, selectedGroupKey]);
 
   // Per-borehole derived data from the real report payloads.
   const bhData = useMemo(() => {
@@ -279,7 +313,7 @@ export default function ContractorClient({
     (bhData[bh.id]?.reviewedIntervals ?? []).map((iv: any) => ({ bh, iv }))
   );
 
-  const currentSite = sites.find((s: any) => s.id === selectedSiteId) || null;
+  const currentGroup = structureGroups.find((g) => g.key === selectedGroupKey) || null;
 
   const handleBackToDashboard = () => router.push("/dashboard");
   const handleSwitchToPortal = () => router.push(`/projects/${project.id}/portal`);
@@ -494,90 +528,109 @@ export default function ContractorClient({
             </text>
           </svg>
 
-          {/* hover zones */}
+          {/* hover zones — tooltip itself is portaled to <body>, see below,
+              so it can never be clipped by xsec-wrap/xsec-body's overflow
+              or fight for hover with a neighboring borehole's zone */}
           {displayBoreholes.map((bh: any, index: number) => {
-            const data = bhData[bh.id];
             const bhX = bhXFor(index, svgWidth);
-            const lat = num(bh.latitude);
-            const lng = num(bh.longitude);
-            const rl = num(bh.groundLevelRL);
-            const plannedDepth = num(bh.plannedDepth);
-            const finalDepth = num(bh.finalDepth);
-            const anomalies = data?.anomalies ?? [];
-
             return (
               <div
                 key={`hover-${mode}-${bh.id}`}
-                onMouseEnter={() => setHoveredBhId(bh.id)}
-                onMouseLeave={() => setHoveredBhId(null)}
+                onMouseEnter={(e) => {
+                  setHoveredBhId(bh.id);
+                  setHoverRect(e.currentTarget.getBoundingClientRect());
+                }}
+                onMouseLeave={() => {
+                  setHoveredBhId(null);
+                  setHoverRect(null);
+                }}
                 className="absolute cursor-pointer"
                 style={{ left: `${bhX - 20}px`, top: `${TOP_Y}px`, width: "40px", height: `${CHART_H}px` }}
-              >
-                {hoveredBhId === bh.id && (
-                  <div
-                    className="hover-card"
-                    style={{ left: "50%", transform: "translateX(-50%) translateY(-8px)", pointerEvents: "none", display: "block" }}
-                  >
-                    <div className="hc-title font-display">
-                      {bh.boreholeCode}
-                      {bh.name ? ` · ${bh.name}` : ""}
-                      {anomalies.length > 0 && " ⚠"}
-                    </div>
-                    <div className="hc-row">
-                      <span className="hc-label">Latitude</span>
-                      <span className="hc-value green">{lat != null ? `${lat.toFixed(6)}°` : "—"}</span>
-                    </div>
-                    <div className="hc-row">
-                      <span className="hc-label">Longitude</span>
-                      <span className="hc-value green">{lng != null ? `${lng.toFixed(6)}°` : "—"}</span>
-                    </div>
-                    <div className="hc-row">
-                      <span className="hc-label">RL</span>
-                      <span className="hc-value green">{rl != null ? `${rl} m` : "—"}</span>
-                    </div>
-                    <div className="hc-row">
-                      <span className="hc-label">Planned depth</span>
-                      <span className="hc-value">{plannedDepth != null ? `${plannedDepth} m` : "—"}</span>
-                    </div>
-                    <div className="hc-row">
-                      <span className="hc-label">Final depth</span>
-                      <span className="hc-value">{finalDepth != null ? `${finalDepth} m` : "—"}</span>
-                    </div>
-                    <div className="hc-row">
-                      <span className="hc-label">Start date</span>
-                      <span className="hc-value">{fmtDate(bh.startedAt) ?? "—"}</span>
-                    </div>
-                    <div className="hc-row">
-                      <span className="hc-label">End date</span>
-                      <span className="hc-value">{fmtDate(bh.completedAt) ?? "—"}</span>
-                    </div>
-                    <div className="hc-row">
-                      <span className="hc-label">Status</span>
-                      <span className="hc-value">{STATUS_LABEL[bh.status] ?? bh.status ?? "—"}</span>
-                    </div>
-                    {anomalies.length > 0 ? (
-                      <div className="hc-dev warn">⚠ {anomalies[0].reason}</div>
-                    ) : (() => {
-                      const dev = gpsDeviationM(bh);
-                      if (dev == null) {
-                        return (
-                          <div className="hc-dev" style={{ background: "#2C2C2A", color: "#B4B2A9" }}>
-                            GPS deviation: not recorded
-                          </div>
-                        );
-                      }
-                      return dev <= 30 ? (
-                        <div className="hc-dev">✓ GPS within {dev.toFixed(1)}m of planned point</div>
-                      ) : (
-                        <div className="hc-dev warn">⚠ GPS deviation {dev.toFixed(1)}m from planned point</div>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
+              />
             );
           })}
         </div>
+
+        {(() => {
+          if (!hoveredBhId || !hoverRect || typeof document === "undefined") return null;
+          const bh = displayBoreholes.find((b: any) => b.id === hoveredBhId);
+          if (!bh) return null;
+          const data = bhData[bh.id];
+          const lat = num(bh.latitude);
+          const lng = num(bh.longitude);
+          const rl = num(bh.groundLevelRL);
+          const plannedDepth = num(bh.plannedDepth);
+          const finalDepth = num(bh.finalDepth);
+          const anomalies = data?.anomalies ?? [];
+
+          return createPortal(
+            <div
+              className="hover-card"
+              style={{
+                position: "fixed",
+                left: hoverRect.left + hoverRect.width / 2,
+                top: hoverRect.top,
+                transform: "translate(-50%, calc(-100% - 8px))",
+              }}
+            >
+              <div className="hc-title font-display">
+                {bh.boreholeCode}
+                {bh.name ? ` · ${bh.name}` : ""}
+                {anomalies.length > 0 && " ⚠"}
+              </div>
+              <div className="hc-row">
+                <span className="hc-label">Latitude</span>
+                <span className="hc-value green">{lat != null ? `${lat.toFixed(6)}°` : "—"}</span>
+              </div>
+              <div className="hc-row">
+                <span className="hc-label">Longitude</span>
+                <span className="hc-value green">{lng != null ? `${lng.toFixed(6)}°` : "—"}</span>
+              </div>
+              <div className="hc-row">
+                <span className="hc-label">RL</span>
+                <span className="hc-value green">{rl != null ? `${rl} m` : "—"}</span>
+              </div>
+              <div className="hc-row">
+                <span className="hc-label">Planned depth</span>
+                <span className="hc-value">{plannedDepth != null ? `${plannedDepth} m` : "—"}</span>
+              </div>
+              <div className="hc-row">
+                <span className="hc-label">Final depth</span>
+                <span className="hc-value">{finalDepth != null ? `${finalDepth} m` : "—"}</span>
+              </div>
+              <div className="hc-row">
+                <span className="hc-label">Start date</span>
+                <span className="hc-value">{fmtDate(bh.startedAt) ?? "—"}</span>
+              </div>
+              <div className="hc-row">
+                <span className="hc-label">End date</span>
+                <span className="hc-value">{fmtDate(bh.completedAt) ?? "—"}</span>
+              </div>
+              <div className="hc-row">
+                <span className="hc-label">Status</span>
+                <span className="hc-value">{STATUS_LABEL[bh.status] ?? bh.status ?? "—"}</span>
+              </div>
+              {anomalies.length > 0 ? (
+                <div className="hc-dev warn">⚠ {anomalies[0].reason}</div>
+              ) : (() => {
+                const dev = gpsDeviationM(bh);
+                if (dev == null) {
+                  return (
+                    <div className="hc-dev" style={{ background: "#2C2C2A", color: "#B4B2A9" }}>
+                      GPS deviation: not recorded
+                    </div>
+                  );
+                }
+                return dev <= 30 ? (
+                  <div className="hc-dev">✓ GPS within {dev.toFixed(1)}m of planned point</div>
+                ) : (
+                  <div className="hc-dev warn">⚠ GPS deviation {dev.toFixed(1)}m from planned point</div>
+                );
+              })()}
+            </div>,
+            document.body
+          );
+        })()}
       </div>
     );
   };
@@ -652,7 +705,7 @@ export default function ContractorClient({
   };
 
   return (
-    <div className="flex flex-col h-screen font-sans">
+    <div className="cc-app-root flex flex-col h-screen font-sans">
       <style dangerouslySetInnerHTML={{ __html: `
         .portal { background: #fff; border: 0.5px solid #D3D1C7; border-radius: 12px; overflow: hidden; }
         .hdr { background: #993C1D; padding: 16px 20px; }
@@ -689,7 +742,9 @@ export default function ContractorClient({
 
         /* HOVER CARD */
         .bh-hover-zone { position: relative; display: inline-block; }
-        .hover-card { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%) translateY(-8px); background: #2C2C2A; color: #fff; border-radius: 8px; padding: 10px 12px; font-size: 11px; white-space: nowrap; z-index: 100; min-width: 210px; border: 0.5px solid #444441; box-shadow: 0 4px 12px rgba(0,0,0,0.3); pointer-events: none; }
+        /* Positioned inline (position:fixed) at render time — portaled to
+           document.body so no ancestor's overflow/scroll can clip it. */
+        .hover-card { background: #2C2C2A; color: #fff; border-radius: 8px; padding: 10px 12px; font-size: 11px; white-space: nowrap; z-index: 1200; min-width: 210px; border: 0.5px solid #444441; box-shadow: 0 4px 12px rgba(0,0,0,0.3); pointer-events: none; }
         .hover-card::after { content:''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-top-color: #2C2C2A; }
         .hc-title { font-size: 12px; font-weight: 500; color: #FAC775; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 0.5px solid #444441; }
         .hc-row { display: flex; justify-content: space-between; gap: 16px; padding: 2px 0; font-size: 10px; }
@@ -727,10 +782,53 @@ export default function ContractorClient({
         .bh-info-gps { font-size: 9px; color: #5F5E5A; margin-top: 3px; line-height: 1.3; }
         .bh-info-cell.pending { background: #F1EFE8; opacity: 0.7; }
         .bh-info-cell.inprog { background: #FAEEDA; }
+
+        /* "Download full report — PDF" prints via the browser's native
+           print-to-PDF rather than a server-rendered file — no interactive
+           chrome (nav, dropdowns, toggles, hover tooltips, buttons) makes
+           sense on paper, so it's stripped for the print media. */
+        @media print {
+          @page { margin: 10mm; }
+
+          .print-hide { display: none !important; }
+
+          /* .cc-app-root is height:100vh + flex, and .cc-scroll-area is
+             overflow-y:auto sized to fit inside it — both fix the box to
+             the viewport height, so only whatever fit on screen printed
+             and everything else was silently clipped. Let the content flow
+             as normal in-document height instead, so the browser paginates
+             all of it across as many pages as it needs. */
+          html, body { height: auto !important; }
+          .cc-app-root { display: block !important; height: auto !important; overflow: visible !important; }
+          .cc-scroll-area { overflow: visible !important; height: auto !important; padding: 0 !important; }
+
+          /* html/body's global background (globals.css) is the app's dark
+             theme (--color-bg-base, near-black) — browsers strip it during
+             print by default, but forcing color printing below for the
+             report's own colors (header, badges) also forces THIS to
+             print, filling any empty page space with black. Keep the page
+             itself plain white; only the report content should be colored. */
+          html, body, .cc-app-root { background: #fff !important; }
+
+          /* Browsers drop background colors/images by default when
+             printing — without this the maroon header prints as an empty
+             white box with white-on-white text, i.e. "the header doesn't
+             show up". Force every themed background to actually print. */
+          .portal, .portal * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+
+          .portal { border: none !important; box-shadow: none !important; }
+          .xsec-body { overflow: visible !important; }
+
+          /* Don't split these across a page boundary mid-element. */
+          .hdr, .sc, .xsec-wrap, .photo-card, .bh-info-cell, .mod-note, .flag-strip {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+        }
       ` }} />
 
       {/* Topbar — matches PortalTopbar style and pixel dimensions */}
-      <div className="bg-bg-surface border-b border-border flex items-center shrink-0" style={{ height: "50px", padding: "0 16px", gap: "14px" }}>
+      <div className="print-hide bg-bg-surface border-b border-border flex items-center shrink-0" style={{ height: "50px", padding: "0 16px", gap: "14px" }}>
         <span onClick={handleBackToDashboard} className="font-display text-[15px] text-rust-d tracking-[0.3px] cursor-pointer">GroundLense</span>
         <span className="text-[9px] text-rust-d font-mono bg-[rgba(153,60,29,.2)] border border-[rgba(153,60,29,.3)] rounded-[3px]" style={{ padding: "2px 7px" }}>
           CONTRACTOR
@@ -755,7 +853,7 @@ export default function ContractorClient({
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto" style={{ padding: "20px 24px", background: "#FFF8F6" }}>
+      <div className="cc-scroll-area flex-1 overflow-y-auto" style={{ padding: "20px 24px", background: "#FFF8F6" }}>
         <div className="portal shadow-sm">
           {/* Header Panel */}
           <div className="hdr">
@@ -813,24 +911,21 @@ export default function ContractorClient({
             <div className="sec-label">Select structure</div>
             <div className="struct-row">
               <select
-                className="struct-sel"
-                value={selectedSiteId}
-                onChange={(e) => setSelectedSiteId(e.target.value)}
-                disabled={sites.length === 0}
+                className="struct-sel print-hide"
+                value={selectedGroupKey}
+                onChange={(e) => setSelectedGroupKey(e.target.value)}
+                disabled={boreholes.length === 0}
               >
-                {sites.length > 0 ? (
-                  sites.map((s: any) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.code ? `(${s.code})` : ""}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">All boreholes — no structures defined</option>
-                )}
+                <option value="__all__">All boreholes ({boreholes.length})</option>
+                {structureGroups.map((g) => (
+                  <option key={g.key} value={g.key}>
+                    {groupLabel(g)} ({g.boreholeIds.size})
+                  </option>
+                ))}
               </select>
               <div style={{ fontSize: "11px", color: "#854F0B", background: "#FAEEDA", padding: "4px 8px", borderRadius: "5px", border: "0.5px solid #EF9F27", fontWeight: 500 }}>
                 {displayBoreholes.length} borehole{displayBoreholes.length === 1 ? "" : "s"}
-                {currentSite?.structureType ? ` · ${currentSite.structureType}` : ""}
+                {currentGroup ? ` · ${groupLabel(currentGroup)}` : ""}
               </div>
             </div>
 
@@ -855,7 +950,7 @@ export default function ContractorClient({
                 <div className="xsec-title font-medium">
                   Geological cross-section · hover any borehole for coordinates + dates
                 </div>
-                <div className="toggle-wrap">
+                <div className="toggle-wrap print-hide">
                   <div className="toggle-label">Viewing:</div>
                   <button
                     onClick={() => setViewMode("site")}
@@ -960,35 +1055,99 @@ export default function ContractorClient({
               </div>
             ) : (
               <div className="photos-strip">
-                {photos.map((p: any) => (
-                  <div key={p.id} className="photo-card shadow-sm hover:scale-[1.01] transition-all">
-                    <div className="photo-img" style={{ background: "#F1EFE8", color: "#5F5E5A" }}>
-                      {p.mimeType?.startsWith("image/") ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={`/api/media/${p.id}`} alt={p.fileName || "Site photo"} loading="lazy" />
-                      ) : (
-                        <>
-                          <RiImageLine className="text-[20px]" />
-                          <span className="font-semibold">{truncate(p.fileName, 20) || "File"}</span>
-                        </>
-                      )}
-                    </div>
-                    <div className="photo-info">
-                      <div className="photo-bh">
-                        {p.bhCode}
-                        {p.from != null ? ` · ${p.from}–${p.to ?? "?"}m` : ""}
+                {photos.map((p: any) => {
+                  const isImage = p.mimeType?.startsWith("image/");
+                  const isBroken = brokenPhotoIds.has(p.id);
+                  return (
+                    <div
+                      key={p.id}
+                      className="photo-card shadow-sm hover:scale-[1.01] transition-all"
+                      style={{ cursor: isImage && !isBroken ? "pointer" : "default" }}
+                      onClick={() => { if (isImage && !isBroken) setExpandedPhoto(p); }}
+                    >
+                      <div className="photo-img" style={{ background: "#F1EFE8", color: "#5F5E5A" }}>
+                        {isImage ? (
+                          isBroken ? (
+                            <>
+                              <RiAlertLine className="text-[16px] text-[#E24B4A]" />
+                              <span className="font-semibold text-center px-1">Photo unavailable</span>
+                            </>
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={`/api/media/${p.id}`}
+                              alt={p.fileName || "Site photo"}
+                              loading="lazy"
+                              onError={() => setBrokenPhotoIds((prev) => new Set(prev).add(p.id))}
+                            />
+                          )
+                        ) : (
+                          <>
+                            <RiImageLine className="text-[20px]" />
+                            <span className="font-semibold">{truncate(p.fileName, 20) || "File"}</span>
+                          </>
+                        )}
                       </div>
-                      <div className="photo-date">{fmtDate(p.createdAt) ?? "—"}</div>
-                      <div className="photo-tag">{truncate(p.fileName, 32) || "—"}</div>
+                      <div className="photo-info">
+                        <div className="photo-bh">
+                          {p.bhCode}
+                          {p.from != null ? ` · ${p.from}–${p.to ?? "?"}m` : ""}
+                        </div>
+                        <div className="photo-date">{fmtDate(p.createdAt) ?? "—"}</div>
+                        <div className="photo-tag">{truncate(p.fileName, 32) || "—"}</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
-            {/* Document downloads strip — backend not available yet */}
-            <div className="dl-row mt-4">
-              <button className="dl-btn" disabled title="Available soon">
+            {/* Photo lightbox — click any thumbnail to expand */}
+            {expandedPhoto && (
+              <div
+                className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/85"
+                onClick={() => setExpandedPhoto(null)}
+              >
+                <div
+                  className="bg-white rounded-[10px] overflow-hidden max-w-[90vw] max-h-[90vh] flex flex-col"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#F5C4B3]">
+                    <div className="text-[12px] font-medium text-[#412402]">
+                      {expandedPhoto.bhCode}
+                      {expandedPhoto.from != null ? ` · ${expandedPhoto.from}–${expandedPhoto.to ?? "?"}m` : ""}
+                      {" · "}
+                      {truncate(expandedPhoto.fileName, 40) || "Site photo"}
+                    </div>
+                    <button
+                      onClick={() => setExpandedPhoto(null)}
+                      className="text-[13px] text-[#888780] hover:text-[#412402] px-2"
+                      aria-label="Close"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/media/${expandedPhoto.id}`}
+                    alt={expandedPhoto.fileName || "Site photo"}
+                    className="max-w-[90vw] max-h-[calc(90vh-90px)] object-contain bg-black"
+                    onError={() => { setBrokenPhotoIds((prev) => new Set(prev).add(expandedPhoto.id)); setExpandedPhoto(null); }}
+                  />
+                  <div className="px-4 py-2 text-[10px] text-[#888780]">
+                    Captured {fmtDate(expandedPhoto.createdAt) ?? "—"}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Document downloads strip */}
+            <div className="dl-row mt-4 print-hide">
+              <button
+                className="dl-btn"
+                onClick={() => window.print()}
+                title="Opens the browser print dialog — choose 'Save as PDF' as the destination"
+              >
                 <RiDownloadLine className="text-[14px]" />
                 Download full report — PDF
               </button>
@@ -996,11 +1155,16 @@ export default function ContractorClient({
                 <RiShieldCheckLine className="text-[14px]" />
                 Tamper certificate
               </button>
-              <button className="dl-btn-sec" disabled title="Available soon">
+              <button
+                className="dl-btn-sec"
+                disabled={photos.length === 0}
+                onClick={() => { window.location.href = `/api/projects/${project.id}/photos-zip`; }}
+                title={photos.length === 0 ? "No site photos to download" : "Downloads every uploaded photo for this project as a ZIP"}
+              >
                 <RiImageLine className="text-[14px]" />
                 All site photos
               </button>
-              <span className="dl-hint">Downloads available soon</span>
+              <span className="dl-hint">PDF opens your browser's print dialog · Tamper certificate coming soon</span>
             </div>
           </div>
         </div>

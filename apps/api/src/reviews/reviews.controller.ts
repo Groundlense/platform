@@ -14,6 +14,7 @@ import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { BulkReviewDto } from './dto/bulk-review.dto';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { CreateMessageDto } from './dto/create-message.dto';
 
@@ -40,6 +41,20 @@ export class ReviewsController {
     @CurrentUser() user: any,
   ) {
     return this.reviewsService.createIntervalReview(user, intervalId, dto);
+  }
+
+  @ApiOperation({
+    summary:
+      'Bulk-approve or bulk-reject every interval of a borehole in one call',
+  })
+  @Permissions('REVIEW_CREATE')
+  @Post('boreholes/:boreholeId/reviews/bulk')
+  createBulkBoreholeReview(
+    @Param('boreholeId') boreholeId: string,
+    @Body() dto: BulkReviewDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.reviewsService.createBulkBoreholeReview(user, boreholeId, dto);
   }
 
   @ApiOperation({

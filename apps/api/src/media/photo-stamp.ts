@@ -33,19 +33,34 @@ export function isStampable(mimeType?: string | null): boolean {
  * (or point STAMP_LOGO_PATH at it). When present it replaces the drawn
  * pin+wordmark; when absent the vector fallback keeps the stamp working.
  */
-function logoPath(): string {
-  return (
-    process.env.STAMP_LOGO_PATH ??
-    join(process.cwd(), 'assets', 'Groundlense_logo.jpeg')
-  );
+function logoCandidatePaths(): string[] {
+  // Transparent PNG preferred (sits cleanly on the dark banner); original
+  // JPEG kept as fallback.
+  const names = ['groundlense-logo.png', 'Groundlense_logo.jpeg'];
+  const roots = [
+    // Relative to this compiled file (dist/media/ → apps/api/assets/) —
+    // works no matter what the process working directory is (Render starts
+    // the service from the repo root, local dev from apps/api).
+    join(__dirname, '..', '..', 'assets'),
+    join(process.cwd(), 'assets'),
+    join(process.cwd(), 'apps', 'api', 'assets'),
+  ];
+  const candidates: Array<string | undefined> = [process.env.STAMP_LOGO_PATH];
+  for (const name of names) {
+    for (const root of roots) candidates.push(join(root, name));
+  }
+  return candidates.filter((p): p is string => !!p);
 }
 
 async function loadLogo(): Promise<Buffer | null> {
-  try {
-    return await readFile(logoPath());
-  } catch {
-    return null;
+  for (const path of logoCandidatePaths()) {
+    try {
+      return await readFile(path);
+    } catch {
+      // try next candidate
+    }
   }
+  return null;
 }
 
 function esc(v: string): string {

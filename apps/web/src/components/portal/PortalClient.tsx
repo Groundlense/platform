@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, type ReactNode } from "react";
+import { useState, useMemo, useEffect, useRef, Fragment, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   RiSettings4Line,
@@ -20,6 +20,8 @@ import {
 import { usePortalTab } from "./PortalContext";
 import {
   createIntervalReview,
+  createBulkBoreholeReview,
+  bulkAssignTeamAction,
   fetchBoreholeReviews,
   fetchBoreholeIntegrity,
   submitSampleLabResult,
@@ -35,8 +37,8 @@ import {
   deleteTeamMemberAction,
   type BoreholeIntegrity,
 } from "@/app/actions/portal";
-import { createCrewMemberAction } from "@/app/actions/crew";
-import { createBoreholeAction, assignBoreholeTeamAction, approveProjectJoinRequestAction, rejectProjectJoinRequestAction } from "@/app/actions/projects";
+import { createCrewMemberAction, findUserByMobileAction } from "@/app/actions/crew";
+import { createBoreholeAction, assignBoreholeTeamAction, approveProjectJoinRequestAction, rejectProjectJoinRequestAction, updateProjectAction, updateBoreholeLocationAction } from "@/app/actions/projects";
 
 interface PortalClientProps {
   project: any;
@@ -103,13 +105,13 @@ function parseNum(v: any): number | null {
 
 // ── UTM → WGS84 Decimal Degrees conversion ──
 // Accepts easting (e.g. 521847) and northing (e.g. 3148203) in UTM.
-// zone: UTM zone number (default 43 for most of India)
-// southern: true if south of equator
+// zone/southern are the uploader's explicit, stated declaration (Excel
+// import coordinate-format picker) — never a default, never inferred.
 function utmToLatLng(
   easting: number,
   northing: number,
-  zone = 43,
-  southern = false
+  zone: number,
+  southern: boolean
 ): { lat: number; lng: number } {
   const k0 = 0.9996;
   const a = 6378137.0;
@@ -195,10 +197,17 @@ function utmToLatLng(
   };
 }
 
-// Normalizes a coordinate string to decimal degrees.
-// If it looks like a UTM easting/northing (integer ≥ 10000), converts via UTM→WGS84.
-// Returns { lat, lng } or null if cannot determine.
-function normalizeCoords(
+// The ORIGINAL coordinates exactly as uploaded — no UTM-detection guessing,
+// no zone assumption. Every map pin, the Google Maps link, and any other
+// actionable/navigational use of a borehole's location MUST use this.
+// UTM-sourced coordinates are converted deterministically at Excel-upload
+// time only, using the zone/hemisphere the uploader explicitly states (see
+// handleExcelUpload) — never inferred from the numbers, never defaulted.
+// A value that isn't already valid decimal degrees by the time it's read
+// here means it was uploaded before that flow existed (or as decimal
+// degrees was never selected) — the borehole is left off the map rather
+// than plotted at a guess; the Setup table flags it so it can be re-uploaded.
+function rawDecimalCoords(
   rawLat: string | null | undefined,
   rawLng: string | null | undefined
 ): { lat: number; lng: number } | null {
@@ -206,39 +215,8 @@ function normalizeCoords(
   const latN = parseFloat(rawLat);
   const lngN = parseFloat(rawLng);
   if (isNaN(latN) || isNaN(lngN)) return null;
-
-  // Already decimal degrees: lat in [-90,90] and lng in [-180,180]
   if (latN >= -90 && latN <= 90 && lngN >= -180 && lngN <= 180 && (latN !== 0 || lngN !== 0)) {
     return { lat: latN, lng: lngN };
-  }
-
-  // Likely UTM: easting is 6-digit (100000-999999), northing is 7-digit (1000000-9999999)
-  // In our case rawLat column may hold northing and rawLng easting (or vice-versa).
-  // We detect by value ranges: easting ~100000-900000, northing ~1000000-9999999
-  const isEasting = (v: number) => v >= 100000 && v <= 900000;
-  const isNorthing = (v: number) => v >= 1000000 && v <= 9999999;
-
-  let easting: number | null = null;
-  let northing: number | null = null;
-
-  if (isEasting(lngN) && isNorthing(latN)) {
-    easting = lngN; northing = latN;
-  } else if (isEasting(latN) && isNorthing(lngN)) {
-    easting = latN; northing = lngN;
-  } else if (isEasting(lngN) || isNorthing(lngN)) {
-    // Best guess: treat lat col as northing, lng col as easting
-    easting = lngN; northing = latN;
-  } else {
-    return null;
-  }
-
-  try {
-    const converted = utmToLatLng(easting, northing);
-    if (converted.lat >= -90 && converted.lat <= 90 && converted.lng >= -180 && converted.lng <= 180) {
-      return converted;
-    }
-  } catch {
-    return null;
   }
   return null;
 }
@@ -293,6 +271,73 @@ function fmtDateTime(iso: string | null | undefined): string {
   });
 }
 
+type EditableIntervalField =
+  | "fromDepth"
+  | "toDepth"
+  | "blow1"
+  | "blow2"
+  | "blow3"
+  | "nValue"
+  | "nCorrected"
+  | "soilDescription";
+
+const EDITABLE_FIELD_ORDER: EditableIntervalField[] = [
+  "fromDepth",
+  "toDepth",
+  "blow1",
+  "blow2",
+  "blow3",
+  "nValue",
+  "nCorrected",
+  "soilDescription",
+];
+
+const EDITABLE_FIELD_LABELS: Record<EditableIntervalField, string> = {
+  fromDepth: "From Depth (m)",
+  toDepth: "To Depth (m)",
+  blow1: "Blow Count 0–15cm",
+  blow2: "Blow Count 15–30cm",
+  blow3: "Blow Count 30–45cm",
+  nValue: "Raw N",
+  nCorrected: "Corrected N",
+  soilDescription: "Soil Type / Description",
+};
+
+interface FieldDiff {
+  field: string;
+  old: number | string | null;
+  new: number | string | null;
+  clause: string;
+  comment: string | null;
+  byUserId: string;
+  at: string;
+}
+
+const DIFF_MARKER = "##DIFF##";
+
+/**
+ * Recovers "original vs corrected" per field from the audit lines the
+ * backend appends to BoreholeInterval.remarks on every MODIFY_FIELD review
+ * (see reviews.service.ts) — durable across reloads, unlike session state.
+ * Keeps only the latest line per field (remarks are appended chronologically).
+ */
+function parseIntervalDiffs(remarks: string | null | undefined): Record<string, FieldDiff> {
+  if (!remarks) return {};
+  const out: Record<string, FieldDiff> = {};
+  remarks.split("\n").forEach((line) => {
+    if (!line.startsWith(DIFF_MARKER)) return;
+    try {
+      const parsed = JSON.parse(line.slice(DIFF_MARKER.length));
+      if (parsed && typeof parsed.field === "string") {
+        out[parsed.field] = parsed;
+      }
+    } catch {
+      // Malformed/legacy line — ignore.
+    }
+  });
+  return out;
+}
+
 const num = (s: string): number => {
   const v = parseFloat(s);
   return isNaN(v) ? 0 : v;
@@ -308,6 +353,8 @@ interface Anomaly {
   nValue: number | null;
   type: "REFUSAL" | "N_SPIKE";
   message: string;
+  /** When the underlying reading was recorded in the field (observedAt, falling back to createdAt). */
+  timestamp: string | null;
 }
 
 // ── Crew invite / WhatsApp share helpers ──
@@ -339,6 +386,14 @@ function buildAssignmentMessage(boreholeCodes: string, projectCode: string): str
   return `New borehole assigned / नई बोरिंग: ${boreholeCodes} in project ${projectCode}. Open the GroundLense app and tap Sync to see it.`;
 }
 
+const LIVE_FEED_DOT: Record<string, string> = {
+  anomaly: "fd-red",
+  water: "fd-a",
+  sample: "fd-a",
+  closure: "fd-g",
+  spt: "fd-g",
+};
+
 const CREW_ROLE_OPTIONS = [
   { code: "FIELD_WORKER", label: "Field Worker" },
   { code: "GEOTECH_ENGINEER", label: "Geotech Engineer" },
@@ -353,7 +408,6 @@ export default function PortalClient({
   user = null,
   members = [],
   nablLabs = [],
-  activityLogs = [],
   projectDashboard = null,
   teams = [],
   orgUsers = [],
@@ -435,8 +489,10 @@ export default function PortalClient({
         structureType: bh.structureType ?? null,
         chainage: bh.chainage ?? null,
         span: bh.span ?? null,
-        // Normalize coordinates: auto-converts UTM to decimal degrees if needed
-        _normalizedCoords: normalizeCoords(
+        // The real, original coordinate — used for every map pin, the
+        // Google Maps link, and GPS-deviation math. null (not guessed) when
+        // the uploaded value isn't already valid decimal degrees.
+        _rawCoords: rawDecimalCoords(
           bh.latitude != null ? String(bh.latitude) : null,
           bh.longitude != null ? String(bh.longitude) : null
         ),
@@ -455,19 +511,65 @@ export default function PortalClient({
   }, [boreholes]);
 
   // ── Review modifications applied this session (server-persisted) ──
-  const [appliedMods, setAppliedMods] = useState<
-    Record<string, { nValue: number; remarks: string; clause: string; appliedAt: string }>
-  >({});
+  // Bridges the gap between a successful save and router.refresh() landing
+  // fresh data; the durable source of truth afterward is the "##DIFF##"
+  // audit lines the backend appends to each interval's remarks (see
+  // parseIntervalDiffs) — that's what survives a reload.
+  interface AppliedMod {
+    fields: Partial<Record<EditableIntervalField, { oldValue: number | string | null; newValue: number | string | null }>>;
+    clause: string;
+    remarks: string;
+    appliedAt: string;
+  }
+  const [appliedMods, setAppliedMods] = useState<Record<string, AppliedMod>>({});
   // Anomalies accepted as valid — persisted via POST /intervals/:id/reviews (APPROVE)
   const [acceptedAnomalies, setAcceptedAnomalies] = useState<Record<string, boolean>>({});
   const [acceptBusyId, setAcceptBusyId] = useState<string | null>(null);
   const [acceptError, setAcceptError] = useState<{ id: string; message: string } | null>(null);
 
-  const effectiveN = (iv: any): number | null =>
-    appliedMods[iv.id] ? appliedMods[iv.id].nValue : iv.nValue;
+  const effectiveN = (iv: any): number | null => {
+    const applied = appliedMods[iv.id]?.fields?.nValue;
+    return applied ? (applied.newValue as number) : iv.nValue;
+  };
+
+  // Original-vs-corrected for one field: session-applied edit first (instant
+  // feedback before refresh lands), else the persisted audit trail. Parsing
+  // remarks is a string-split + JSON.parse per DIFF line — callers that need
+  // several fields off the same interval (the SPT table renders up to 8 per
+  // row) should parse once with parseIntervalDiffs(iv.remarks) and pass it
+  // in, rather than let this re-parse per field.
+  const fieldDiff = (
+    iv: any,
+    field: EditableIntervalField,
+    diffs?: Record<string, FieldDiff>
+  ): { old: any; new: any } | null => {
+    const applied = appliedMods[iv.id]?.fields?.[field];
+    if (applied) return { old: applied.oldValue, new: applied.newValue };
+    const parsed = (diffs ?? parseIntervalDiffs(iv.remarks))[field];
+    if (parsed) return { old: parsed.old, new: parsed.new };
+    return null;
+  };
+
+  const renderDiffCell = (
+    iv: any,
+    field: EditableIntervalField,
+    current: any,
+    fmt: (v: any) => string,
+    diffs?: Record<string, FieldDiff>
+  ) => {
+    const diff = fieldDiff(iv, field, diffs);
+    if (!diff) return fmt(current);
+    return (
+      <span className="fv-diff" title={`Original: ${fmt(diff.old)}`}>
+        <span className="fv-old">{fmt(diff.old)}</span>
+        <span className="fv-arrow">→</span>
+        <span className="fv-new">{fmt(current)}</span>
+      </span>
+    );
+  };
 
   // ── Anomaly heuristic over REAL intervals:
-  //    anomalous if isRefusal, or nValue ≥ 30 AND ≥ 2.5× median of previous up-to-3 intervals ──
+  //    anomalous if isRefusal, or nValue ≥ 2.5× median of previous up-to-3 intervals ──
   const allAnomalies = useMemo<Anomaly[]>(() => {
     const found: Anomaly[] = [];
     mappedBoreholes.forEach((bh: any) => {
@@ -486,11 +588,12 @@ export default function PortalClient({
             message: `Refusal recorded at ${depthLabel}${
               iv.penetrationMm != null ? ` (penetration ${iv.penetrationMm}mm)` : ""
             } — verify rock/obstruction with the field team.`,
+            timestamp: iv.observedAt || iv.createdAt || null,
           });
           return;
         }
         const n = effectiveN(iv);
-        if (n != null && n >= 30) {
+        if (n != null) {
           const prev = bh.intervals
             .slice(Math.max(0, idx - 3), idx)
             .map((p: any) => effectiveN(p))
@@ -510,6 +613,7 @@ export default function PortalClient({
                 message: `N=${n} at ${depthLabel} is ${(n / med).toFixed(
                   1
                 )}× the median (N=${med}) of the preceding intervals — possible casing disturbance or gravel pocket.`,
+                timestamp: iv.observedAt || iv.createdAt || null,
               });
             }
           }
@@ -530,6 +634,120 @@ export default function PortalClient({
     [visibleAnomalies]
   );
 
+  // Resolve a synced field record's userId to the crew's own ID (employee
+  // code), same identity workers see on their own borelogs/GL passes.
+  const workerLabel = (userId: string | null | undefined): string | null => {
+    if (!userId) return null;
+    const m = members.find((mm: any) => mm.userId === userId);
+    const mu = m?.user;
+    if (!mu) return null;
+    return mu.employeeCode || [mu.firstName, mu.lastName].filter(Boolean).join(" ") || null;
+  };
+
+  interface LiveFeedItem {
+    id: string;
+    timestamp: string;
+    kind: "spt" | "water" | "sample" | "closure" | "anomaly";
+    line1: string;
+    line2: string;
+  }
+
+  // ── Live Data Feed: real narrative built from synced field records ──
+  // (SPT readings, water table checks, samples, closures, anomalies) —
+  // never from generic ActivityLog rows, which the mobile sync pipeline
+  // doesn't write to anyway.
+  const liveFeedItems = useMemo<LiveFeedItem[]>(() => {
+    const items: LiveFeedItem[] = [];
+
+    mappedBoreholes.forEach((bh: any) => {
+      const label = bh.name && bh.name !== bh.boreholeCode ? bh.name : null;
+
+      bh.intervals.forEach((iv: any) => {
+        if (iv.nValue == null && !iv.isRefusal) return;
+        const ts = iv.observedAt || iv.createdAt;
+        if (!ts) return;
+        const photos = (iv.media || []).length;
+        const gpsOk = (iv.media || []).some((m: any) => m.gpsLat != null && m.gpsLng != null);
+        items.push({
+          id: `spt-${iv.id}`,
+          timestamp: ts,
+          kind: "spt",
+          line1: `${bh.boreholeCode}${label ? ` · ${label}` : ""} · SPT at ${iv.toDepth.toFixed(1)}m — ${
+            iv.isRefusal ? "Refusal" : `N=${iv.nValue}`
+          }${!iv.isRefusal && iv.nCorrected != null && iv.nCorrected !== iv.nValue ? ` (Corrected N=${iv.nCorrected})` : ""}`,
+          line2: `${iv.soilDescription || "Soil type not recorded"} · Worker ${workerLabel(iv.recordedByUserId) || "—"} · ${
+            photos > 0 ? `${photos} photo${photos > 1 ? "s" : ""} uploaded` : "No photo"
+          } · ${gpsOk ? "GPS verified" : "GPS not captured"}`,
+        });
+      });
+
+      (bh.waterTableObservations || []).forEach((wt: any) => {
+        const ts = wt.observedAt || wt.createdAt;
+        if (!ts) return;
+        const depth = parseNum(wt.depth);
+        const typeLabel =
+          wt.readingType === "DRILLING_LEVEL" ? "Drilling level reading"
+          : wt.readingType === "REST_LEVEL" ? "Rest level reading"
+          : wt.readingType === "STABILIZED_LEVEL" ? "Stabilized level reading"
+          : "Water level reading";
+        items.push({
+          id: `wt-${wt.id}`,
+          timestamp: ts,
+          kind: "water",
+          line1: `${bh.boreholeCode} · Water table at ${depth != null ? depth.toFixed(2) : "—"}m`,
+          line2: `${typeLabel}${
+            wt.readingType && wt.readingType !== "STABILIZED_LEVEL" ? " · Stabilized re-check recommended ~24h later" : ""
+          }`,
+        });
+      });
+
+      (bh.samples || []).forEach((s: any) => {
+        const ts = s.collectedAt || s.createdAt;
+        if (!ts) return;
+        const iv = s.interval;
+        const depthNote =
+          iv && iv.fromDepth != null && iv.toDepth != null
+            ? ` · from ${Number(iv.fromDepth).toFixed(1)}–${Number(iv.toDepth).toFixed(1)}m`
+            : "";
+        items.push({
+          id: `sample-${s.id}`,
+          timestamp: ts,
+          kind: "sample",
+          line1: `${bh.boreholeCode} · Sample ${s.sampleNumber} collected`,
+          line2: `${s.sampleType === "DISTURBED" ? "Disturbed" : "Undisturbed"} sample${depthNote} · ${
+            s.status || (s.dispatchDate ? "Dispatched to lab" : "Awaiting lab dispatch")
+          }`,
+        });
+      });
+
+      if (bh.status === "COMPLETED" && (bh.completedAt || bh.updatedAt)) {
+        items.push({
+          id: `closure-${bh.id}`,
+          timestamp: bh.completedAt || bh.updatedAt,
+          kind: "closure",
+          line1: `${bh.boreholeCode} · Boring closed and locked · ${bh.finalDepth != null ? bh.finalDepth.toFixed(1) : "—"}m`,
+          line2: `Worker ${workerLabel(bh.assignedWorkerId) || "—"} · Data immutable — further edits require an IS-code reason`,
+        });
+      }
+    });
+
+    allAnomalies.forEach((a) => {
+      if (!a.timestamp) return;
+      items.push({
+        id: `anom-${a.intervalId}-${a.type}`,
+        timestamp: a.timestamp,
+        kind: "anomaly",
+        line1: `${a.boreholeCode} · ${a.type === "REFUSAL" ? "Refusal" : "N-value anomaly"} flagged at ${a.depthLabel}${
+          a.type === "N_SPIKE" ? ` — N=${a.nValue}` : ""
+        }`,
+        line2: a.message,
+      });
+    });
+
+    return items.sort((x, y) => new Date(y.timestamp).getTime() - new Date(x.timestamp).getTime());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mappedBoreholes, allAnomalies, members]);
+
   // Tab stats counters
   const stats = useMemo(() => {
     const total = mappedBoreholes.length;
@@ -544,14 +762,13 @@ export default function PortalClient({
     return { total, completed, active, pending };
   }, [mappedBoreholes]);
 
-  // Real activity logs only — no fabricated feed
-  const logs = activityLogs || [];
+  // Stats for the Live Data Feed header — driven by the same real field
+  // records as the feed itself (activityLogs isn't written to by mobile sync).
   const entriesToday = useMemo(() => {
     const today = new Date().toDateString();
-    return logs.filter((l: any) => l.createdAt && new Date(l.createdAt).toDateString() === today)
-      .length;
-  }, [logs]);
-  const lastEntryAgo = logs.length > 0 ? timeAgo(logs[0]?.createdAt) : null;
+    return liveFeedItems.filter((it) => new Date(it.timestamp).toDateString() === today).length;
+  }, [liveFeedItems]);
+  const lastEntryAgo = liveFeedItems.length > 0 ? timeAgo(liveFeedItems[0]?.timestamp) : null;
 
   const totalPhotos = useMemo(() => {
     const fromIntervals = mappedBoreholes.reduce(
@@ -573,11 +790,18 @@ export default function PortalClient({
   const [bhStatusApproved, setBhStatusApproved] = useState<Record<string, boolean>>({});
   const [approveBusyBhId, setApproveBusyBhId] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
+  // Boring rejection — persisted via POST /intervals/:id/reviews (action REJECT)
+  const [bhStatusRejected, setBhStatusRejected] = useState<Record<string, boolean>>({});
+  const [showRejectPanel, setShowRejectPanel] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectBusyBhId, setRejectBusyBhId] = useState<string | null>(null);
+  const [rejectError, setRejectError] = useState<string | null>(null);
   // Persisted review history per borehole — GET /boreholes/:id/reviews
   const [bhReviews, setBhReviews] = useState<Record<string, any[]>>({});
   const [bhReviewsLoading, setBhReviewsLoading] = useState<Record<string, boolean>>({});
   const [modIntervalId, setModIntervalId] = useState<string | null>(null);
-  const [modNValue, setModNValue] = useState<string>("");
+  const [modField, setModField] = useState<EditableIntervalField | null>(null);
+  const [modValue, setModValue] = useState<string>("");
   const [selectedClause, setSelectedClause] = useState<string>("");
   const [modReason, setModReason] = useState<string>("");
   const [modBusy, setModBusy] = useState(false);
@@ -603,39 +827,53 @@ export default function PortalClient({
 
   const openModPanel = (iv: any) => {
     setModIntervalId(iv.id);
-    setModNValue(iv.nValue != null ? String(iv.nValue) : "");
+    setModField(null);
+    setModValue("");
     setSelectedClause("");
     setModReason("");
     setModError(null);
   };
 
   const handleApplyModification = async (bh: any, iv: any) => {
-    const newN = parseInt(modNValue, 10);
-    if (!selectedClause || isNaN(newN)) return;
+    const field = modField;
+    const raw = modValue.trim();
+    if (!field || !selectedClause || !raw) return;
     setModBusy(true);
     setModError(null);
-    // POST /intervals/:id/reviews — MODIFY_N updates the interval nValue and
-    // appends the audit remark server-side.
+    // POST /intervals/:id/reviews — MODIFY_FIELD updates the interval field
+    // and appends a "##DIFF##"-tagged audit line to remarks server-side, so
+    // original vs corrected survives page reloads (see parseIntervalDiffs).
     const res = await createIntervalReview(iv.id, {
-      action: "MODIFY_N",
-      nValueNew: newN,
+      action: "MODIFY_FIELD",
+      fieldName: field,
+      fieldValueNew: raw,
       isCodeReason: selectedClause,
       comments: modReason.trim() || undefined,
     });
     setModBusy(false);
     if (res.success) {
-      setAppliedMods((prev) => ({
-        ...prev,
-        [iv.id]: {
-          nValue: newN,
-          remarks: `N modified ${iv.nValue ?? "—"}→${newN} per ${selectedClause}${
-            modReason.trim() ? ` — ${modReason.trim()}` : ""
-          }`,
-          clause: selectedClause,
-          appliedAt: new Date().toISOString(),
-        },
-      }));
+      const isNumeric = field !== "soilDescription";
+      const oldValue = iv[field] ?? null;
+      const newValue: number | string = isNumeric ? Number(raw) : raw;
+      const noteText = `${EDITABLE_FIELD_LABELS[field]} modified ${oldValue ?? "—"}→${newValue} per ${selectedClause}${
+        modReason.trim() ? ` — ${modReason.trim()}` : ""
+      }`;
+      setAppliedMods((prev) => {
+        const existing = prev[iv.id];
+        const baseRemarks = existing?.remarks ?? iv.remarks ?? "";
+        return {
+          ...prev,
+          [iv.id]: {
+            fields: { ...(existing?.fields || {}), [field]: { oldValue, newValue } },
+            clause: selectedClause,
+            remarks: baseRemarks ? `${baseRemarks}\n${noteText}` : noteText,
+            appliedAt: new Date().toISOString(),
+          },
+        };
+      });
       setModIntervalId(null);
+      setModField(null);
+      setModValue("");
       loadBhReviews(bh.id);
       router.refresh();
     } else {
@@ -643,27 +881,48 @@ export default function PortalClient({
     }
   };
 
-  // Approve every interval of a boring — each approval is a persisted review row.
+  // Approve every interval of a boring — one bulk call, not one per interval.
   const handleApproveBoring = async (bh: any) => {
     if (approveBusyBhId || bh.intervals.length === 0) return;
     setApproveBusyBhId(bh.id);
     setApproveError(null);
-    const results = await Promise.all(
-      bh.intervals.map((iv: any) =>
-        createIntervalReview(iv.id, {
-          action: "APPROVE",
-          comments: "Boring approved by engineer review",
-        })
-      )
-    );
+    const res = await createBulkBoreholeReview(bh.id, {
+      action: "APPROVE",
+      comments: "Boring approved by engineer review",
+    });
     setApproveBusyBhId(null);
-    const failed = results.filter((r) => !r.success);
-    if (failed.length === 0) {
+    if (res.success) {
       setBhStatusApproved((prev) => ({ ...prev, [bh.id]: true }));
       loadBhReviews(bh.id);
       router.refresh();
     } else {
-      setApproveError(failed[0].error || `Failed to approve ${failed.length} interval(s).`);
+      setApproveError(res.error || "Failed to approve boring.");
+    }
+  };
+
+  // Reject every interval of a boring — mirrors handleApproveBoring; a
+  // rejection reason is mandatory (surfaced in the review history feed).
+  const handleRejectBoring = async (bh: any) => {
+    if (rejectBusyBhId || bh.intervals.length === 0) return;
+    if (!rejectReason.trim()) {
+      setRejectError("Please enter a reason for rejection.");
+      return;
+    }
+    setRejectBusyBhId(bh.id);
+    setRejectError(null);
+    const res = await createBulkBoreholeReview(bh.id, {
+      action: "REJECT",
+      comments: rejectReason.trim(),
+    });
+    setRejectBusyBhId(null);
+    if (res.success) {
+      setBhStatusRejected((prev) => ({ ...prev, [bh.id]: true }));
+      setShowRejectPanel(null);
+      setRejectReason("");
+      loadBhReviews(bh.id);
+      router.refresh();
+    } else {
+      setRejectError(res.error || "Failed to reject boring.");
     }
   };
 
@@ -776,6 +1035,10 @@ export default function PortalClient({
   };
 
   const selectSample = (id: string) => {
+    // Re-clicking the already-selected sample must not wipe the form: the
+    // population effect below is keyed on selectedSample?.id changing, so a
+    // same-id reset here had nothing to re-populate it afterward.
+    if (id === selectedSampleId) return;
     setSelectedSampleId(id);
     resetLabForm();
     setTempUnlock(false);
@@ -845,7 +1108,13 @@ export default function PortalClient({
     } else {
       resetLabForm();
     }
-  }, [selectedSample]);
+    // Keyed on stable primitives, not the whole `selectedSample` object —
+    // the 30s background poll (and every router.refresh() elsewhere) hands
+    // down a brand-new object reference every time even when nothing about
+    // this sample changed, which was wiping in-progress unsaved form values
+    // via resetLabForm() on every poll tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSample?.id, selectedSample?.labResult?.id]);
 
   // Auto-calculations (kept from prototype — derived from entered values)
   const plasticityIndex = useMemo(() => {
@@ -1127,7 +1396,13 @@ export default function PortalClient({
     return () => {
       window.removeEventListener('resize', resizeCanvas);
     };
-  }, [gSiltClay, gFineSand, gMedSand, gCoarseSand, gGravel, siblingSamples]);
+    // activeTab is included deliberately: the Lab tab (and its <canvas>) is
+    // fully unmounted/remounted on every tab switch ({activeTab === "lab" &&
+    // ...}), and canvasRef is a ref — invisible to React's dependency
+    // tracking — so without this the chart stayed blank on a freshly
+    // (re)mounted canvas until some unrelated grain-size value changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gSiltClay, gFineSand, gMedSand, gCoarseSand, gGravel, siblingSamples, activeTab]);
   const downloadExcelTemplate = () => {
     const headers = "BH_No,Sub_Structure,Structure_Type,Chainage,Span,Team,Easting,Northing,RL_mAmsl,Planned_Depth_m,Notes\n" +
       "BH-01,Abutment A,VUP,134+550,1x20,Team A,521847.00,3148203.00,100.000,30.0,A-1 abutment";
@@ -1196,8 +1471,18 @@ export default function PortalClient({
           return;
         }
 
+        // UTM zone/hemisphere is the user's explicit, stated declaration for
+        // this whole file — never inferred from the numbers, never a guess.
+        const utmZoneNum = excelCoordFormat === "utm" ? parseInt(excelUtmZone, 10) : null;
+        if (excelCoordFormat === "utm" && (!Number.isInteger(utmZoneNum) || utmZoneNum! < 1 || utmZoneNum! > 60)) {
+          alert("Enter a valid UTM zone (1–60) before uploading a UTM file.");
+          return;
+        }
+        const utmSouthern = excelUtmHemisphere === "S";
+
         let createdCount = 0;
         let errorCount = 0;
+        const coordFailures: string[] = [];
 
         for (let i = 1; i < rows.length; i++) {
           const cells = rows[i];
@@ -1215,12 +1500,43 @@ export default function PortalClient({
           const chainageVal = chainageIdx !== -1 ? String(cells[chainageIdx] || "").trim() : "";
           const spanVal = spanIdx !== -1 ? String(cells[spanIdx] || "").trim() : "";
 
+          // Coordinate handling: "decimal" passes the uploaded values through
+          // completely unchanged. "utm" converts deterministically using the
+          // zone/hemisphere the user declared above — never a range-based
+          // guess. A row whose easting/northing don't parse as numbers, or
+          // whose converted result isn't a valid lat/lng, is reported and
+          // left without coordinates rather than silently accepting a bad value.
+          let latVal = northingVal;
+          let lngVal = eastingVal;
+          if (excelCoordFormat === "utm" && (eastingVal || northingVal)) {
+            const eastingNum = Number(eastingVal);
+            const northingNum = Number(northingVal);
+            if (!eastingVal || !northingVal || !Number.isFinite(eastingNum) || !Number.isFinite(northingNum)) {
+              coordFailures.push(`${bhNo}: easting/northing not both valid numbers`);
+              latVal = "";
+              lngVal = "";
+            } else {
+              const converted = utmToLatLng(eastingNum, northingNum, utmZoneNum!, utmSouthern);
+              if (
+                !Number.isFinite(converted.lat) || !Number.isFinite(converted.lng) ||
+                converted.lat < -90 || converted.lat > 90 || converted.lng < -180 || converted.lng > 180
+              ) {
+                coordFailures.push(`${bhNo}: converted coordinates out of range — check zone/hemisphere`);
+                latVal = "";
+                lngVal = "";
+              } else {
+                latVal = converted.lat.toFixed(7);
+                lngVal = converted.lng.toFixed(7);
+              }
+            }
+          }
+
           const formData = new FormData();
           formData.append("projectId", proj.id);
           formData.append("boreholeCode", bhNo);
           if (nameVal) formData.append("name", nameVal);
-          if (northingVal) formData.append("latitude", northingVal);
-          if (eastingVal) formData.append("longitude", eastingVal);
+          if (latVal) formData.append("latitude", latVal);
+          if (lngVal) formData.append("longitude", lngVal);
           if (rlVal) formData.append("groundLevelRL", rlVal);
           if (depthVal) formData.append("plannedDepth", depthVal);
           if (structTypeVal) formData.append("structureType", structTypeVal);
@@ -1236,7 +1552,12 @@ export default function PortalClient({
           }
         }
 
-        alert(`Successfully processed file. Imported ${createdCount} boreholes.${errorCount > 0 ? ` Failed to import ${errorCount} boreholes.` : ""}`);
+        let summary = `Successfully processed file. Imported ${createdCount} boreholes.`;
+        if (errorCount > 0) summary += ` Failed to import ${errorCount} boreholes.`;
+        if (coordFailures.length > 0) {
+          summary += `\n\nCoordinates NOT set for ${coordFailures.length} borehole(s) (created without location):\n${coordFailures.join("\n")}`;
+        }
+        alert(summary);
         router.refresh();
       } catch (err) {
         console.error("Error parsing spreadsheet file:", err);
@@ -1255,7 +1576,7 @@ export default function PortalClient({
   const [ieFirmName, setIeFirmName] = useState(proj?.billingCompany?.name ?? "");
   const [projectState, setProjectState] = useState(proj?.state ?? "");
   const [investigationStart, setInvestigationStart] = useState(proj?.startDate ? new Date(proj.startDate).toISOString().split('T')[0] : "");
-  const [expectedCompletion, setExpectedCompletion] = useState(proj?.endDate ? new Date(proj.endDate).toISOString().split('T')[0] : "");
+  const [expectedCompletion, setExpectedCompletion] = useState((proj?.endDate ?? proj?.targetCompletionDate) ? new Date((proj!.endDate ?? proj!.targetCompletionDate)!).toISOString().split('T')[0] : "");
 
   // ── Setup tab: Investigation Parameters state ──
   const [isEditingInvestigationParameters, setIsEditingInvestigationParameters] = useState(false);
@@ -1275,7 +1596,7 @@ export default function PortalClient({
       setIeFirmName(proj.billingCompany?.name ?? "");
       setProjectState(proj.state ?? "");
       setInvestigationStart(proj.startDate ? new Date(proj.startDate).toISOString().split('T')[0] : "");
-      setExpectedCompletion(proj.endDate ? new Date(proj.endDate).toISOString().split('T')[0] : "");
+      setExpectedCompletion((proj.endDate ?? proj.targetCompletionDate) ? new Date((proj.endDate ?? proj.targetCompletionDate)!).toISOString().split('T')[0] : "");
     }
   }, [proj]);
 
@@ -1292,9 +1613,26 @@ export default function PortalClient({
     return `${clientPart}/${contractorPart}/${projectPart}/${glIdPart}/${formattedDate}`;
   }, [clientName, contractorName, projectName, proj?.projectCode, formattedDate]);
 
-  const handleSaveProjectDetails = () => {
+  const [savingProjectDetails, setSavingProjectDetails] = useState(false);
+  const [projectDetailsError, setProjectDetailsError] = useState("");
+
+  const handleSaveProjectDetails = async () => {
+    if (!proj?.id) return;
+    setSavingProjectDetails(true);
+    setProjectDetailsError("");
+    const res = await updateProjectAction(proj.id, {
+      name: projectName.trim(),
+      state: projectState || undefined,
+      startDate: investigationStart || undefined,
+      endDate: expectedCompletion || undefined,
+    });
+    setSavingProjectDetails(false);
+    if ((res as any).error) {
+      setProjectDetailsError((res as any).error);
+      return;
+    }
     setIsEditingProjectDetails(false);
-    alert("Project details saved successfully!");
+    router.refresh();
   };
 
   // ── Setup tab: Drilling Crew member states & handlers ──
@@ -1336,7 +1674,51 @@ export default function PortalClient({
     setCrewInvite(null);
     setInviteMsgCopied(false);
     setOtpCopied(false);
+    setMobileLookupMatch(null);
+    setMobileLookupLoading(false);
   };
+
+  // Project members not already on the team open in the Add Crew Member modal.
+  const crewModalAssignableMembers = useMemo(() => {
+    if (!showAddCrewMemberModal) return [];
+    const teamMemberIds = new Set((showAddCrewMemberModal.members || []).map((tm: any) => tm.userId));
+    return members.filter((m: any) => !teamMemberIds.has(m.userId));
+  }, [showAddCrewMemberModal, members]);
+
+  // Mobile-lookup autofill: if the entered number already belongs to a
+  // registered user, pull their name from the DB instead of asking the
+  // admin to retype it (and avoid a name-mismatch rejection on submit).
+  const [mobileLookupMatch, setMobileLookupMatch] = useState<any>(null);
+  const [mobileLookupLoading, setMobileLookupLoading] = useState(false);
+  useEffect(() => {
+    if (crewMemberType !== "new" || !showAddCrewMemberModal) {
+      setMobileLookupMatch(null);
+      return;
+    }
+    const digits = newWorkerMobile.replace(/\D/g, "");
+    if (digits.length !== 10 || !/^[6-9]/.test(digits)) {
+      setMobileLookupMatch(null);
+      return;
+    }
+    let cancelled = false;
+    setMobileLookupLoading(true);
+    const timer = setTimeout(async () => {
+      const res = await findUserByMobileAction(digits);
+      if (cancelled) return;
+      setMobileLookupLoading(false);
+      if (res.found && res.user) {
+        setMobileLookupMatch(res.user);
+        setNewWorkerFirstName(res.user.firstName || "");
+        setNewWorkerLastName(res.user.lastName || "");
+      } else {
+        setMobileLookupMatch(null);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [newWorkerMobile, crewMemberType, showAddCrewMemberModal]);
 
   const [verifyingUser, setVerifyingUser] = useState<any>(null);
   const [verifyRowOtpCode, setVerifyRowOtpCode] = useState("");
@@ -1814,32 +2196,31 @@ export default function PortalClient({
     setTeamCreateLoading(false);
     if (res.success) {
       const newTeamId = res.data?.id;
-      const assignedIds: string[] = [];
-      const assignErrors: string[] = [];
       if (newTeamId && selectedBoreholeIds.length > 0) {
-        for (const bhId of selectedBoreholeIds) {
-          const assignRes = await assignBoreholeTeamAction(bhId, newTeamId);
-          if ((assignRes as any).success) {
-            assignedIds.push(bhId);
-          } else {
-            const code = mappedBoreholes.find((b: any) => b.id === bhId)?.boreholeCode ?? bhId;
-            // API 403 messages (e.g. "Project setup is locked") surfaced verbatim
-            assignErrors.push(`${code}: ${(assignRes as any).error || "assignment failed"}`);
+        // One batched call instead of one PATCH per borehole.
+        const assignRes = await bulkAssignTeamAction(proj.id, selectedBoreholeIds, newTeamId);
+        if (assignRes.success) {
+          const assignedIds = assignRes.data?.assignedIds ?? [];
+          setLocalBoreholes(prev =>
+            prev.map(bh => {
+              if (assignedIds.includes(bh.id)) {
+                return {
+                  ...bh,
+                  teamId: newTeamId,
+                  teamName: newTeamName.trim(),
+                  team: { id: newTeamId, name: newTeamName.trim() }
+                };
+              }
+              return bh;
+            })
+          );
+          const lockedCodes = assignRes.data?.lockedCodes ?? [];
+          if (lockedCodes.length > 0) {
+            alert(`Team created. ${lockedCodes.length} borehole(s) could not be assigned (setup locked — fieldwork already started): ${lockedCodes.join(", ")}`);
           }
+        } else {
+          alert(assignRes.error || "Team created, but failed to assign the selected boreholes.");
         }
-        setLocalBoreholes(prev =>
-          prev.map(bh => {
-            if (assignedIds.includes(bh.id)) {
-              return {
-                ...bh,
-                teamId: newTeamId,
-                teamName: newTeamName.trim(),
-                team: { id: newTeamId, name: newTeamName.trim() }
-              };
-            }
-            return bh;
-          })
-        );
       }
 
       const updatedTeams = await fetchOrgTeams(orgId, proj.id);
@@ -1942,6 +2323,55 @@ export default function PortalClient({
   const [selectedReportBhId, setSelectedReportBhId] = useState<string>("");
   const [reportGenerated, setReportGenerated] = useState(false);
   const [showExcelSec, setShowExcelSec] = useState(false);
+  // Excel import coordinate format — explicit, never guessed. A phone's GPS,
+  // Google Maps, and every mapping library all speak decimal-degree lat/lng
+  // only; UTM easting/northing must be converted, and the UTM zone can't be
+  // safely inferred from the numbers alone, so the user states it up front.
+  const [excelCoordFormat, setExcelCoordFormat] = useState<"decimal" | "utm">("decimal");
+  const [excelUtmZone, setExcelUtmZone] = useState<string>("43");
+  const [excelUtmHemisphere, setExcelUtmHemisphere] = useState<"N" | "S">("N");
+  // Fix-in-place for a single borehole's coordinates — for data uploaded
+  // before the UTM zone picker existed. Same explicit-zone-only approach:
+  // the zone is stated here, never guessed from the raw digits.
+  const [fixCoordsBhId, setFixCoordsBhId] = useState<string | null>(null);
+  const [fixCoordsZone, setFixCoordsZone] = useState("43");
+  const [fixCoordsHemisphere, setFixCoordsHemisphere] = useState<"N" | "S">("N");
+  const [fixCoordsBusy, setFixCoordsBusy] = useState(false);
+  const [fixCoordsError, setFixCoordsError] = useState<string | null>(null);
+
+  const handleFixCoords = async (bh: any) => {
+    const zoneNum = parseInt(fixCoordsZone, 10);
+    if (!Number.isInteger(zoneNum) || zoneNum < 1 || zoneNum > 60) {
+      setFixCoordsError("Enter a valid UTM zone (1–60).");
+      return;
+    }
+    // Import convention: northing was stored into the "latitude" slot,
+    // easting into "longitude" — see handleExcelUpload.
+    const northingNum = Number(bh.latitude);
+    const eastingNum = Number(bh.longitude);
+    if (!Number.isFinite(northingNum) || !Number.isFinite(eastingNum)) {
+      setFixCoordsError("Stored raw values aren't valid numbers — cannot convert.");
+      return;
+    }
+    const converted = utmToLatLng(eastingNum, northingNum, zoneNum, fixCoordsHemisphere === "S");
+    if (
+      !Number.isFinite(converted.lat) || !Number.isFinite(converted.lng) ||
+      converted.lat < -90 || converted.lat > 90 || converted.lng < -180 || converted.lng > 180
+    ) {
+      setFixCoordsError("Converted coordinates are out of range — check the zone/hemisphere.");
+      return;
+    }
+    setFixCoordsBusy(true);
+    setFixCoordsError(null);
+    const res = await updateBoreholeLocationAction(bh.id, converted.lat.toFixed(7), converted.lng.toFixed(7));
+    setFixCoordsBusy(false);
+    if (res.error) {
+      setFixCoordsError(res.error);
+      return;
+    }
+    setFixCoordsBhId(null);
+    router.refresh();
+  };
   // Map expand / zoom / pan state
   const [mapExpanded, setMapExpanded] = useState(false);
   // Photo lightbox: the clicked site photo + its borehole context, showing
@@ -2053,20 +2483,22 @@ export default function PortalClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBorehole, appliedMods]);
 
-  // Schematic map positions from real coordinates (relative layout)
+  // Schematic map positions — original uploaded coordinates only (never
+  // UTM-guessed); a borehole whose coordinates aren't valid decimal degrees
+  // is left off the map rather than plotted at a guessed location.
   const mapPoints = useMemo(() => {
     const withCoords = mappedBoreholes.filter(
-      (b: any) => b._normalizedCoords != null
+      (b: any) => b._rawCoords != null
     );
     if (withCoords.length === 0) return [];
-    const lats = withCoords.map((b: any) => b._normalizedCoords.lat);
-    const lngs = withCoords.map((b: any) => b._normalizedCoords.lng);
+    const lats = withCoords.map((b: any) => b._rawCoords.lat);
+    const lngs = withCoords.map((b: any) => b._rawCoords.lng);
     const minLat = Math.min(...lats), maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
     const latSpan = maxLat - minLat, lngSpan = maxLng - minLng;
     return withCoords.map((b: any) => {
-      const lat = b._normalizedCoords.lat;
-      const lng = b._normalizedCoords.lng;
+      const lat = b._rawCoords.lat;
+      const lng = b._rawCoords.lng;
       const left = lngSpan > 0 ? 10 + ((lng - minLng) / lngSpan) * 75 : 48;
       const top = latSpan > 0 ? 20 + (1 - (lat - minLat) / latSpan) * 55 : 48;
       return { bh: b, left: `${left.toFixed(1)}%`, top: `${top.toFixed(1)}%` };
@@ -2076,13 +2508,13 @@ export default function PortalClient({
   // Yandex maps is replaced with relative GPS schematic map by default
   const yandexMapUrl = null;
 
-  // Google Maps link for the expanded modal
+  // Google Maps link for the expanded modal — original coordinates only.
   const googleMapsUrl = useMemo(() => {
-    const withCoords = mappedBoreholes.filter((b: any) => b._normalizedCoords != null);
+    const withCoords = mappedBoreholes.filter((b: any) => b._rawCoords != null);
     if (withCoords.length === 0) return null;
-    const first = withCoords[0]._normalizedCoords;
+    const first = withCoords[0]._rawCoords;
     const markers = withCoords
-      .map((b: any) => `${b._normalizedCoords.lat},${b._normalizedCoords.lng}`)
+      .map((b: any) => `${b._rawCoords.lat},${b._rawCoords.lng}`)
       .join("/");
     return `https://www.google.com/maps/@${first.lat},${first.lng},15z?q=${markers}`;
   }, [mappedBoreholes]);
@@ -2104,7 +2536,7 @@ export default function PortalClient({
       const L = (window as any).L;
       if (!L) return;
 
-      const pts = mapPoints.map((p: any) => p.bh._normalizedCoords).filter(Boolean);
+      const pts = mapPoints.map((p: any) => p.bh._rawCoords).filter(Boolean);
       if (pts.length === 0) return;
 
       const avgLat = pts.reduce((sum: number, p: any) => sum + p.lat, 0) / pts.length;
@@ -2136,15 +2568,15 @@ export default function PortalClient({
         }).addTo(inlineMap);
 
         mapPoints.forEach(({ bh }: any) => {
-          if (!bh._normalizedCoords) return;
-          const marker = L.marker([bh._normalizedCoords.lat, bh._normalizedCoords.lng], { icon: customIcon }).addTo(inlineMap);
+          if (!bh._rawCoords) return;
+          const marker = L.marker([bh._rawCoords.lat, bh._rawCoords.lng], { icon: customIcon }).addTo(inlineMap);
           const statusText = bh.status === "COMPLETED" ? "✅ Completed" : bh.status === "IN_PROGRESS" ? "🔵 In Progress" : bh.status === "TERMINATED" ? "⏸ Paused (resumable)" : bh.status === "SUSPENDED" ? "❚❚ Suspended" : bh.status === "ABANDONED" ? "✗ Abandoned" : "⭕ Pending";
           marker.bindPopup(
             `<b>BH ID:</b> ${bh.boreholeCode}<br/>` +
             `<b>Location:</b> ${bh.name || "—"}<br/>` +
             `<b>Team:</b> ${bh.teamName || "Unassigned"}<br/>` +
             `<b>Status:</b> ${statusText}<br/>` +
-            `<b>Coordinates:</b> ${bh._normalizedCoords.lat.toFixed(6)}, ${bh._normalizedCoords.lng.toFixed(6)}`
+            `<b>Coordinates:</b> ${bh._rawCoords.lat.toFixed(6)}, ${bh._rawCoords.lng.toFixed(6)}`
           );
         });
       }
@@ -2167,8 +2599,8 @@ export default function PortalClient({
           }).addTo(expandedMap);
 
           mapPoints.forEach(({ bh }: any) => {
-            if (!bh._normalizedCoords) return;
-            const marker = L.marker([bh._normalizedCoords.lat, bh._normalizedCoords.lng], { icon: customIcon }).addTo(expandedMap);
+            if (!bh._rawCoords) return;
+            const marker = L.marker([bh._rawCoords.lat, bh._rawCoords.lng], { icon: customIcon }).addTo(expandedMap);
             const statusText = bh.status === "COMPLETED" ? "✅ Completed" : bh.status === "IN_PROGRESS" ? "🔵 In Progress" : bh.status === "TERMINATED" ? "⏸ Paused (resumable)" : bh.status === "SUSPENDED" ? "❚❚ Suspended" : bh.status === "ABANDONED" ? "✗ Abandoned" : "⭕ Pending";
             marker.bindPopup(
               `<div style="font-family: sans-serif; font-size: 11px; line-height: 1.4;">` +
@@ -2176,7 +2608,7 @@ export default function PortalClient({
               `<b>Sub-structure:</b> ${bh.name || "—"}<br/>` +
               `<b>Assigned Team:</b> ${bh.teamName || "Unassigned"}<br/>` +
               `<b>Status:</b> ${statusText}<br/>` +
-              `<b>Coords:</b> ${bh._normalizedCoords.lat.toFixed(6)}, ${bh._normalizedCoords.lng.toFixed(6)}` +
+              `<b>Coords:</b> ${bh._rawCoords.lat.toFixed(6)}, ${bh._rawCoords.lng.toFixed(6)}` +
               `</div>`
             );
           });
@@ -2201,8 +2633,6 @@ export default function PortalClient({
       }
     }
   }, [mapPoints, mapExpanded]);
-
-  const modSuccessFor = (ivId: string) => appliedMods[ivId];
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-bg-base">
@@ -2304,6 +2734,11 @@ export default function PortalClient({
         .mod-orig { font-size: 11px; font-weight: 500; color: var(--color-text-ter); }
         .mod-new { font-size: 11px; font-weight: 700; color: var(--color-green-d); }
         .btn-row { display: flex; gap: 6px; margin-top: 8px; }
+        .fv-diff { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+        .fv-old { color: #ffffff; font-size: 9px; }
+        .fv-arrow { color: var(--color-text-ter); font-size: 9px; }
+        .fv-new { color: #F09595; font-weight: 700; }
+        .reject-panel { background: var(--color-bg-raised); border: 1px solid rgba(163,45,45,.35); border-radius: 8px; padding: 12px; margin-top: 8px; }
 
         /* LAB TAB styles */
         .sl { font-size: 9px; font-weight: 600; color: var(--color-rust-d); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 14px; margin-bottom: 6px; }
@@ -2528,6 +2963,61 @@ export default function PortalClient({
                   <div className="ib ib-b">
                     ℹ Download the Excel template, fill boring locations with your structural engineer / contractor, then upload. Format: BH No. · Latitude · Longitude · RL · Planned Depth
                   </div>
+
+                  <div className="fg mb-2">
+                    <div className="fl">Coordinate format in this file — required, never guessed</div>
+                    <div className="flex gap-3 text-[11px] font-medium mb-1">
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="excelCoordFormat"
+                          checked={excelCoordFormat === "decimal"}
+                          onChange={() => setExcelCoordFormat("decimal")}
+                        />
+                        Decimal Degrees (e.g. 12.9716, 77.5946)
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="excelCoordFormat"
+                          checked={excelCoordFormat === "utm"}
+                          onChange={() => setExcelCoordFormat("utm")}
+                        />
+                        UTM Easting/Northing
+                      </label>
+                    </div>
+                    {excelCoordFormat === "utm" && (
+                      <div className="grid2 mt-1">
+                        <div className="fg">
+                          <div className="fl">UTM Zone (1–60)</div>
+                          <input
+                            type="number"
+                            min={1}
+                            max={60}
+                            className="fi"
+                            value={excelUtmZone}
+                            onChange={(e) => setExcelUtmZone(e.target.value)}
+                            placeholder="e.g. 43"
+                          />
+                        </div>
+                        <div className="fg">
+                          <div className="fl">Hemisphere</div>
+                          <select
+                            className="fs"
+                            value={excelUtmHemisphere}
+                            onChange={(e) => setExcelUtmHemisphere(e.target.value as "N" | "S")}
+                          >
+                            <option value="N">Northern (N)</option>
+                            <option value="S">Southern (S)</option>
+                          </select>
+                        </div>
+                        <div className="text-[9px] text-text-ter mt-1" style={{ gridColumn: "1 / -1" }}>
+                          Converted using WGS84 UTM — the zone/hemisphere above, exactly as entered, never inferred from the numbers. If your survey used a different geodetic datum, converted coordinates will carry that datum's offset.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="grid2 mb-2">
                     <button className="btn btn-b w-full" onClick={downloadExcelTemplate}>⬇ Download Excel template</button>
                     <div
@@ -2606,15 +3096,13 @@ export default function PortalClient({
                         }
                         const targetTeamObj = localTeams.find(t => t.id === targetTeamId);
                         const targetTeamName = targetTeamObj?.name ?? "";
-                        const assignedIds: string[] = [];
-                        for (const bhId of selectedBoringLocationIds) {
-                          const res = await assignBoreholeTeamAction(bhId, targetTeamId);
-                          if ((res as any).success) {
-                            assignedIds.push(bhId);
-                          }
+                        // One batched call instead of one PATCH per borehole.
+                        const res = await bulkAssignTeamAction(proj.id, selectedBoringLocationIds, targetTeamId);
+                        if (!res.success) {
+                          alert(res.error || "Failed to assign boreholes to team.");
+                          return;
                         }
-                        
-                        // Update local state
+                        const assignedIds = res.data?.assignedIds ?? [];
                         setLocalBoreholes(prev =>
                           prev.map(bh => {
                             if (assignedIds.includes(bh.id)) {
@@ -2629,7 +3117,11 @@ export default function PortalClient({
                           })
                         );
                         setSelectedBoringLocationIds([]);
-                        alert(`Successfully assigned ${assignedIds.length} boreholes to ${targetTeamName}.`);
+                        const lockedCodes = res.data?.lockedCodes ?? [];
+                        alert(
+                          `Successfully assigned ${assignedIds.length} boreholes to ${targetTeamName}.` +
+                          (lockedCodes.length > 0 ? ` ${lockedCodes.length} could not be assigned (setup locked): ${lockedCodes.join(", ")}` : "")
+                        );
                       }}
                     >
                       Assign
@@ -2677,7 +3169,7 @@ export default function PortalClient({
                       <th>Team</th>
                       <th>Latitude (raw)</th>
                       <th>Longitude (raw)</th>
-                      <th>Converted Coords</th>
+                      <th>Format</th>
                       <th>RL (m)</th>
                       <th>Planned Depth (m)</th>
                       <th>Final Depth (m)</th>
@@ -2694,13 +3186,11 @@ export default function PortalClient({
                     ) : (
                       mappedBoreholes.map((bh: any) => {
                         const st = BH_STATUS[bh.status] || BH_STATUS.PLANNED;
-                        const nc = bh._normalizedCoords;
-                        const isConverted = nc && (
-                          Math.abs(nc.lat - (parseNum(bh.latitude) ?? 0)) > 0.001 ||
-                          Math.abs(nc.lng - (parseNum(bh.longitude) ?? 0)) > 0.001
-                        );
+                        const hasRawCoords = bh.latitude != null && bh.longitude != null;
+                        const isPlottable = bh._rawCoords != null;
                         return (
-                          <tr key={bh.id}>
+                          <Fragment key={bh.id}>
+                          <tr>
                             {!setupIsLocked && (
                               <td>
                                 <input
@@ -2788,18 +3278,89 @@ export default function PortalClient({
                             <td className="font-mono text-[10px]">{bh.latitude ?? "—"}</td>
                             <td className="font-mono text-[10px]">{bh.longitude ?? "—"}</td>
                             <td className="font-mono text-[10px]">
-                              {nc ? (
-                                <span title={isConverted ? "Converted from UTM" : "Decimal degrees"}>
-                                  {isConverted && <span className="text-amber-d mr-1" title="Auto-converted from UTM">↻</span>}
-                                  {nc.lat.toFixed(6)}, {nc.lng.toFixed(6)}
+                              {!hasRawCoords ? (
+                                "—"
+                              ) : isPlottable ? (
+                                <span className="text-green-d">✓ Decimal degrees</span>
+                              ) : (
+                                <span className="flex items-center gap-1.5">
+                                  <span className="text-amber-d" title="Not usable for maps/navigation as-is">
+                                    ⚠ Not decimal degrees
+                                  </span>
+                                  {!setupIsLocked && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-d btn-sm text-[8px] py-0.5 px-1.5"
+                                      onClick={() => {
+                                        setFixCoordsBhId(fixCoordsBhId === bh.id ? null : bh.id);
+                                        setFixCoordsError(null);
+                                      }}
+                                    >
+                                      Fix
+                                    </button>
+                                  )}
                                 </span>
-                              ) : "—"}
+                              )}
                             </td>
                             <td className="font-mono text-[10px]">{fmtNum(bh.groundLevelRL, 3)}</td>
                             <td>{fmtNum(bh.plannedDepth, 1)}</td>
                             <td>{fmtNum(bh.finalDepth, 1)}</td>
                             <td><span className={`pill ${st.cls}`}>{st.text}</span></td>
                           </tr>
+                          {fixCoordsBhId === bh.id && (
+                            <tr>
+                              <td colSpan={setupIsLocked ? 13 : 14}>
+                                <div className="reject-panel my-1">
+                                  <div className="fl mb-1">
+                                    Fix coordinates for {bh.boreholeCode} — declare the UTM zone these raw values (Lat {bh.latitude}, Lng {bh.longitude}) were surveyed in
+                                  </div>
+                                  <div className="grid2">
+                                    <div className="fg">
+                                      <div className="fl">UTM Zone (1–60)</div>
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        max={60}
+                                        className="fi"
+                                        value={fixCoordsZone}
+                                        onChange={(e) => setFixCoordsZone(e.target.value)}
+                                      />
+                                    </div>
+                                    <div className="fg">
+                                      <div className="fl">Hemisphere</div>
+                                      <select
+                                        className="fs"
+                                        value={fixCoordsHemisphere}
+                                        onChange={(e) => setFixCoordsHemisphere(e.target.value as "N" | "S")}
+                                      >
+                                        <option value="N">Northern (N)</option>
+                                        <option value="S">Southern (S)</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                  {fixCoordsError && (
+                                    <div className="ib ib-r mt-2">✗ {fixCoordsError}</div>
+                                  )}
+                                  <div className="btn-row mt-2">
+                                    <button
+                                      className="btn btn-p btn-sm"
+                                      onClick={() => handleFixCoords(bh)}
+                                      disabled={fixCoordsBusy}
+                                    >
+                                      {fixCoordsBusy ? "Converting…" : "Convert & Save"}
+                                    </button>
+                                    <button
+                                      className="btn btn-w btn-sm"
+                                      onClick={() => { setFixCoordsBhId(null); setFixCoordsError(null); }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         );
                       })
                     )}
@@ -2837,8 +3398,10 @@ export default function PortalClient({
                     {!setupIsLocked ? (
                       isEditingProjectDetails ? (
                         <>
-                          <span className="ct-action cursor-pointer text-green-d bg-green-light border-green-d" onClick={handleSaveProjectDetails}>Save</span>
-                          <span className="ct-action cursor-pointer text-text-sec bg-bg-card border-border" onClick={() => setIsEditingProjectDetails(false)}>Cancel</span>
+                          <span className={`ct-action cursor-pointer text-green-d bg-green-light border-green-d ${savingProjectDetails ? "opacity-60 pointer-events-none" : ""}`} onClick={handleSaveProjectDetails}>
+                            {savingProjectDetails ? "Saving..." : "Save"}
+                          </span>
+                          <span className="ct-action cursor-pointer text-text-sec bg-bg-card border-border" onClick={() => { setIsEditingProjectDetails(false); setProjectDetailsError(""); }}>Cancel</span>
                         </>
                       ) : (
                         <span className="ct-action cursor-pointer" onClick={() => setIsEditingProjectDetails(true)}>Edit</span>
@@ -2853,6 +3416,11 @@ export default function PortalClient({
                 <div className="empty-state">Project details could not be loaded.</div>
               ) : (
                 <>
+                  {projectDetailsError && (
+                    <div className="ib ib-r p-2 text-[10px] font-medium mb-2">
+                      ❌ {projectDetailsError}
+                    </div>
+                  )}
                   <div className="grid2">
                     <div className="fg">
                       <div className="fl">Project ID</div>
@@ -2869,39 +3437,19 @@ export default function PortalClient({
                     </div>
                     <div className="fg">
                       <div className="fl">Client / Authority</div>
-                      <input 
-                        className="fi text-amber-d" 
-                        value={clientName} 
-                        onChange={(e) => setClientName(e.target.value)} 
-                        readOnly={!isEditingProjectDetails} 
-                      />
+                      <input className="fi text-amber-d" value={clientName || "—"} readOnly title="Managed via Project Companies, not directly editable here" />
                     </div>
                     <div className="fg">
                       <div className="fl">Contractor (EPC Company)</div>
-                      <input 
-                        className="fi text-amber-d" 
-                        value={contractorName} 
-                        onChange={(e) => setContractorName(e.target.value)} 
-                        readOnly={!isEditingProjectDetails} 
-                      />
+                      <input className="fi text-amber-d" value={contractorName || "—"} readOnly title="Managed via Project Companies, not directly editable here" />
                     </div>
                     <div className="fg">
                       <div className="fl">Agency (Geotech Company)</div>
-                      <input 
-                        className="fi text-amber-d" 
-                        value={agencyName} 
-                        onChange={(e) => setAgencyName(e.target.value)} 
-                        readOnly={!isEditingProjectDetails} 
-                      />
+                      <input className="fi text-amber-d" value={agencyName || "—"} readOnly title="Managed via Project Companies, not directly editable here" />
                     </div>
                     <div className="fg">
                       <div className="fl">IE Firm</div>
-                      <input 
-                        className="fi text-amber-d" 
-                        value={ieFirmName} 
-                        onChange={(e) => setIeFirmName(e.target.value)} 
-                        readOnly={!isEditingProjectDetails} 
-                      />
+                      <input className="fi text-amber-d" value={ieFirmName || "—"} readOnly title="Managed via Project Companies, not directly editable here" />
                     </div>
                     <div className="fg">
                       <div className="fl">Contract Number (auto-generated)</div>
@@ -3122,9 +3670,6 @@ export default function PortalClient({
                 ) : (
                   <div className="grid grid-cols-1 gap-3 mb-3">
                     {localTeams.map((team: any) => {
-                      const teamMemberIds = new Set((team.members || []).map((tm: any) => tm.userId));
-                      const assignableMembers = members.filter((m: any) => !teamMemberIds.has(m.userId));
-
                       return (
                         <div key={team.id} className="bg-bg-raised border border-border rounded-lg p-3 flex flex-col justify-between">
                           <div>
@@ -3719,11 +4264,17 @@ export default function PortalClient({
               </div>
             )}
 
-            {/* Anomaly Alerts — only rendered when real anomalies exist */}
+            {/* Anomaly Alerts — only rendered when real anomalies exist.
+                Capped to keep this from rendering hundreds of cards on a
+                project with a lot of naturally noisy N-value data; resolve
+                (flag or accept) some to reveal the rest. */}
             {visibleAnomalies.length > 0 && (
               <>
-                <div className="text-[10px] font-bold text-red-500 tracking-[0.5px] uppercase mb-2">🚨 Anomaly Alerts — Action Required</div>
-                {visibleAnomalies.map((a) => (
+                <div className="text-[10px] font-bold text-red-500 tracking-[0.5px] uppercase mb-2">
+                  🚨 Anomaly Alerts — Action Required
+                  {visibleAnomalies.length > 25 ? ` (showing 25 of ${visibleAnomalies.length})` : ""}
+                </div>
+                {visibleAnomalies.slice(0, 25).map((a) => (
                   <div key={a.intervalId} className="anom-card">
                     <div className="anom-hdr">
                       <span className="pill p-red text-[8px] uppercase">{a.type === "REFUSAL" ? "⚠ Refusal" : "🚨 Critical"}</span>
@@ -3753,27 +4304,32 @@ export default function PortalClient({
               </>
             )}
 
-            {/* Live Data Feed — real activity logs */}
+            {/* Live Data Feed — narrative built from real synced field records */}
             <div className="card shadow-sm">
               <div className="card-title">📡 Live Data Feed — Recent Activity</div>
-              {logs.length === 0 ? (
+              {liveFeedItems.length === 0 ? (
                 <div className="empty-state">
                   <b>No activity yet.</b><br />
                   Entries appear here when field teams sync data.
                 </div>
               ) : (
-                logs.map((log: any, i: number) => (
-                  <div key={log.id || i} className="feed-item">
-                    <div className={`fdot ${String(log.action).toUpperCase().includes("ANOMALY") ? "fd-red" : String(log.action).toUpperCase().includes("WATER") ? "fd-a" : "fd-g"}`} />
-                    <div className="fc">
-                      <div className="ft">{log.action}</div>
-                      <div className="fs2">
-                        {log.entityType} {log.entityId ? `· ${log.entityId}` : ""} · By {log.user?.firstName ?? "—"} {log.user?.lastName ?? ""}
+                <>
+                  {liveFeedItems.slice(0, 40).map((item) => (
+                    <div key={item.id} className="feed-item">
+                      <div className={`fdot ${LIVE_FEED_DOT[item.kind]}`} />
+                      <div className="fc">
+                        <div className="ft">{item.line1}</div>
+                        <div className="fs2">{item.line2}</div>
                       </div>
+                      <div className="ftime">{timeAgo(item.timestamp)}</div>
                     </div>
-                    <div className="ftime">{timeAgo(log.createdAt)}</div>
-                  </div>
-                ))
+                  ))}
+                  {liveFeedItems.length > 40 && (
+                    <div className="text-[9px] text-text-ter text-center mt-2">
+                      Showing latest 40 of {liveFeedItems.length} entries
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -3800,6 +4356,10 @@ export default function PortalClient({
               const isAppr =
                 !!bhStatusApproved[bh.id] ||
                 (bhReviews[bh.id] || []).some((r: any) => r.status === "APPROVED");
+              // Rejected = persisted REJECTED review exists, or rejected this session
+              const isRejected =
+                !!bhStatusRejected[bh.id] ||
+                (bhReviews[bh.id] || []).some((r: any) => r.status === "REJECTED");
               const bhAnoms = anomaliesForBh(bh.id);
               const flagged = bhAnoms.length > 0;
 
@@ -3822,8 +4382,8 @@ export default function PortalClient({
                       </div>
                     </div>
                     {isCompleted ? (
-                      <span className={`pill ${isAppr ? "p-g" : flagged ? "p-red" : "p-gr"} ml-auto text-[9px]`}>
-                        {isAppr ? "✓ Approved" : flagged ? "🚨 Review required" : "○ Not reviewed"}
+                      <span className={`pill ${isAppr ? "p-g" : isRejected ? "p-red" : flagged ? "p-red" : "p-gr"} ml-auto text-[9px]`}>
+                        {isAppr ? "✓ Approved" : isRejected ? "✗ Rejected" : flagged ? "🚨 Review required" : "○ Not reviewed"}
                       </span>
                     ) : (
                       <span className={`pill ${(BH_STATUS[bh.status] || BH_STATUS.PLANNED).cls} ml-auto text-[9px]`}>
@@ -3855,11 +4415,54 @@ export default function PortalClient({
                               >
                                 {isAppr ? "✓ Approved" : approveBusyBhId === bh.id ? "Approving…" : "✓ Approve Boring"}
                               </button>
+                              <button
+                                onClick={() => {
+                                  setRejectError(null);
+                                  setShowRejectPanel(showRejectPanel === bh.id ? null : bh.id);
+                                }}
+                                className="btn btn-d btn-sm cursor-pointer"
+                                title="Records a persisted REJECT review for every SPT interval of this boring"
+                                disabled={isRejected || rejectBusyBhId === bh.id}
+                              >
+                                {isRejected ? "✗ Rejected" : rejectBusyBhId === bh.id ? "Rejecting…" : "✗ Reject Boring"}
+                              </button>
                             </div>
                           </div>
 
                           {approveError && (
                             <div className="ib ib-r">✗ {approveError}</div>
+                          )}
+
+                          {showRejectPanel === bh.id && (
+                            <div className="reject-panel animate-fade-in mb-2">
+                              <div className="fg mb-2">
+                                <div className="fl">Reason for rejection — Mandatory</div>
+                                <input
+                                  className="fi"
+                                  placeholder="e.g. SPT readings inconsistent with adjacent boreholes, needs re-verification"
+                                  value={rejectReason}
+                                  onChange={(e) => setRejectReason(e.target.value)}
+                                />
+                              </div>
+                              {rejectError && (
+                                <div className="ib ib-r mb-2">✗ {rejectError}</div>
+                              )}
+                              <div className="btn-row">
+                                <button
+                                  onClick={() => handleRejectBoring(bh)}
+                                  className="btn btn-d btn-sm cursor-pointer"
+                                  disabled={!rejectReason.trim() || rejectBusyBhId === bh.id}
+                                >
+                                  {rejectBusyBhId === bh.id ? "Rejecting…" : "Confirm Reject"}
+                                </button>
+                                <button
+                                  className="btn btn-w btn-sm"
+                                  onClick={() => { setShowRejectPanel(null); setRejectReason(""); setRejectError(null); }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
                           )}
 
                           <table className="spt-tbl">
@@ -3879,29 +4482,42 @@ export default function PortalClient({
                             <tbody>
                               {bh.intervals.map((item: any, idx: number) => {
                                 const isAnomInterval = anomalousIntervalIds.has(item.id);
-                                const mod = modSuccessFor(item.id);
+                                // Parsed once per row, not once per cell (8 cells share it).
+                                const diffs = parseIntervalDiffs(item.remarks);
+                                const fromDiff = fieldDiff(item, "fromDepth", diffs);
+                                const toDiff = fieldDiff(item, "toDepth", diffs);
+                                const depthChanged = !!(fromDiff || toDiff);
+                                const fmtDepth = (v: any) => (v == null ? "—" : Number(v).toFixed(1));
                                 return (
                                   <tr key={item.id || idx} className={isAnomInterval ? "flagged" : ""}>
-                                    <td>{item.fromDepth.toFixed(1)}-{item.toDepth.toFixed(1)}m</td>
-                                    <td>{item.blow1 ?? "—"}</td>
-                                    <td>{item.blow2 ?? "—"}</td>
-                                    <td>{item.blow3 ?? "—"}</td>
-                                    <td className={isAnomInterval ? "nv-flag" : "nv"}>
-                                      {mod ? `${mod.nValue} (modified)` : item.isRefusal ? "Refusal" : (item.nValue ?? "—")}
+                                    <td>
+                                      {depthChanged ? (
+                                        <span className="fv-diff" title="Original depth range">
+                                          <span className="fv-old">{fmtDepth(fromDiff ? fromDiff.old : item.fromDepth)}-{fmtDepth(toDiff ? toDiff.old : item.toDepth)}m</span>
+                                          <span className="fv-arrow">→</span>
+                                          <span className="fv-new">{fmtDepth(item.fromDepth)}-{fmtDepth(item.toDepth)}m</span>
+                                        </span>
+                                      ) : (
+                                        `${item.fromDepth.toFixed(1)}-${item.toDepth.toFixed(1)}m`
+                                      )}
                                     </td>
-                                    <td>{item.nCorrected ?? "—"}</td>
-                                    <td>{item.soilDescription ?? "—"}</td>
+                                    <td>{renderDiffCell(item, "blow1", item.blow1, (v) => v ?? "—", diffs)}</td>
+                                    <td>{renderDiffCell(item, "blow2", item.blow2, (v) => v ?? "—", diffs)}</td>
+                                    <td>{renderDiffCell(item, "blow3", item.blow3, (v) => v ?? "—", diffs)}</td>
+                                    <td className={isAnomInterval ? "nv-flag" : "nv"}>
+                                      {item.isRefusal ? "Refusal" : renderDiffCell(item, "nValue", effectiveN(item), (v) => v ?? "—", diffs)}
+                                    </td>
+                                    <td>{renderDiffCell(item, "nCorrected", item.nCorrected, (v) => v ?? "—", diffs)}</td>
+                                    <td>{renderDiffCell(item, "soilDescription", item.soilDescription, (v) => v || "—", diffs)}</td>
                                     <td>
                                       <span className={`pill ${isAnomInterval ? "p-red" : item.isCompleted ? "p-g" : "p-gr"}`}>
                                         {isAnomInterval ? "🚨" : item.isCompleted ? "✓" : "○"}
                                       </span>
                                     </td>
                                     <td>
-                                      {isAnomInterval && !mod && (
-                                        <button className="btn btn-d btn-sm" onClick={(e) => { e.stopPropagation(); openModPanel(item); }}>
-                                          ✏ Modify
-                                        </button>
-                                      )}
+                                      <button className="btn btn-d btn-sm" onClick={(e) => { e.stopPropagation(); openModPanel(item); }}>
+                                        ✏ Modify
+                                      </button>
                                     </td>
                                   </tr>
                                 );
@@ -3909,21 +4525,41 @@ export default function PortalClient({
                             </tbody>
                           </table>
 
-                          {/* Modification panel for the selected flagged interval */}
-                          {bh.intervals.filter((iv: any) => iv.id === modIntervalId).map((iv: any) => (
+                          {/* Modification panel for the selected interval — any editable field */}
+                          {bh.intervals.filter((iv: any) => iv.id === modIntervalId).map((iv: any) => {
+                            const isAnomInterval = anomalousIntervalIds.has(iv.id);
+                            return (
                             <div key={iv.id} className="border-t border-border pt-3 mt-2">
                               <div className="mod-panel animate-fade-in">
-                                <div className="mod-title">✏ Modify — {bh.boreholeCode} · {iv.fromDepth.toFixed(1)}–{iv.toDepth.toFixed(1)}m · N-value</div>
+                                <div className="mod-title">✏ Modify — {bh.boreholeCode} · {iv.fromDepth.toFixed(1)}–{iv.toDepth.toFixed(1)}m</div>
+                                <div className="fg mb-2">
+                                  <div className="fl">Field to correct</div>
+                                  <select
+                                    className="fs"
+                                    value={modField ?? ""}
+                                    onChange={(e) => {
+                                      const f = (e.target.value || null) as EditableIntervalField | null;
+                                      setModField(f);
+                                      setModValue(f && iv[f] != null ? String(iv[f]) : "");
+                                    }}
+                                  >
+                                    <option value="">— Select field —</option>
+                                    {EDITABLE_FIELD_ORDER.map((f) => (
+                                      <option key={f} value={f}>{EDITABLE_FIELD_LABELS[f]}</option>
+                                    ))}
+                                  </select>
+                                </div>
                                 <div className="mod-row">
-                                  <div className="mod-orig">Original N = {iv.nValue ?? "—"}</div>
+                                  <div className="mod-orig">Original: {modField ? (iv[modField] ?? "—") : "—"}</div>
                                   <div className="text-rust-d">→</div>
                                   <input
-                                    type="number"
-                                    className="fi w-[75px] text-center"
-                                    value={modNValue}
-                                    onChange={(e) => setModNValue(e.target.value)}
+                                    type={modField === "soilDescription" ? "text" : "number"}
+                                    className="fi w-[140px] text-center"
+                                    value={modValue}
+                                    onChange={(e) => setModValue(e.target.value)}
+                                    disabled={!modField}
                                   />
-                                  <div className="mod-new">Corrected N = {modNValue || "—"}</div>
+                                  <div className="mod-new">New: {modValue || "—"}</div>
                                 </div>
                                 <div className="fg mb-2">
                                   <div className="fl">IS Code Reason — Mandatory</div>
@@ -3950,40 +4586,47 @@ export default function PortalClient({
                                   <button
                                     onClick={() => handleApplyModification(bh, iv)}
                                     className="btn btn-p btn-sm cursor-pointer"
-                                    disabled={!selectedClause || isNaN(parseInt(modNValue, 10)) || modBusy}
-                                    title={!selectedClause ? "Select the mandatory IS clause first" : undefined}
+                                    disabled={!modField || !selectedClause || !modValue.trim() || modBusy}
+                                    title={!modField ? "Select a field first" : !selectedClause ? "Select the mandatory IS clause first" : undefined}
                                   >
                                     {modBusy ? "Applying…" : "Apply Modification"}
                                   </button>
-                                  <button className="btn btn-w btn-sm" onClick={() => setModIntervalId(null)}>Cancel</button>
-                                  <button
-                                    onClick={async () => {
-                                      const ok = await handleAcceptValid(
-                                        iv.id,
-                                        `N=${iv.nValue ?? "—"} accepted as valid by engineer review`
-                                      );
-                                      if (ok) setModIntervalId(null);
-                                    }}
-                                    className="btn btn-s btn-sm cursor-pointer"
-                                    disabled={acceptBusyId === iv.id}
-                                    title="Records a persisted APPROVE review for this interval"
-                                  >
-                                    {acceptBusyId === iv.id ? "Saving…" : `Accept N=${iv.nValue ?? "—"} as Valid`}
-                                  </button>
+                                  <button className="btn btn-w btn-sm" onClick={() => { setModIntervalId(null); setModField(null); }}>Cancel</button>
+                                  {isAnomInterval && (
+                                    <button
+                                      onClick={async () => {
+                                        const ok = await handleAcceptValid(
+                                          iv.id,
+                                          `N=${iv.nValue ?? "—"} accepted as valid by engineer review`
+                                        );
+                                        if (ok) { setModIntervalId(null); setModField(null); }
+                                      }}
+                                      className="btn btn-s btn-sm cursor-pointer"
+                                      disabled={acceptBusyId === iv.id}
+                                      title="Records a persisted APPROVE review for this interval"
+                                    >
+                                      {acceptBusyId === iv.id ? "Saving…" : `Accept N=${iv.nValue ?? "—"} as Valid`}
+                                    </button>
+                                  )}
                                 </div>
                                 {acceptError && acceptError.id === iv.id && (
                                   <div className="ib ib-r mt-2 mb-0">✗ {acceptError.message}</div>
                                 )}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
 
                           {/* Audit lines for modifications applied this session — real user, real timestamp */}
                           {bh.intervals.filter((iv: any) => appliedMods[iv.id]).map((iv: any) => {
                             const mod = appliedMods[iv.id];
+                            const fieldEntries = Object.entries(mod.fields) as [EditableIntervalField, { oldValue: any; newValue: any }][];
                             return (
                               <div key={iv.id} className="p-3 bg-[rgba(59,109,17,.08)] border border-green-d rounded-md text-[10px] text-green-d leading-relaxed font-semibold animate-fade-in mt-2">
-                                ✓ Modification saved to server: N={iv.nValue ?? "—"} corrected to N={mod.nValue} under {mod.clause}. Logged by {userName} · {new Date(mod.appliedAt).toLocaleString("en-IN")}.
+                                {fieldEntries.map(([f, v]) => (
+                                  <div key={f}>✓ {EDITABLE_FIELD_LABELS[f]}: {v.oldValue ?? "—"} → {v.newValue ?? "—"} under {mod.clause}.</div>
+                                ))}
+                                <div className="font-normal text-text-ter mt-1">Logged by {userName} · {new Date(mod.appliedAt).toLocaleString("en-IN")}.</div>
                               </div>
                             );
                           })}
@@ -5582,42 +6225,101 @@ export default function PortalClient({
               )}
 
               <div className="space-y-3">
-                <div className="grid2">
-                  <div className="fg">
-                    <span className="fl">First Name</span>
+                <div className="flex gap-3 text-[10px] font-medium mb-1">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
-                      type="text"
-                      className="fi"
-                      value={newWorkerFirstName}
-                      onChange={(e) => setNewWorkerFirstName(e.target.value)}
-                      placeholder="e.g. Ramesh"
+                      type="radio"
+                      name="crewMemberType"
+                      checked={crewMemberType === "new"}
+                      onChange={() => { setCrewMemberType("new"); setCrewMemberAddError(""); }}
+                    />
+                    New Worker
+                  </label>
+                  <label
+                    className={`flex items-center gap-1.5 ${crewModalAssignableMembers.length === 0 ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                    title={crewModalAssignableMembers.length === 0 ? "No other project members available to add" : undefined}
+                  >
+                    <input
+                      type="radio"
+                      name="crewMemberType"
+                      checked={crewMemberType === "existing"}
+                      disabled={crewModalAssignableMembers.length === 0}
+                      onChange={() => { setCrewMemberType("existing"); setCrewMemberAddError(""); }}
+                    />
+                    Existing Project Member
+                  </label>
+                </div>
+
+                {crewMemberType === "existing" ? (
+                  <div className="fg">
+                    <span className="fl">Project Member</span>
+                    <select
+                      className="fs"
+                      value={selectedProjectMemberId}
+                      onChange={(e) => setSelectedProjectMemberId(e.target.value)}
                       required
-                    />
+                    >
+                      <option value="">Select a member...</option>
+                      {crewModalAssignableMembers.map((m: any) => {
+                        const mu = m.user || {};
+                        const label = `${mu.firstName ?? ""} ${mu.lastName ?? ""}`.trim() || mu.email || m.userId;
+                        return (
+                          <option key={m.userId} value={m.userId}>
+                            {label}{mu.employeeCode ? ` (${mu.employeeCode})` : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
                   </div>
-                  <div className="fg">
-                    <span className="fl">Last Name (optional)</span>
-                    <input
-                      type="text"
-                      className="fi"
-                      value={newWorkerLastName}
-                      onChange={(e) => setNewWorkerLastName(e.target.value)}
-                      placeholder="e.g. Chandra"
-                    />
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="fg">
+                      <span className="fl">Mobile Number (10-digit, used for app login)</span>
+                      <input
+                        type="tel"
+                        className="fi font-mono"
+                        value={newWorkerMobile}
+                        onChange={(e) => { setNewWorkerMobile(e.target.value); setMobileLookupMatch(null); }}
+                        placeholder="e.g. 9876543210"
+                        required
+                      />
+                      {mobileLookupLoading && (
+                        <div className="text-[9px] text-text-ter mt-1">Checking mobile number...</div>
+                      )}
+                      {!mobileLookupLoading && mobileLookupMatch && (
+                        <div className="text-[9px] text-green-d mt-1">
+                          ✓ Existing GroundLense member found — name autofilled below.
+                        </div>
+                      )}
+                    </div>
 
-                <div className="fg">
-                  <span className="fl">Mobile Number (10-digit, used for app login)</span>
-                  <input
-                    type="tel"
-                    className="fi font-mono"
-                    value={newWorkerMobile}
-                    onChange={(e) => setNewWorkerMobile(e.target.value)}
-                    placeholder="e.g. 9876543210"
-                    required
-                  />
-                </div>
-
+                    <div className="grid2">
+                      <div className="fg">
+                        <span className="fl">First Name</span>
+                        <input
+                          type="text"
+                          className="fi"
+                          value={newWorkerFirstName}
+                          onChange={(e) => setNewWorkerFirstName(e.target.value)}
+                          placeholder="e.g. Ramesh"
+                          readOnly={!!mobileLookupMatch}
+                          required
+                        />
+                      </div>
+                      <div className="fg">
+                        <span className="fl">Last Name (optional)</span>
+                        <input
+                          type="text"
+                          className="fi"
+                          value={newWorkerLastName}
+                          onChange={(e) => setNewWorkerLastName(e.target.value)}
+                          placeholder="e.g. Chandra"
+                          readOnly={!!mobileLookupMatch}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

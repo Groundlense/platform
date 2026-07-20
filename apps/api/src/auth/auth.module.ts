@@ -25,8 +25,14 @@ import { ActivityLogsModule } from '../activity-logs/activity-logs.module';
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_ACCESS_SECRET'),
 
+        // No silent-refresh flow is wired up yet (POST /auth/refresh exists
+        // but nothing calls it) — the web session cookie lives 24h (see
+        // apps/web/src/lib/session.ts), so the JWT must last at least that
+        // long or users get hard-booted mid-session once the old 15-minute
+        // token goes stale. Chosen deliberately over building refresh
+        // plumbing; revisit if a proper silent-refresh flow gets added.
         signOptions: {
-          expiresIn: '15m',
+          expiresIn: '24h',
         },
       }),
     }),

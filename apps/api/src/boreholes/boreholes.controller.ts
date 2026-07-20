@@ -10,6 +10,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { existsSync } from 'fs';
+import { join } from 'path';
+import archiver from 'archiver';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -26,6 +29,8 @@ import { UpdateIntervalDto } from './dto/update-interval.dto';
 import { CreateSampleDto } from './dto/create-sample.dto';
 
 import { AssignBoreholeDto } from './dto/assign-borehole.dto';
+import { BulkAssignTeamDto } from './dto/bulk-assign-team.dto';
+import { UpdateBoreholeLocationDto } from './dto/update-borehole-location.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { UpdateBoreholeStatusDto } from './dto/update-borehole-status.dto';
@@ -66,6 +71,22 @@ export class BoreholesController {
     user: any,
   ) {
     return this.boreholesService.findByProject(projectId, user);
+  }
+
+  // Batched: every borehole's full report data (intervals, samples incl.
+  // labResult, media, water table) in one call — avoids N+M separate
+  // per-borehole/per-sample requests on every project-page load and every
+  // 30s background poll.
+  @Permissions('REPORT_VIEW')
+  @Get('projects/:projectId/report-data')
+  getProjectReportData(
+    @Param('projectId')
+    projectId: string,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService.getProjectReportData(projectId, user);
   }
 
   // Boreholes assigned to the calling worker via team membership.
@@ -176,6 +197,42 @@ export class BoreholesController {
   ) {
     return this.boreholesService.assign(boreholeId, user, dto);
   }
+
+  // Corrects a borehole's coordinates in place — for data uploaded before
+  // the UTM zone picker existed (see UpdateBoreholeLocationDto).
+  @Permissions('WORKER_ASSIGN')
+  @Patch('boreholes/:id/location')
+  updateLocation(
+    @Param('id')
+    boreholeId: string,
+
+    @Body()
+    dto: UpdateBoreholeLocationDto,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService.updateLocation(boreholeId, user, dto);
+  }
+
+  // Batched: assigns a team to many boreholes in one call — replaces what
+  // used to be one PATCH request per borehole (sequential, in-order) for
+  // bulk team assignment.
+  @Permissions('WORKER_ASSIGN')
+  @Patch('projects/:projectId/boreholes/bulk-assign-team')
+  bulkAssignTeam(
+    @Param('projectId')
+    projectId: string,
+
+    @Body()
+    dto: BulkAssignTeamDto,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService.bulkAssignTeam(projectId, user, dto);
+  }
+
   @Permissions('BOREHOLE_EDIT')
   @Patch('boreholes/:id/status')
   updateStatus(
@@ -297,5 +354,46 @@ export class BoreholesController {
     user: any,
   ) {
     return this.boreholesService.exportProject(projectId, user);
+  }
+
+  @Permissions('REPORT_VIEW')
+  @Get('projects/:projectId/photos/zip')
+  async downloadProjectPhotosZip(
+    @Param('projectId')
+    projectId: string,
+
+    @CurrentUser()
+    user: any,
+
+    @Res()
+    res: Response,
+  ) {
+    const media = await this.boreholesService.listProjectMediaForZip(
+      projectId,
+      user,
+    );
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="site-photos-${projectId}.zip"`,
+    );
+
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('error', (err) => res.destroy(err));
+    archive.pipe(res);
+
+    // Files missing on disk (e.g. an ephemeral storage wipe) are skipped,
+    // not fatal — the rest of the archive still downloads.
+    for (const m of media) {
+      if (!m.mimeType?.startsWith('image/')) continue;
+      const absolutePath = join(process.cwd(), 'uploads', m.filePath);
+      if (!existsSync(absolutePath)) continue;
+      archive.file(absolutePath, {
+        name: `${m.boreholeCode}/${m.fileName || m.id}`,
+      });
+    }
+
+    await archive.finalize();
   }
 }

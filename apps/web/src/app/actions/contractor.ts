@@ -32,3 +32,18 @@ export async function fetchBoreholeReportData(boreholeId: string): Promise<any |
     return null;
   }
 }
+
+/**
+ * Batched report data for every borehole in a project — one call instead of
+ * one fetchBoreholeReportData per borehole. Returns [] on failure.
+ */
+export async function fetchProjectReportData(projectId: string): Promise<any[]> {
+  const token = await getToken();
+  if (!token) return [];
+  try {
+    const reports = await apiGet<any[]>(`/projects/${projectId}/report-data`, token);
+    return Array.isArray(reports) ? reports : [];
+  } catch {
+    return [];
+  }
+}

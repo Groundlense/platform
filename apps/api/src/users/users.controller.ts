@@ -35,6 +35,16 @@ export class UsersController {
     return this.usersService.findAll(user);
   }
 
+  // Declared before ':id' so 'by-mobile' isn't captured as a user id.
+  @Permissions('USER_VIEW')
+  @Get('by-mobile/:mobile')
+  findByMobile(
+    @Param('mobile')
+    mobile: string,
+  ) {
+    return this.usersService.findByMobile(mobile);
+  }
+
   @Permissions('USER_MANAGE')
   @Post()
   createUser(

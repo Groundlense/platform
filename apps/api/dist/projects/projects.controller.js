@@ -16,6 +16,7 @@ exports.ProjectsController = void 0;
 const common_1 = require("@nestjs/common");
 const projects_service_1 = require("./projects.service");
 const create_project_dto_1 = require("./dto/create-project.dto");
+const update_project_dto_1 = require("./dto/update-project.dto");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 const current_user_decorator_1 = require("../auth/decorators/current-user.decorator");
 const add_project_member_dto_1 = require("./dto/add-project-member.dto");
@@ -33,6 +34,9 @@ let ProjectsController = class ProjectsController {
     }
     create(dto, user) {
         return this.projectsService.create(dto, user.id, user.organizationId);
+    }
+    update(projectId, dto, user) {
+        return this.projectsService.update(projectId, dto, user);
     }
     findAll(user) {
         return this.projectsService.findAll(user);
@@ -99,6 +103,17 @@ __decorate([
     __metadata("design:paramtypes", [create_project_dto_1.CreateProjectDto, Object]),
     __metadata("design:returntype", void 0)
 ], ProjectsController.prototype, "create", null);
+__decorate([
+    (0, permissions_decorator_1.Permissions)('PROJECT_EDIT'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, permissions_guard_1.PermissionsGuard),
+    (0, common_1.Patch)(':projectId'),
+    __param(0, (0, common_2.Param)('projectId')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, update_project_dto_1.UpdateProjectDto, Object]),
+    __metadata("design:returntype", void 0)
+], ProjectsController.prototype, "update", null);
 __decorate([
     (0, common_1.Get)(),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),

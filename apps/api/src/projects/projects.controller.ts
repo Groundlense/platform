@@ -14,6 +14,8 @@ import { ProjectsService } from './projects.service';
 
 import { CreateProjectDto } from './dto/create-project.dto';
 
+import { UpdateProjectDto } from './dto/update-project.dto';
+
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -43,6 +45,17 @@ export class ProjectsController {
   @Post()
   create(@Body() dto: CreateProjectDto, @CurrentUser() user: any) {
     return this.projectsService.create(dto, user.id, user.organizationId);
+  }
+
+  @Permissions('PROJECT_EDIT')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Patch(':projectId')
+  update(
+    @Param('projectId') projectId: string,
+    @Body() dto: UpdateProjectDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectsService.update(projectId, dto, user);
   }
 
   @Get()

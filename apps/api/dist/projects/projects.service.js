@@ -154,6 +154,36 @@ let ProjectsService = class ProjectsService {
         });
         return project;
     }
+    async update(projectId, dto, actor) {
+        await this.access.assertProjectAccess(actor, projectId);
+        if (!this.access.isSuperAdmin(actor)) {
+            const started = await this.db.borehole.count({
+                where: { projectId, status: { not: 'PLANNED' } },
+            });
+            if (started > 0) {
+                throw new common_1.ForbiddenException('Project setup is locked — fieldwork has already started');
+            }
+        }
+        const data = {};
+        if (dto.name !== undefined)
+            data.name = dto.name;
+        if (dto.state !== undefined)
+            data.state = dto.state;
+        if (dto.startDate !== undefined) {
+            data.startDate = dto.startDate ? new Date(dto.startDate) : null;
+        }
+        if (dto.endDate !== undefined) {
+            const endDate = dto.endDate ? new Date(dto.endDate) : null;
+            data.endDate = endDate;
+            data.targetCompletionDate = endDate;
+        }
+        const project = await this.db.project.update({
+            where: { id: projectId },
+            data,
+        });
+        await this.activityLogsService.log(actor.id, 'PROJECT_UPDATED', 'PROJECT', project.id, data);
+        return project;
+    }
     async findAll(user) {
         const projects = await this.db.project.findMany({
             where: this.access.projectScopeWhere(user),
@@ -230,14 +260,6 @@ let ProjectsService = class ProjectsService {
     }
     async addMember(projectId, userId, actor) {
         await this.access.assertProjectAccess(actor, projectId);
-        if (!this.access.isSuperAdmin(actor)) {
-            const started = await this.db.borehole.count({
-                where: { projectId, status: { not: 'PLANNED' } },
-            });
-            if (started > 0) {
-                throw new common_1.ForbiddenException('Project setup is locked — fieldwork has already started');
-            }
-        }
         const existing = await this.db.projectMember.findFirst({
             where: { projectId, userId },
         });

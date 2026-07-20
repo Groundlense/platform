@@ -6,6 +6,8 @@ import { CreateBoreholeDto } from './dto/create-borehole.dto';
 import { UpdateIntervalDto } from './dto/update-interval.dto';
 import { CreateSampleDto } from './dto/create-sample.dto';
 import { AssignBoreholeDto } from './dto/assign-borehole.dto';
+import { BulkAssignTeamDto } from './dto/bulk-assign-team.dto';
+import { UpdateBoreholeLocationDto } from './dto/update-borehole-location.dto';
 import { ActivityLogsService } from 'src/activity-logs/activity-logs.service';
 import { ProjectAccessService } from 'src/common/access/project-access.service';
 import { IntegrityService } from 'src/common/integrity/integrity.service';
@@ -284,6 +286,95 @@ export class BoreholesService {
     );
     return borehole;
   }
+
+  /**
+   * Corrects a borehole's coordinates in place — for data uploaded before
+   * the UTM zone picker existed. Same PLANNED-only lock as assign(); the
+   * server only validates the already-converted decimal-degree values are
+   * in range, it does no UTM interpretation of its own.
+   */
+  async updateLocation(
+    boreholeId: string,
+    user: any,
+    dto: UpdateBoreholeLocationDto,
+  ) {
+    const existing = await this.access.assertBoreholeAccess(user, boreholeId);
+
+    if (existing.status !== 'PLANNED' && !this.access.isSuperAdmin(user)) {
+      throw new ForbiddenException(
+        'Location is locked — fieldwork on this borehole has started',
+      );
+    }
+
+    const lat = Number(dto.latitude);
+    const lng = Number(dto.longitude);
+    if (
+      !Number.isFinite(lat) || lat < -90 || lat > 90 ||
+      !Number.isFinite(lng) || lng < -180 || lng > 180
+    ) {
+      throw new BadRequestException(
+        'latitude/longitude must be valid decimal degrees',
+      );
+    }
+
+    const borehole = await this.db.borehole.update({
+      where: { id: boreholeId },
+      data: { latitude: dto.latitude, longitude: dto.longitude },
+    });
+
+    await this.activityLogsService.log(
+      user.id,
+      'BOREHOLE_LOCATION_UPDATED',
+      'BOREHOLE',
+      borehole.id,
+      { latitude: dto.latitude, longitude: dto.longitude },
+    );
+
+    return borehole;
+  }
+
+  /**
+   * Assigns a team to many boreholes in one call — one query instead of the
+   * per-borehole sequential round trips the web portal used to make for
+   * bulk team-assignment (new-team creation with pre-selected boreholes,
+   * and the Boring Locations table's bulk-assign bar).
+   */
+  async bulkAssignTeam(projectId: string, user: any, dto: BulkAssignTeamDto) {
+    await this.access.assertProjectAccess(user, projectId);
+
+    const boreholes = await this.db.borehole.findMany({
+      where: { id: { in: dto.boreholeIds }, projectId },
+      select: { id: true, status: true, boreholeCode: true },
+    });
+
+    const isSuperAdmin = this.access.isSuperAdmin(user);
+    // Same rule as the single-borehole assign(): locked once fieldwork on
+    // that specific borehole has started (SUPER_ADMIN excepted).
+    const assignable = boreholes.filter((b) => b.status === 'PLANNED' || isSuperAdmin);
+    const locked = boreholes.filter((b) => b.status !== 'PLANNED' && !isSuperAdmin);
+    const assignableIds = assignable.map((b) => b.id);
+
+    if (assignableIds.length > 0) {
+      await this.db.borehole.updateMany({
+        where: { id: { in: assignableIds } },
+        data: { teamId: dto.teamId },
+      });
+
+      await this.activityLogsService.log(
+        user.id,
+        'BOREHOLE_BULK_ASSIGNED',
+        'PROJECT',
+        projectId,
+        { boreholeIds: assignableIds, teamId: dto.teamId },
+      );
+    }
+
+    return {
+      assignedIds: assignableIds,
+      lockedCodes: locked.map((b) => b.boreholeCode),
+    };
+  }
+
   async updateStatus(boreholeId: string, status: BoreholeStatus, user: any) {
     const borehole = await this.access.assertBoreholeAccess(user, boreholeId);
 
@@ -348,6 +439,33 @@ export class BoreholesService {
           include: {
             samples: true,
 
+            media: true,
+          },
+        },
+        waterTableObservations: true,
+      },
+    });
+  }
+
+  /**
+   * Batched equivalent of getReportData for every borehole in a project —
+   * one query instead of the N (boreholes) + M (samples, for lab results)
+   * separate round trips the web portal used to make on every page load and
+   * every 30s poll. Includes labResult directly (getReportData's single-
+   * borehole version doesn't — the web layer used to fetch that per-sample).
+   */
+  async getProjectReportData(projectId: string, user: any) {
+    await this.access.assertProjectAccess(user, projectId);
+
+    return this.db.borehole.findMany({
+      where: { projectId },
+      orderBy: { boreholeCode: 'asc' },
+      include: {
+        site: true,
+        team: true,
+        intervals: {
+          include: {
+            samples: { include: { labResult: true } },
             media: true,
           },
         },
@@ -545,6 +663,34 @@ export class BoreholesService {
       project,
       integrity,
     };
+  }
+
+  /** Every uploaded photo/media row across the project, for the "All site
+   *  photos" ZIP download — grouped by borehole so the archive stays
+   *  navigable rather than dumping hundreds of files into one folder. */
+  async listProjectMediaForZip(projectId: string, user: any) {
+    await this.access.assertProjectAccess(user, projectId);
+
+    const boreholes = await this.db.borehole.findMany({
+      where: { projectId },
+      select: {
+        boreholeCode: true,
+        intervals: {
+          select: {
+            media: {
+              select: { id: true, fileName: true, filePath: true, mimeType: true },
+            },
+          },
+        },
+      },
+      orderBy: { boreholeCode: 'asc' },
+    });
+
+    return boreholes.flatMap((bh) =>
+      bh.intervals.flatMap((iv) =>
+        iv.media.map((m) => ({ ...m, boreholeCode: bh.boreholeCode })),
+      ),
+    );
   }
 
   private async computeIntegritySummary(boreholeId: string) {
