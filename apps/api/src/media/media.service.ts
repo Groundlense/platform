@@ -44,6 +44,7 @@ export class MediaService {
       CORE_BOX: 'CORE_BOX',
       SITE_SETUP: 'SITE_SETUP',
       CLOSURE: 'SITE_SETUP',
+      CLOSURE_VIDEO: 'CLOSURE_VIDEO',
     };
     const photoType = meta?.purpose
       ? (PHOTO_TYPE_BY_PURPOSE[meta.purpose] as any) ?? null
@@ -98,7 +99,7 @@ export class MediaService {
 
         mimeType: file.mimetype,
 
-        mediaType: 'PHOTO',
+        mediaType: file.mimetype.startsWith('video/') ? 'VIDEO' : 'PHOTO',
 
         uploadedByUserId: user.id,
 

@@ -5,6 +5,7 @@ const KEYS = {
   REFRESH_TOKEN: '@refresh_token',
   DEVICE_ID: '@device_id',
   USER: '@current_user',
+  OFFLINE_LOGIN: '@offline_login',
   PROJECTS: '@projects',
   BOREHOLES: (projectId: string) => `@boreholes:${projectId}`,
   INTERVALS: (boreholeId: string) => `@intervals:${boreholeId}`,
@@ -130,6 +131,30 @@ export const storage = {
     await AsyncStorage.removeItem(KEYS.USER);
   },
 
+  // --- Offline login ---
+  /**
+   * Written after every successful ONLINE login: all identifiers the
+   * worker may type (employee code, email, mobile) plus a SHA-256 hash
+   * of the PIN/password, so offline logins can be verified without the
+   * server.
+   */
+  async saveOfflineLogin(record: {
+    userId: string;
+    identifiers: string[];
+    pinHash: string;
+  }): Promise<void> {
+    await AsyncStorage.setItem(KEYS.OFFLINE_LOGIN, JSON.stringify(record));
+  },
+
+  async getOfflineLogin(): Promise<{
+    userId: string;
+    identifiers: string[];
+    pinHash: string;
+  } | null> {
+    const data = await AsyncStorage.getItem(KEYS.OFFLINE_LOGIN);
+    return data ? JSON.parse(data) : null;
+  },
+
   // --- Projects ---
   async saveProjects(projects: any[]): Promise<void> {
     await AsyncStorage.setItem(KEYS.PROJECTS, JSON.stringify(projects));
@@ -138,6 +163,18 @@ export const storage = {
   async getProjects(): Promise<any[]> {
     const data = await AsyncStorage.getItem(KEYS.PROJECTS);
     return data ? JSON.parse(data) : [];
+  },
+
+  /**
+   * SPT test interval for a project, in meters (set at project setup and
+   * locked once boring starts). Falls back to the IS 1892 default of
+   * 1.5 m for cached projects that predate the setting.
+   */
+  async getProjectSptInterval(projectId: string): Promise<number> {
+    const projects = await this.getProjects();
+    const project = projects.find((p: any) => p?.id === projectId);
+    const value = Number(project?.sptIntervalM);
+    return Number.isFinite(value) && value > 0 ? value : 1.5;
   },
 
   // --- Boreholes ---

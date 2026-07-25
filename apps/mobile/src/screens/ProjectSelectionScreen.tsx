@@ -11,12 +11,13 @@ import {
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
+import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
 import { api } from '../services/api';
 import { syncManager } from '../services/sync';
 
 export default function ProjectSelectionScreen({ navigation }: { navigation: any }) {
-  const [lang] = useState<'en' | 'hi'>('en');
+  const { lang } = useLanguage();
   const [user, setUser] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResult, setSearchResult] = useState<any>(null);
@@ -64,7 +65,7 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
       if (fresh.length === 0) return;
       await storage.addSeenAssignments(fresh.map((bh: any) => bh.id));
       Alert.alert(
-        'New borehole assigned / नई बोरिंग सौंपी गई',
+        lang === 'hi' ? 'नई बोरिंग सौंपी गई' : 'New borehole assigned',
         fresh.map((bh: any) => bh.boreholeCode || bh.name || bh.id).join(', ')
       );
     } catch (err) {
@@ -81,13 +82,13 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
       const cachedProjects = await storage.getProjects();
       setProjects(cachedProjects);
       if (!result.success) {
-        setSyncError(result.error || 'Sync failed / सिंक विफल');
+        setSyncError(result.error || (lang === 'hi' ? 'सिंक विफल' : 'Sync failed'));
       } else {
         await checkNewAssignments();
       }
     } catch (err: any) {
       console.warn('Sync failed:', err);
-      setSyncError(err?.message || 'Sync failed / सिंक विफल');
+      setSyncError(err?.message || (lang === 'hi' ? 'सिंक विफल' : 'Sync failed'));
     } finally {
       setSyncing(false);
     }
@@ -97,6 +98,9 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
     const query = searchQuery.trim();
     if (!query) return;
     setLoading(true);
+    // No response at all = no network reaching the server. A response (even
+    // an error one) means the server was reached — not "offline".
+    let isNetworkError = true;
     try {
       // Server search first — it distinguishes "exists but not assigned"
       // (red) from "does not exist" (amber).
@@ -114,12 +118,13 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
           setSearchResult({ projectCode: query, found: false, offline: false });
         }
         return;
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Server project search failed, using local cache:', err);
+        isNetworkError = !err?.response;
       }
 
-      // Offline fallback: search the locally synced project cache. Anything
-      // cached is by definition assigned to this worker.
+      // Fallback: search the locally synced project cache. Anything cached
+      // is by definition assigned to this worker.
       const cachedProjects = await storage.getProjects();
       const matched = cachedProjects.find(
         (p: any) => (p.projectCode || '').toUpperCase() === query.toUpperCase()
@@ -129,14 +134,16 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
           ...matched,
           found: true,
           hasAccess: true,
-          offline: true,
+          offline: isNetworkError,
+          serverError: !isNetworkError,
         });
       } else {
         // Amber "not found" state — the ID is not in the local cache
         setSearchResult({
           projectCode: query,
           found: false,
-          offline: true,
+          offline: isNetworkError,
+          serverError: !isNetworkError,
         });
       }
     } finally {
@@ -268,13 +275,15 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
                       {searchResult.projectCode} · Not assigned ✗
                     </Text>
                     <Text style={styles.srNameError}>
-                      Project found but not assigned to your team / प्रोजेक्ट आपको
-                      असाइन नहीं है
+                      {lang === 'hi'
+                        ? 'प्रोजेक्ट आपको असाइन नहीं है'
+                        : 'Project found but not assigned to your team'}
                     </Text>
                     <Text style={styles.srSub}>
-                      {searchResult.name ? `${searchResult.name} — ` : ''}contact your
-                      supervisor to get assigned. / असाइनमेंट के लिए अपने सुपरवाइजर से
-                      संपर्क करें।
+                      {searchResult.name ? `${searchResult.name} — ` : ''}
+                      {lang === 'hi'
+                        ? 'असाइनमेंट के लिए अपने सुपरवाइजर से संपर्क करें।'
+                        : 'contact your supervisor to get assigned.'}
                     </Text>
                   </View>
                 ) : (
@@ -283,12 +292,20 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
                       {searchResult.projectCode} · Not found ⚠️
                     </Text>
                     <Text style={styles.srNameWarn}>
-                      Project not found / प्रोजेक्ट नहीं मिला
+                      {lang === 'hi' ? 'प्रोजेक्ट नहीं मिला' : 'Project not found'}
                     </Text>
                     <Text style={styles.srSub}>
                       {searchResult.offline
-                        ? 'You are offline — only synced projects were searched. Check the ID or sync first. / आप ऑफलाइन हैं — ID जांचें या पहले सिंक करें।'
-                        : 'Check the ID or sync first. If you should be assigned, contact your engineer. / ID जांचें या पहले सिंक करें।'}
+                        ? (lang === 'hi'
+                            ? 'आप ऑफलाइन हैं — केवल सिंक किए गए प्रोजेक्ट खोजे गए। ID जांचें या पहले सिंक करें।'
+                            : 'You are offline — only synced projects were searched. Check the ID or sync first.')
+                        : searchResult.serverError
+                        ? (lang === 'hi'
+                            ? 'सर्वर से कनेक्ट नहीं हो सका — केवल सिंक किए गए प्रोजेक्ट खोजे गए।'
+                            : "Couldn't reach the server — only synced projects were searched.")
+                        : (lang === 'hi'
+                            ? 'ID जांचें या पहले सिंक करें। यदि आपको असाइन होना चाहिए, तो अपने इंजीनियर से संपर्क करें।'
+                            : 'Check the ID or sync first. If you should be assigned, contact your engineer.')}
                     </Text>
                   </View>
                 )
@@ -301,7 +318,7 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
               onPress={() => navigation.navigate('EngineerQuery')}
             >
               <Text style={styles.queryInboxBtnText}>
-                📨 Engineer queries / इंजीनियर के सवाल
+                {lang === 'hi' ? 'इंजीनियर के सवाल' : '📨 Engineer queries'}
               </Text>
             </TouchableOpacity>
 
@@ -310,11 +327,12 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
             {activeProjects.length === 0 ? (
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>
-                  No projects assigned yet / कोई प्रोजेक्ट नहीं
+                  {lang === 'hi' ? 'कोई प्रोजेक्ट नहीं' : 'No projects assigned yet'}
                 </Text>
                 <Text style={styles.emptySub}>
-                  Ask your engineer to assign you, then sync. / अपने इंजीनियर से प्रोजेक्ट
-                  आवंटित करवाएं, फिर सिंक करें।
+                  {lang === 'hi'
+                    ? 'अपने इंजीनियर से प्रोजेक्ट आवंटित करवाएं, फिर सिंक करें।'
+                    : 'Ask your engineer to assign you, then sync.'}
                 </Text>
                 <TouchableOpacity
                   style={styles.emptySyncBtn}
@@ -324,7 +342,9 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
                   {syncing ? (
                     <ActivityIndicator size="small" color={colors.white} />
                   ) : (
-                    <Text style={styles.emptySyncBtnText}>🔄 Sync now / अभी सिंक करें</Text>
+                    <Text style={styles.emptySyncBtnText}>
+                      {lang === 'hi' ? 'अभी सिंक करें' : '🔄 Sync now'}
+                    </Text>
                   )}
                 </TouchableOpacity>
               </View>

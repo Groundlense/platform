@@ -10,13 +10,14 @@ import {
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
+import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
 import { media } from '../services/media';
 
 export default function SampleCollectionScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, sessionId, currentDepth, intervalNo, sptData, soilData } = route.params;
-  const [lang, setLang] = useState<'en' | 'hi'>('hi');
+  const { lang, setLang } = useLanguage();
 
   // Sample states
   const [sampleType, setSampleType] = useState<'DISTURBED' | 'UNDISTURBED'>('DISTURBED');
@@ -71,7 +72,7 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
   // Real camera capture — photo is queued locally and uploaded on sync
   // once this interval exists on the server.
   const handleCapturePhoto = async (photoType: 'Slate Board Photo' | 'Sealed Tube Photo') => {
-    const shot = await media.capturePhoto('SAMPLE');
+    const shot = await media.capturePhoto('SAMPLE', lang);
     if (!shot) return; // cancelled / unavailable / denied — honest Alert already shown
     await media.queuePhoto({
       boreholeId: borehole.id,
@@ -97,14 +98,21 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
   const handleNextDepth = async () => {
     if (isUds && !udsChecksOk) {
       Alert.alert(
-        'Confirmation required / पुष्टि जरूरी',
-        'Both ends waxed & sealed AND stored upright must be ticked before continuing. / दोनों चेकबॉक्स टिक करना जरूरी है।'
+        lang === 'hi' ? 'पुष्टि जरूरी' : 'Confirmation required',
+        lang === 'hi'
+          ? 'दोनों चेकबॉक्स टिक करना जरूरी है।'
+          : 'Both ends waxed & sealed AND stored upright must be ticked before continuing.'
       );
       return;
     }
 
     if (isUds && recoveryRatio !== null && !isNaN(penetrationCm) && !isNaN(recoveryCm) && recoveryCm > penetrationCm) {
-      Alert.alert('Invalid values', 'Recovery cannot exceed tube penetration. / रिकवरी पेनेट्रेशन से ज्यादा नहीं हो सकती।');
+      Alert.alert(
+        'Invalid values',
+        lang === 'hi'
+          ? 'रिकवरी पेनेट्रेशन से ज्यादा नहीं हो सकती।'
+          : 'Recovery cannot exceed tube penetration.'
+      );
       return;
     }
 
@@ -196,11 +204,11 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
       // Rock branch: soil description said Rock — exit the SPT loop into core mode
       if (isRockBranch) {
         Alert.alert(
-          'Rock encountered / चट्टान मिली',
+          lang === 'hi' ? 'चट्टान मिली' : 'Rock encountered',
           'Switching to rock coring mode (Screen 8).',
           [
             {
-              text: 'Start coring / कोरिंग शुरू करें',
+              text: lang === 'hi' ? 'कोरिंग शुरू करें' : 'Start coring',
               onPress: () =>
                 navigation.replace('RockCoring', {
                   borehole: updatedBorehole,
@@ -217,18 +225,21 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
 
       // Loop exit by the borehole's REAL planned depth (no magic numbers).
       // If plannedDepth is missing, keep looping — worker exits via Terminate.
-      const nextDepth = currentDepth + 1.5;
+      const sptIntervalM = await storage.getProjectSptInterval(projectId);
+      const nextDepth = Math.round((currentDepth + sptIntervalM) * 100) / 100;
       const nextInterval = intervalNo + 1;
       const plannedDepth = parseFloat(borehole.plannedDepth);
       const targetReached = !isNaN(plannedDepth) && plannedDepth > 0 && currentDepth >= plannedDepth;
 
       if (targetReached) {
         Alert.alert(
-          'Target Depth Reached / लक्ष्य गहराई पूर्ण',
-          `Planned depth ${plannedDepth.toFixed(1)}m reached. Proceed to closure. / नियोजित गहराई पूरी हुई।`,
+          lang === 'hi' ? 'लक्ष्य गहराई पूर्ण' : 'Target Depth Reached',
+          lang === 'hi'
+            ? 'नियोजित गहराई पूरी हुई।'
+            : `Planned depth ${plannedDepth.toFixed(1)}m reached. Proceed to closure.`,
           [
             {
-              text: 'Boring Closure / समाप्त करें',
+              text: lang === 'hi' ? 'समाप्त करें' : 'Boring Closure',
               onPress: () =>
                 navigation.navigate('BoringClosure', {
                   borehole: updatedBorehole,
@@ -289,7 +300,7 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
             onPress={() => setSampleType('DISTURBED')}
           >
             <Text style={[styles.tileText, !isUds && styles.tileTextActive]}>
-              Disturbed SPT / विक्षुब्ध नमूना
+              {lang === 'hi' ? 'विक्षुब्ध नमूना' : 'Disturbed SPT'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -297,28 +308,29 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
             onPress={() => setSampleType('UNDISTURBED')}
           >
             <Text style={[styles.tileText, isUds && styles.tileTextActiveUds]}>
-              UDS Thin wall / अविक्षुब्ध
+              {lang === 'hi' ? 'अविक्षुब्ध' : 'UDS Thin wall'}
             </Text>
           </TouchableOpacity>
         </View>
 
         {isUds ? (
           <View style={styles.udsCareBox}>
-            <Text style={styles.udsCareTitle}>Undisturbed sample — handle with care</Text>
-            <Text style={styles.udsCareSub}>अविक्षुब्ध नमूना — ध्यान से रखें</Text>
+            <Text style={styles.udsCareTitle}>
+              {lang === 'hi' ? 'अविक्षुब्ध नमूना — ध्यान से रखें' : 'Undisturbed sample — handle with care'}
+            </Text>
           </View>
         ) : null}
 
         {/* Dynamic Sample ID display card */}
         <View style={[styles.sampleIdBox, isUds && styles.sampleIdBoxUds]}>
           <Text style={[styles.sampleIdLabel, isUds && styles.sampleIdLabelUds]}>
-            {t('writeOnTube', lang)} / ट्यूब पर लिखें
+            {lang === 'hi' ? 'ट्यूब पर लिखें' : t('writeOnTube', lang)}
           </Text>
           <Text style={styles.sampleIdVal}>{sampleId}</Text>
           <Text style={[styles.sampleIdHint, isUds && styles.sampleIdLabelUds]}>
             {isUds
-              ? 'Write on tube AND core box / ट्यूब और बॉक्स दोनों पर लिखें'
-              : 'Use marker pen clearly / मार्कर से साफ लिखें'}
+              ? (lang === 'hi' ? 'ट्यूब और बॉक्स दोनों पर लिखें' : 'Write on tube AND core box')
+              : (lang === 'hi' ? 'मार्कर से साफ लिखें' : 'Use marker pen clearly')}
           </Text>
         </View>
 
@@ -326,7 +338,7 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
         {isUds ? (
           <View style={styles.udsInputRow}>
             <View style={styles.udsInputHalf}>
-              <Text style={styles.fieldLabel}>Tube penetration (cm) / पेनेट्रेशन</Text>
+              <Text style={styles.fieldLabel}>{lang === 'hi' ? 'पेनेट्रेशन' : 'Tube penetration (cm)'}</Text>
               <TextInput
                 style={styles.input}
                 value={tubePenetration}
@@ -337,7 +349,7 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
               />
             </View>
             <View style={styles.udsInputHalf}>
-              <Text style={styles.fieldLabel}>Recovery (cm) / रिकवरी</Text>
+              <Text style={styles.fieldLabel}>{lang === 'hi' ? 'रिकवरी' : 'Recovery (cm)'}</Text>
               <TextInput
                 style={styles.input}
                 value={tubeRecovery}
@@ -352,7 +364,7 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
 
         {isUds ? (
           <View style={styles.recoveryRow}>
-            <Text style={styles.recoveryLabel}>Recovery ratio / रिकवरी अनुपात</Text>
+            <Text style={styles.recoveryLabel}>{lang === 'hi' ? 'रिकवरी अनुपात' : 'Recovery ratio'}</Text>
             <Text style={styles.recoveryVal}>
               {recoveryRatio !== null ? `${recoveryRatio}%` : '— enter values above'}
             </Text>
@@ -361,7 +373,7 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
 
         {/* Slate board photo — real capture, uploads on sync */}
         <View style={styles.slateContainer}>
-          <Text style={styles.slateTitle}>📋 Slate board photo required / स्लेट बोर्ड फोटो जरूरी</Text>
+          <Text style={styles.slateTitle}>📋 {lang === 'hi' ? 'स्लेट बोर्ड फोटो जरूरी' : 'Slate board photo required'}</Text>
           <Text style={styles.slateSub}>
             Hold slate showing: BH ID · Depth · Date (like: {bhPrefix} · {currentDepth.toFixed(1)}m · {new Date().toLocaleDateString('en-GB')})
           </Text>
@@ -370,7 +382,9 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
             onPress={() => handleCapturePhoto('Slate Board Photo')}
           >
             <Text style={[styles.cameraText, slatePhotoCaptured && styles.cameraTextDone]}>
-              {slatePhotoCaptured ? '✓ Slate Board Photo Captured / फोटो ले लिया गया' : '📷 Capture Slate Photo / स्लेट फोटो लें'}
+              {slatePhotoCaptured
+                ? (lang === 'hi' ? 'फोटो ले लिया गया' : '✓ Slate Board Photo Captured')
+                : (lang === 'hi' ? 'स्लेट फोटो लें' : '📷 Capture Slate Photo')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -381,7 +395,9 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
           onPress={() => handleCapturePhoto('Sealed Tube Photo')}
         >
           <Text style={[styles.cameraTextWide, sealedPhotoCaptured && styles.cameraTextDone]}>
-            {sealedPhotoCaptured ? '✓ Sealed Tube Photo Captured / फोटो ले लिया गया' : `📷 ${t('sealedPhoto', lang)} / सील ट्यूब फोटो`}
+            {sealedPhotoCaptured
+              ? (lang === 'hi' ? 'फोटो ले लिया गया' : '✓ Sealed Tube Photo Captured')
+              : (lang === 'hi' ? `📷 सील ट्यूब फोटो` : `📷 ${t('sealedPhoto', lang)}`)}
           </Text>
         </TouchableOpacity>
 
@@ -391,7 +407,9 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
           onPress={() => setSealedConfirmed(!sealedConfirmed)}
         >
           <Text style={[styles.confirmText, sealedConfirmed && styles.confirmTextDone]}>
-            {sealedConfirmed ? '✓ Sample sealed confirmed / नमूना सील हो गया' : 'Tap to confirm sample sealed / सील की पुष्टि करें'}
+            {sealedConfirmed
+              ? (lang === 'hi' ? 'नमूना सील हो गया' : '✓ Sample sealed confirmed')
+              : (lang === 'hi' ? 'सील की पुष्टि करें' : 'Tap to confirm sample sealed')}
           </Text>
         </TouchableOpacity>
 
@@ -399,8 +417,9 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
         {isUds ? (
           <>
             <View style={styles.udsVerificationCard}>
-              <Text style={styles.udsVerificationTitle}>Wax seal — BOTH ends mandatory</Text>
-              <Text style={styles.udsVerificationSub}>दोनों तरफ मोम लगाना जरूरी है (IS 2132)</Text>
+              <Text style={styles.udsVerificationTitle}>
+                {lang === 'hi' ? 'दोनों तरफ मोम लगाना जरूरी है (IS 2132)' : 'Wax seal — BOTH ends mandatory'}
+              </Text>
             </View>
             <View style={styles.checkRow}>
               <TouchableOpacity
@@ -408,7 +427,7 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
                 onPress={() => setWaxConfirmed(!waxConfirmed)}
               >
                 <Text style={[styles.checkTileText, waxConfirmed && styles.checkTileTextDone]}>
-                  {waxConfirmed ? '✓ ' : '☐ '}Both ends waxed & sealed / मोम सील
+                  {waxConfirmed ? '✓ ' : '☐ '}{lang === 'hi' ? 'मोम सील' : 'Both ends waxed & sealed'}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -416,7 +435,7 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
                 onPress={() => setUprightConfirmed(!uprightConfirmed)}
               >
                 <Text style={[styles.checkTileText, uprightConfirmed && styles.checkTileTextDone]}>
-                  {uprightConfirmed ? '✓ ' : '☐ '}Stored upright in box / सीधा रखा
+                  {uprightConfirmed ? '✓ ' : '☐ '}{lang === 'hi' ? 'सीधा रखा' : 'Stored upright in box'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -436,12 +455,14 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
           disabled={nextDisabled || saving}
         >
           <Text style={styles.nextBtnText}>
-            {isRockBranch ? 'Save → Rock coring / रॉक कोरिंग →' : 'Next depth / अगली गहराई →'}
+            {isRockBranch
+              ? (lang === 'hi' ? 'रॉक कोरिंग →' : 'Save → Rock coring')
+              : (lang === 'hi' ? 'अगली गहराई →' : 'Next depth')}
           </Text>
         </TouchableOpacity>
         {nextDisabled ? (
           <Text style={styles.blockHint}>
-            Tick both UDS confirmations to continue / दोनों पुष्टि टिक करें
+            {lang === 'hi' ? 'दोनों पुष्टि टिक करें' : 'Tick both UDS confirmations to continue'}
           </Text>
         ) : null}
       </ScrollView>

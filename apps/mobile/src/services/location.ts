@@ -44,17 +44,19 @@ function getGeolocation(): any | null {
 
 let permissionDenied = false;
 
-async function ensureLocationPermission(): Promise<boolean> {
+async function ensureLocationPermission(lang: 'en' | 'hi' = 'hi'): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
   try {
     const granted = await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       {
-        title: 'Location needed / लोकेशन चाहिए',
+        title: lang === 'hi' ? 'लोकेशन चाहिए' : 'Location needed',
         message:
-          'GroundLense uses GPS to guide you to the borehole and to stamp field photos with the true location. / GPS से बोरहोल तक पहुँचने और फोटो पर सही लोकेशन दर्ज करने के लिए।',
-        buttonPositive: 'Allow / अनुमति दें',
-        buttonNegative: 'Deny / मना करें',
+          lang === 'hi'
+            ? 'GPS से बोरहोल तक पहुँचने और फोटो पर सही लोकेशन दर्ज करने के लिए।'
+            : 'GroundLense uses GPS to guide you to the borehole and to stamp field photos with the true location.',
+        buttonPositive: lang === 'hi' ? 'अनुमति दें' : 'Allow',
+        buttonNegative: lang === 'hi' ? 'मना करें' : 'Deny',
       },
     );
     const ok = granted === PermissionsAndroid.RESULTS.GRANTED;
@@ -82,25 +84,31 @@ export const location = {
 
   /**
    * One-shot position. `silent: true` (used for photo stamping) never shows
-   * an Alert — a photo without GPS is still a valid photo.
+   * an Alert — a photo without GPS is still a valid photo. `lang` picks
+   * which language the Alert text is shown in (defaults to 'hi').
    */
-  async getCurrentPosition(opts?: { silent?: boolean }): Promise<GpsFix | null> {
+  async getCurrentPosition(opts?: { silent?: boolean; lang?: 'en' | 'hi' }): Promise<GpsFix | null> {
+    const lang = opts?.lang ?? 'hi';
     const Geolocation = getGeolocation();
     if (!Geolocation) {
       if (!opts?.silent) {
         Alert.alert(
-          'GPS needs an app rebuild / GPS के लिए ऐप री-इंस्टॉल करें',
-          'This app build does not include the GPS module yet. Reinstall/update the app to enable location. / ऐप को अपडेट करें।',
+          lang === 'hi' ? 'GPS के लिए ऐप री-इंस्टॉल करें' : 'GPS needs an app rebuild',
+          lang === 'hi'
+            ? 'ऐप को अपडेट करें।'
+            : 'This app build does not include the GPS module yet. Reinstall/update the app to enable location.',
         );
       }
       return null;
     }
-    const permitted = await ensureLocationPermission();
+    const permitted = await ensureLocationPermission(lang);
     if (!permitted) {
       if (!opts?.silent) {
         Alert.alert(
-          'Location unavailable / लोकेशन उपलब्ध नहीं',
-          'Allow location permission in Settings to use GPS guidance. / GPS मार्गदर्शन के लिए सेटिंग्स में लोकेशन अनुमति दें।',
+          lang === 'hi' ? 'लोकेशन उपलब्ध नहीं' : 'Location unavailable',
+          lang === 'hi'
+            ? 'GPS मार्गदर्शन के लिए सेटिंग्स में लोकेशन अनुमति दें।'
+            : 'Allow location permission in Settings to use GPS guidance.',
         );
       }
       return null;
@@ -116,8 +124,10 @@ export const location = {
             (err: any) => {
               if (!opts?.silent) {
                 Alert.alert(
-                  'GPS fix failed / GPS नहीं मिला',
-                  `Move to open sky and try again. / खुले आसमान में जाकर दोबारा कोशिश करें। (${err?.message ?? 'no fix'})`,
+                  lang === 'hi' ? 'GPS नहीं मिला' : 'GPS fix failed',
+                  lang === 'hi'
+                    ? `खुले आसमान में जाकर दोबारा कोशिश करें। (${err?.message ?? 'no fix'})`
+                    : `Move to open sky and try again. (${err?.message ?? 'no fix'})`,
                 );
               }
               resolve(null);
@@ -134,10 +144,10 @@ export const location = {
    * Live tracking for the reach-the-borehole screen. Returns a watch id;
    * ALWAYS clear it with clearWatch on unmount.
    */
-  async watchPosition(onFix: (fix: GpsFix) => void): Promise<number | null> {
+  async watchPosition(onFix: (fix: GpsFix) => void, lang: 'en' | 'hi' = 'hi'): Promise<number | null> {
     const Geolocation = getGeolocation();
     if (!Geolocation) return null;
-    const permitted = await ensureLocationPermission();
+    const permitted = await ensureLocationPermission(lang);
     if (!permitted) return null;
     return Geolocation.watchPosition(
       (pos: any) => onFix(toFix(pos)),

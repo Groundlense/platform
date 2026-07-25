@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
+import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
 import { api } from '../services/api';
 
@@ -34,12 +35,14 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
   // Legacy fallback: a query passed via navigation params (e.g. from a
   // notification deep link) is rendered directly without the inbox.
   const { query, referencedInterval } = route.params ?? {};
-  const [lang, setLang] = useState<'en' | 'hi'>('hi');
+  const { lang, setLang } = useLanguage();
 
   const [me, setMe] = useState<any>(null);
   const [threads, setThreads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  // True network failure vs. a server that answered with an error.
+  const [loadWasNetworkError, setLoadWasNetworkError] = useState(true);
   const [selectedThread, setSelectedThread] = useState<any>(null);
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
@@ -65,9 +68,10 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
         );
       }
       setThreads(Array.isArray(data) ? data : []);
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Failed to load engineer queries:', err);
       setLoadFailed(true);
+      setLoadWasNetworkError(!err?.response);
     } finally {
       setLoading(false);
     }
@@ -76,15 +80,17 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
   const handleVoiceReply = () => {
     // No speech-to-text module is integrated — never insert fabricated transcripts.
     Alert.alert(
-      'Voice Coming Soon / वॉयस जल्द',
-      'Voice transcription requires the device app build with microphone permissions. Please type your reply for now. / अभी अपना जवाब टाइप करें।'
+      lang === 'hi' ? 'वॉयस जल्द' : 'Voice Coming Soon',
+      lang === 'hi'
+        ? 'अभी अपना जवाब टाइप करें।'
+        : 'Voice transcription requires the device app build with microphone permissions. Please type your reply for now.'
     );
   };
 
   const sendReply = async (threadId: string) => {
     const text = replyText.trim();
     if (!text) {
-      Alert.alert(t('error', lang), 'Type a reply first / पहले जवाब टाइप करें');
+      Alert.alert(t('error', lang), lang === 'hi' ? 'पहले जवाब टाइप करें' : 'Type a reply first');
       return;
     }
     setSending(true);
@@ -104,12 +110,19 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
             : th
         )
       );
-      Alert.alert('Sent ✓ / भेजा गया', 'Your reply was sent to the engineer. / आपका जवाब इंजीनियर को भेज दिया गया।');
+      Alert.alert(
+        lang === 'hi' ? 'भेजा गया' : 'Sent ✓',
+        lang === 'hi'
+          ? 'आपका जवाब इंजीनियर को भेज दिया गया।'
+          : 'Your reply was sent to the engineer.'
+      );
     } catch (err) {
       console.warn('Reply failed:', err);
       Alert.alert(
         t('error', lang),
-        'Reply could not be sent. Check your internet connection and try again. / जवाब नहीं भेजा जा सका — इंटरनेट जांचें।'
+        lang === 'hi'
+          ? 'जवाब नहीं भेजा जा सका — इंटरनेट जांचें।'
+          : 'Reply could not be sent. Check your internet connection and try again.'
       );
     } finally {
       setSending(false);
@@ -123,8 +136,10 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
       // This query object carries no thread reference — never pretend a
       // reply was delivered.
       Alert.alert(
-        'Cannot reply here / यहाँ जवाब नहीं',
-        'Open this query from the Engineer queries inbox to reply. / जवाब देने के लिए इंजीनियर के सवाल सूची से खोलें।'
+        lang === 'hi' ? 'यहाँ जवाब नहीं' : 'Cannot reply here',
+        lang === 'hi'
+          ? 'जवाब देने के लिए इंजीनियर के सवाल सूची से खोलें।'
+          : 'Open this query from the Engineer queries inbox to reply.'
       );
     }
   };
@@ -145,7 +160,7 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
       {/* Voice reply — speech module not yet integrated */}
       <TouchableOpacity style={styles.voiceBtn} onPress={handleVoiceReply}>
         <Text style={styles.voiceBtnText}>
-          🎙 {t('voiceReplyBtn', lang)} — coming soon / जल्द
+          🎙 {t('voiceReplyBtn', lang)} {lang === 'hi' ? 'जल्द' : '— coming soon'}
         </Text>
       </TouchableOpacity>
 
@@ -169,7 +184,7 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
     return (
       <>
         <TouchableOpacity style={styles.backLink} onPress={() => setSelectedThread(null)}>
-          <Text style={styles.backLinkText}>← All queries / सभी सवाल</Text>
+          <Text style={styles.backLinkText}>{lang === 'hi' ? 'सभी सवाल' : '← All queries'}</Text>
         </TouchableOpacity>
 
         {/* Thread header */}
@@ -178,7 +193,7 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
             <Text style={styles.threadEngineer}>{personName(thread.raisedBy)}</Text>
             <View style={[styles.statusChip, isClosed ? styles.chipClosed : styles.chipOpen]}>
               <Text style={isClosed ? styles.chipClosedText : styles.chipOpenText}>
-                {isClosed ? 'Closed / बंद' : 'Open / खुला'}
+                {lang === 'hi' ? (isClosed ? 'बंद' : 'खुला') : (isClosed ? 'Closed' : 'Open')}
               </Text>
             </View>
           </View>
@@ -198,7 +213,7 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
           return (
             <View key={msg.id} style={mine ? styles.msgCardMine : styles.queryCard}>
               <Text style={mine ? styles.msgHeaderMine : styles.queryHeader}>
-                {mine ? 'You / आप' : personName(msg.sender)} · {formatDate(msg.createdAt)}
+                {mine ? (lang === 'hi' ? 'आप' : 'You') : personName(msg.sender)} · {formatDate(msg.createdAt)}
               </Text>
               <Text style={mine ? styles.msgTextMine : styles.queryText}>{msg.message}</Text>
             </View>
@@ -208,7 +223,7 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
         {isClosed ? (
           <View style={styles.closedNotice}>
             <Text style={styles.closedNoticeText}>
-              This query has been closed by the engineer. / यह सवाल बंद कर दिया गया है।
+              {lang === 'hi' ? 'यह सवाल बंद कर दिया गया है।' : 'This query has been closed by the engineer.'}
             </Text>
           </View>
         ) : (
@@ -223,7 +238,7 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
       return (
         <View style={styles.emptyCard}>
           <ActivityIndicator size="small" color={colors.amber} />
-          <Text style={styles.emptySub}>Loading queries… / सवाल लोड हो रहे हैं…</Text>
+          <Text style={styles.emptySub}>{lang === 'hi' ? 'सवाल लोड हो रहे हैं…' : 'Loading queries…'}</Text>
         </View>
       );
     }
@@ -231,13 +246,15 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
       return (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>
-            Connect to the internet to load queries / सवाल देखने के लिए इंटरनेट से जुड़ें
+            {loadWasNetworkError
+              ? (lang === 'hi' ? 'सवाल देखने के लिए इंटरनेट से जुड़ें' : 'Connect to the internet to load queries')
+              : (lang === 'hi' ? 'सर्वर से कनेक्ट नहीं हो सका' : "Couldn't reach the server")}
           </Text>
           <Text style={styles.emptySub}>
-            Engineer queries are not stored offline yet. / इंजीनियर के सवाल अभी ऑफलाइन सेव नहीं होते।
+            {lang === 'hi' ? 'इंजीनियर के सवाल अभी ऑफलाइन सेव नहीं होते।' : 'Engineer queries are not stored offline yet.'}
           </Text>
           <TouchableOpacity style={styles.sendBtn} onPress={loadThreads}>
-            <Text style={styles.sendBtnText}>🔄 Retry / फिर कोशिश करें</Text>
+            <Text style={styles.sendBtnText}>{lang === 'hi' ? 'फिर कोशिश करें' : '🔄 Retry'}</Text>
           </TouchableOpacity>
         </View>
       );
@@ -245,12 +262,12 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
     if (threads.length === 0) {
       return (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No queries from engineers yet / कोई सवाल नहीं</Text>
+          <Text style={styles.emptyTitle}>{lang === 'hi' ? 'कोई सवाल नहीं' : 'No queries from engineers yet'}</Text>
           <Text style={styles.emptySub}>
             When an engineer raises a question about your boring data, it will appear here.
           </Text>
           <TouchableOpacity style={styles.sendBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.sendBtnText}>← Back / वापस</Text>
+            <Text style={styles.sendBtnText}>{lang === 'hi' ? 'वापस' : '← Back'}</Text>
           </TouchableOpacity>
         </View>
       );
@@ -270,7 +287,7 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
                 <Text style={styles.threadEngineer}>{personName(thread.raisedBy)}</Text>
                 <View style={[styles.statusChip, isClosed ? styles.chipClosed : styles.chipOpen]}>
                   <Text style={isClosed ? styles.chipClosedText : styles.chipOpenText}>
-                    {isClosed ? 'Closed / बंद' : 'Open / खुला'}
+                    {lang === 'hi' ? (isClosed ? 'बंद' : 'खुला') : (isClosed ? 'Closed' : 'Open')}
                   </Text>
                 </View>
               </View>
@@ -337,7 +354,7 @@ export default function EngineerQueryScreen({ route, navigation }: { route: any;
                     <Text style={styles.refVal}>{referencedInterval.blow3 ?? '—'}</Text>
                   </View>
                   <View style={[styles.refRow, styles.lastRow]}>
-                    <Text style={styles.refLabel}>Raw N / संशोधित</Text>
+                    <Text style={styles.refLabel}>{lang === 'hi' ? 'संशोधित' : 'Raw N'}</Text>
                     <Text style={styles.refVal}>{referencedInterval.nValue ?? '—'}</Text>
                   </View>
                 </View>

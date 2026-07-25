@@ -1,6 +1,7 @@
 "use server";
 
 import { getToken } from "@/lib/session";
+import { validateSptIntervalM } from "@/lib/utils";
 import { createProject, updateProject, createBorehole, createPayment, assignBorehole, updateBoreholeLocation, globalSearchProjects, requestJoinProject, getPendingProjectJoinRequests, approveProjectJoinRequest, rejectProjectJoinRequest } from "@/lib/api/endpoints";
 import { revalidatePath } from "next/cache";
 
@@ -18,9 +19,17 @@ export async function createProjectAction(formData: FormData) {
   const endDate = formData.get("endDate") as string | null;
   const targetCompletionDate = formData.get("targetCompletionDate") as string | null;
   const tenderId = (formData.get("tenderId") as string | null)?.trim();
+  const sptIntervalRaw = (formData.get("sptIntervalM") as string | null)?.trim();
 
   if (!name) {
     return { error: "Project name is required." };
+  }
+
+  let sptIntervalM: number | undefined;
+  if (sptIntervalRaw) {
+    const sptError = validateSptIntervalM(sptIntervalRaw);
+    if (sptError) return { error: sptError };
+    sptIntervalM = parseFloat(sptIntervalRaw);
   }
 
   const projectCode =
@@ -41,6 +50,7 @@ export async function createProjectAction(formData: FormData) {
         endDate: endDate || undefined,
         targetCompletionDate: targetCompletionDate || undefined,
         tenderId: tenderId || undefined,
+        sptIntervalM,
       },
       token
     );
@@ -54,7 +64,7 @@ export async function createProjectAction(formData: FormData) {
 
 export async function updateProjectAction(
   projectId: string,
-  data: { name?: string; state?: string; startDate?: string; endDate?: string }
+  data: { name?: string; state?: string; startDate?: string; endDate?: string; sptIntervalM?: number }
 ) {
   const token = await getToken();
   if (!token) return { error: "Not authenticated" };

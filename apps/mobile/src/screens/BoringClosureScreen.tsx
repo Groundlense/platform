@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { colors } from '../utils/theme';
 import { t } from '../utils/translations';
+import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
 import { media } from '../services/media';
@@ -38,7 +39,7 @@ function formatDuration(startIso?: string | null, endIso?: string | null): strin
 
 export default function BoringClosureScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, readOnly } = route.params;
-  const [lang, setLang] = useState<'en' | 'hi'>('hi');
+  const { lang, setLang } = useLanguage();
 
   // Input states
   const [signed, setSigned] = useState(readOnly ? true : false);
@@ -64,6 +65,8 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
   const [maxIntervalNo, setMaxIntervalNo] = useState<number>(1);
 
   const [photoCaptured, setPhotoCaptured] = useState(false);
+  // Closure video: rig removal + final depth verification (mandatory)
+  const [videoCaptured, setVideoCaptured] = useState(false);
   // Real queued-photo count for this borehole (uploads happen on sync)
   const [pendingPhotos, setPendingPhotos] = useState(0);
 
@@ -142,7 +145,7 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
     if (readOnly || !summary) return;
     setSigned(true);
     Alert.alert(
-      'Signed / हस्ताक्षरित',
+      lang === 'hi' ? 'हस्ताक्षरित' : 'Signed',
       `Recorded as ${summary.workerName} at ${formatTime(new Date().toISOString())}. (Drawn signature pad coming soon.)`
     );
   };
@@ -151,7 +154,7 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
   // completed interval and uploads on the next successful sync.
   const handleFinalPhoto = async () => {
     if (readOnly) return;
-    const shot = await media.capturePhoto('CLOSURE');
+    const shot = await media.capturePhoto('CLOSURE', lang);
     if (!shot) return; // cancelled / unavailable / denied — honest Alert already shown
     await media.queuePhoto({
       boreholeId: borehole.id,
@@ -169,9 +172,42 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
     setPendingPhotos(await media.pendingCountForBorehole(borehole.id));
   };
 
+  // Mandatory closure video: filming the final borehole being closed and
+  // the rig being taken out is the depth-verification evidence.
+  const handleClosureVideo = async () => {
+    if (readOnly) return;
+    const clip = await media.captureVideo('CLOSURE_VIDEO', lang);
+    if (!clip) return; // cancelled / unavailable / denied — honest Alert already shown
+    await media.queuePhoto({
+      boreholeId: borehole.id,
+      intervalNo: maxIntervalNo,
+      purpose: 'CLOSURE_VIDEO',
+      uri: clip.uri,
+      fileName: clip.fileName,
+      mimeType: clip.type,
+      gpsLat: clip.gpsLat,
+      gpsLng: clip.gpsLng,
+      accuracyM: clip.accuracyM,
+      takenAt: new Date().toISOString(),
+    });
+    setVideoCaptured(true);
+    setPendingPhotos(await media.pendingCountForBorehole(borehole.id));
+  };
+
   const handleSubmit = async () => {
     if (gwtEncountered === null) {
       Alert.alert('GWT Confirmation Required', 'Confirm the water table status before submitting (IS 1892).');
+      return;
+    }
+    // Video is mandatory evidence — only waived when the device genuinely
+    // has no camera (never block a worker on impossible hardware).
+    if (!videoCaptured && !media.isCameraKnownUnavailable()) {
+      Alert.alert(
+        lang === 'hi' ? 'वीडियो आवश्यक' : 'Closure video required',
+        lang === 'hi'
+          ? 'अंतिम बोरहोल बंद करते और रिग निकालते समय गहराई सत्यापन का वीडियो लें।'
+          : 'Record the video of the final borehole closing and the rig being taken out for depth verification before submitting.'
+      );
       return;
     }
     if (!signed) {
@@ -209,11 +245,11 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
       syncManager.syncWithServer().catch(() => {});
 
       Alert.alert(
-        'Boring Submitted & Locked / सबमिट और लॉक हो गया',
-        'Data locked and queued for sync. / डेटा लॉक हो गया और सिंक के लिए कतार में है।',
+        lang === 'hi' ? 'सबमिट और लॉक हो गया' : 'Boring Submitted & Locked',
+        lang === 'hi' ? 'डेटा लॉक हो गया और सिंक के लिए कतार में है।' : 'Data locked and queued for sync.',
         [
           {
-            text: 'Return to list / बोरिंग सूची',
+            text: lang === 'hi' ? 'बोरिंग सूची' : 'Return to list',
             onPress: () => navigation.navigate('BoringList', { projectId }),
           },
         ]
@@ -259,37 +295,37 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
         {/* Logging Statistics — aggregated from the worker's actual entries */}
         <View style={styles.statsBlock}>
           <View style={styles.sumRow}>
-            <Text style={styles.sumLabel}>Total depth / कुल गहराई</Text>
+            <Text style={styles.sumLabel}>{lang === 'hi' ? 'कुल गहराई' : 'Total depth'}</Text>
             <Text style={styles.sumVal}>
               {summary?.finalDepth != null ? `${summary.finalDepth.toFixed(1)} m` : '—'}
             </Text>
           </View>
           <View style={styles.sumRow}>
-            <Text style={styles.sumLabel}>Duration / कुल समय</Text>
+            <Text style={styles.sumLabel}>{lang === 'hi' ? 'कुल समय' : 'Duration'}</Text>
             <Text style={styles.sumVal}>{formatDuration(summary?.startIso, summary?.endIso)}</Text>
           </View>
           <View style={styles.sumRow}>
-            <Text style={styles.sumLabel}>SPT intervals / एसपीटी अंतराल</Text>
+            <Text style={styles.sumLabel}>{lang === 'hi' ? 'एसपीटी अंतराल' : 'SPT intervals'}</Text>
             <Text style={styles.sumVal}>
               {summary ? `${summary.intervalCount} entries` : '—'}
             </Text>
           </View>
           <View style={styles.sumRow}>
-            <Text style={styles.sumLabel}>Samples / नमूने</Text>
+            <Text style={styles.sumLabel}>{lang === 'hi' ? 'नमूने' : 'Samples'}</Text>
             <Text style={styles.sumVal}>
               {summary ? `${summary.sptSamples} SPT · ${summary.udsSamples} UDS` : '—'}
             </Text>
           </View>
           <View style={styles.sumRow}>
-            <Text style={styles.sumLabel}>Photos uploaded / फोटो</Text>
+            <Text style={styles.sumLabel}>{lang === 'hi' ? 'फोटो' : 'Photos uploaded'}</Text>
             <Text style={styles.sumVal}>
               {pendingPhotos > 0
-                ? `${pendingPhotos} queued — uploads on sync / सिंक पर अपलोड`
-                : 'None / कोई नहीं'}
+                ? (lang === 'hi' ? 'सिंक पर अपलोड' : `${pendingPhotos} queued — uploads on sync`)
+                : (lang === 'hi' ? 'कोई नहीं' : 'None')}
             </Text>
           </View>
           <View style={styles.sumRow}>
-            <Text style={styles.sumLabel}>Water table / भूजल स्तर</Text>
+            <Text style={styles.sumLabel}>{lang === 'hi' ? 'भूजल स्तर' : 'Water table'}</Text>
             <Text style={styles.sumVal}>
               {summary?.waterTable
                 ? `${summary.waterTable.depth.toFixed(2)}m${summary.waterTable.readingType === 'STABILIZED_LEVEL' ? ' (24hr final)' : ' (during drilling)'}`
@@ -298,13 +334,13 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
           </View>
           {summary?.rockAtDepth != null && (
             <View style={styles.sumRow}>
-              <Text style={styles.sumLabel}>Rock at depth / रॉक गहराई</Text>
+              <Text style={styles.sumLabel}>{lang === 'hi' ? 'रॉक गहराई' : 'Rock at depth'}</Text>
               <Text style={styles.sumVal}>{summary.rockAtDepth.toFixed(1)} m</Text>
             </View>
           )}
           {summary?.rqdText != null && (
             <View style={[styles.sumRow, styles.lastSumRow]}>
-              <Text style={styles.sumLabel}>RQD / रॉक गुणवत्ता</Text>
+              <Text style={styles.sumLabel}>{lang === 'hi' ? 'रॉक गुणवत्ता' : 'RQD'}</Text>
               <Text style={styles.sumVal}>{summary.rqdText}</Text>
             </View>
           )}
@@ -313,7 +349,7 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
         {/* Water Table Confirmation */}
         <View style={styles.gwtConfirmBlock}>
           <Text style={styles.gwtConfirmTitle}>
-            GWT confirmation / भूजल स्तर पुष्टि (IS 1892)
+            {lang === 'hi' ? 'भूजल स्तर पुष्टि (IS 1892)' : 'GWT confirmation'}
           </Text>
           <View style={styles.gwtBtnRow}>
             <TouchableOpacity
@@ -348,13 +384,28 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
         >
           <Text style={[styles.cameraBtnText, photoCaptured && styles.cameraBtnTextDone]}>
             {photoCaptured
-              ? '✓ Photo captured — uploads on sync / फोटो ली गई'
-              : '📷 Final Borehole Photo / बोरहोल फोटो'}
+              ? (lang === 'hi' ? 'फोटो ली गई' : '✓ Photo captured — uploads on sync')
+              : (lang === 'hi' ? 'बोरहोल फोटो' : '📷 Final Borehole Photo')}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Mandatory closure video — rig removal + final depth verification */}
+        <TouchableOpacity
+          style={[styles.cameraBtn, videoCaptured && styles.cameraBtnDone]}
+          onPress={handleClosureVideo}
+          disabled={readOnly}
+        >
+          <Text style={[styles.cameraBtnText, videoCaptured && styles.cameraBtnTextDone]}>
+            {videoCaptured
+              ? (lang === 'hi' ? '✓ वीडियो रिकॉर्ड हुआ' : '✓ Video recorded — uploads on sync')
+              : (lang === 'hi'
+                  ? '🎥 समापन वीडियो (अनिवार्य) — रिग निकालना व गहराई सत्यापन'
+                  : '🎥 Closure Video (required) — rig-out & depth verification')}
           </Text>
         </TouchableOpacity>
 
         {/* Photos of this borehole — queued + synced, tap for geo-tag details */}
-        <PhotoGallery borehole={borehole} />
+        <PhotoGallery borehole={borehole} lang={lang} />
 
         {/* Signature Box — real logged-in worker, typed-name confirmation */}
         <TouchableOpacity
@@ -365,7 +416,9 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
             <Text style={styles.signatureText}>✍️ {summary.workerName}</Text>
           ) : (
             <Text style={styles.signaturePlaceholder}>
-              Tap to sign as {summary?.workerName ?? '…'} / हस्ताक्षर करने के लिए टैप करें
+              {lang === 'hi'
+                ? 'हस्ताक्षर करने के लिए टैप करें'
+                : `Tap to sign as ${summary?.workerName ?? '…'}`}
             </Text>
           )}
         </TouchableOpacity>

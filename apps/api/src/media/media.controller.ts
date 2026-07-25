@@ -15,7 +15,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 
 import { diskStorage } from 'multer';
 
-import { extname } from 'path';
+import { extname, join } from 'path';
+
+import { unlink } from 'fs/promises';
 
 import { randomBytes } from 'crypto';
 
@@ -34,7 +36,17 @@ const ALLOWED_MIME_TYPES = [
   'image/png',
   'image/webp',
   'application/pdf',
+  // Closure/rig-removal verification videos from the mobile app.
+  'video/mp4',
+  'video/quicktime',
+  'video/3gpp',
 ];
+
+// Multer's fileSize limit is a single number applied while the stream is
+// still being written, so it must be the video ceiling; the tighter
+// image/PDF ceiling is enforced after the write (see upload()).
+const VIDEO_MAX_BYTES = 100 * 1024 * 1024;
+const IMAGE_MAX_BYTES = 15 * 1024 * 1024;
 
 @ApiTags('Media')
 @ApiBearerAuth()
@@ -60,7 +72,7 @@ export class MediaController {
         },
       }),
       limits: {
-        fileSize: 15 * 1024 * 1024,
+        fileSize: VIDEO_MAX_BYTES,
       },
       fileFilter: (req, file, cb) => {
         if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
@@ -73,7 +85,7 @@ export class MediaController {
       },
     }),
   )
-  upload(
+  async upload(
     @Param('intervalId')
     intervalId: string,
 
@@ -94,6 +106,22 @@ export class MediaController {
       takenAt?: string;
     },
   ) {
+    // Keep the original 15 MB ceiling for images/PDFs; only videos get the
+    // 100 MB multer limit. The oversized file is already on disk at this
+    // point, so remove it before rejecting.
+    if (
+      file &&
+      !file.mimetype.startsWith('video/') &&
+      file.size > IMAGE_MAX_BYTES
+    ) {
+      await unlink(join(process.cwd(), 'uploads', file.filename)).catch(
+        () => undefined,
+      );
+      throw new BadRequestException(
+        'Images and documents must be 15 MB or smaller',
+      );
+    }
+
     return this.mediaService.create(intervalId, file, user, body);
   }
 

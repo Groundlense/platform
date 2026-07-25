@@ -12,6 +12,7 @@ import { colors } from '../utils/theme';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
 import { media } from '../services/media';
+import { useLanguage } from '../utils/LanguageContext';
 
 const WEATHERING_GRADES = [
   { key: 'FRESH', en: 'Fresh', hi: 'ताज़ा' },
@@ -23,7 +24,7 @@ const WEATHERING_GRADES = [
 export default function RockCoringScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, sessionId, currentDepth, intervalNo } = route.params ?? {};
 
-  const [lang, setLang] = useState<'en' | 'hi'>('hi');
+  const { lang, setLang } = useLanguage();
 
   // Inputs always start empty — values come from the actual core run.
   const [runLength, setRunLength] = useState(''); // cm
@@ -36,7 +37,7 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
   // Real camera capture — photo is queued locally and uploaded on sync
   // once this interval exists on the server.
   const handleTakePhoto = async () => {
-    const shot = await media.capturePhoto('CORE_BOX');
+    const shot = await media.capturePhoto('CORE_BOX', lang);
     if (!shot) return; // cancelled / unavailable / denied — honest Alert already shown
     await media.queuePhoto({
       boreholeId: borehole.id,
@@ -62,7 +63,9 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
         </View>
         <View style={{ padding: 24 }}>
           <Text style={{ fontSize: 18, color: colors.redMid, fontWeight: '700' }}>
-            Boring data missing — reopen from the boring list. / डेटा नहीं मिला — सूची से दोबारा खोलें।
+            {lang === 'hi'
+              ? 'डेटा नहीं मिला — सूची से दोबारा खोलें।'
+              : 'Boring data missing — reopen from the boring list.'}
           </Text>
           <TouchableOpacity style={[styles.saveBtn, { marginTop: 16 }]} onPress={() => navigation.goBack()}>
             <Text style={styles.saveBtnText}>← Back</Text>
@@ -80,21 +83,27 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
   const tcrPercentage = run > 0 ? Math.round((recovery / run) * 100) : 0;
   const rqdPercentage = run > 0 ? Math.round((solidPieces / run) * 100) : 0;
 
-  const getRqdRating = (rqd: number) => {
-    if (rqd < 25) return 'Very Poor (बहुत खराब)';
-    if (rqd < 50) return 'Poor (खराब)';
-    if (rqd < 75) return 'Fair (मध्यम)';
-    if (rqd < 90) return 'Good (अच्छा)';
-    return 'Excellent (उत्कृष्ट)';
+  const getRqdRating = (rqd: number, l: 'en' | 'hi') => {
+    if (rqd < 25) return l === 'hi' ? 'बहुत खराब' : 'Very Poor';
+    if (rqd < 50) return l === 'hi' ? 'खराब' : 'Poor';
+    if (rqd < 75) return l === 'hi' ? 'मध्यम' : 'Fair';
+    if (rqd < 90) return l === 'hi' ? 'अच्छा' : 'Good';
+    return l === 'hi' ? 'उत्कृष्ट' : 'Excellent';
   };
 
   const handleSave = async () => {
     if (run <= 0) {
-      Alert.alert('Run length required', 'Enter the core run length in cm. / रन लंबाई दर्ज करें');
+      Alert.alert(
+        'Run length required',
+        lang === 'hi' ? 'रन लंबाई दर्ज करें' : 'Enter the core run length in cm.'
+      );
       return;
     }
     if (!weathering) {
-      Alert.alert('Weathering grade required', 'Select the rock weathering grade (IS 4078). / अपक्षय ग्रेड चुनें');
+      Alert.alert(
+        'Weathering grade required',
+        lang === 'hi' ? 'अपक्षय ग्रेड चुनें' : 'Select the rock weathering grade (IS 4078).'
+      );
       return;
     }
     if (recovery > run || solidPieces > recovery) {
@@ -106,11 +115,13 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
     // exists, ask before saving the run without a core-box photo.
     if (!photoCaptured && !media.isCameraKnownUnavailable()) {
       Alert.alert(
-        'No photo attached / फोटो नहीं ली गई',
-        'Take the core box photo before saving this run? / रन सुरक्षित करने से पहले कोर बॉक्स फोटो लें?',
+        lang === 'hi' ? 'फोटो नहीं ली गई' : 'No photo attached',
+        lang === 'hi'
+          ? 'रन सुरक्षित करने से पहले कोर बॉक्स फोटो लें?'
+          : 'Take the core box photo before saving this run?',
         [
-          { text: '📷 Take photo / फोटो लें', onPress: () => { handleTakePhoto(); } },
-          { text: 'Continue without photo / बिना फोटो जारी रखें', onPress: () => { performSave(); } },
+          { text: lang === 'hi' ? 'फोटो लें' : '📷 Take photo', onPress: () => { handleTakePhoto(); } },
+          { text: lang === 'hi' ? 'बिना फोटो जारी रखें' : 'Continue without photo', onPress: () => { performSave(); } },
         ]
       );
       return;
@@ -131,7 +142,7 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
         intervalNo,
         fromDepth: currentDepth,
         toDepth: nextDepth,
-        soilDescription: `Rock coring run — ${grade?.en ?? weathering}. TCR: ${tcrPercentage}%, RQD: ${rqdPercentage}% (${getRqdRating(rqdPercentage)})`,
+        soilDescription: `Rock coring run — ${grade?.en ?? weathering}. TCR: ${tcrPercentage}%, RQD: ${rqdPercentage}% (${getRqdRating(rqdPercentage, lang)})`,
         isCompleted: true,
         remarks: `TCR=${tcr}cm, RQD=${rqdPieces}cm. Run=${runLength}cm. Weathering=${grade?.en ?? weathering}.`,
         observedAt: new Date().toISOString(),
@@ -164,15 +175,47 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
       await storage.saveBoreholes(projectId, updated);
       const updatedBorehole = updated.find((bh: any) => bh.id === borehole.id) ?? borehole;
 
-      // Per the prototype, coring loops run-by-run until the worker ends it.
+      // Loop exit by the borehole's REAL planned depth, mirroring the SPT
+      // loop in SampleCollection. Without this the coring loop never ends
+      // on its own — "Next run" kept returning here even past target depth.
+      const plannedDepth = parseFloat(borehole.plannedDepth);
+      const targetReached = !isNaN(plannedDepth) && plannedDepth > 0 && nextDepth >= plannedDepth;
+
+      if (targetReached) {
+        Alert.alert(
+          lang === 'hi' ? 'लक्ष्य गहराई पूर्ण' : 'Target Depth Reached',
+          lang === 'hi'
+            ? `नियोजित गहराई ${plannedDepth.toFixed(1)}m पूरी हुई। समापन पर जाएं।`
+            : `Planned depth ${plannedDepth.toFixed(1)}m reached (run recorded down to ${nextDepth.toFixed(2)}m). Proceed to closure.`,
+          [
+            {
+              text: lang === 'hi' ? 'समाप्त करें' : 'Boring Closure',
+              onPress: () => {
+                navigation.reset({
+                  index: 1,
+                  routes: [
+                    { name: 'BoringList', params: { projectId } },
+                    { name: 'BoringClosure', params: { borehole: updatedBorehole, projectId, sessionId } },
+                  ],
+                });
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      // Rejoin the main boring loop (Screen 4) at the new depth — rock
+      // coring is a detour from Soil Description, and the worker re-enters
+      // it from there if the next interval is still rock.
       Alert.alert(
-        'Core Run Saved / रन डेटा सुरक्षित',
-        `TCR: ${tcrPercentage}% · RQD: ${rqdPercentage}% (${getRqdRating(rqdPercentage)}) recorded down to ${nextDepth.toFixed(2)}m.`,
+        lang === 'hi' ? 'रन डेटा सुरक्षित' : 'Core Run Saved',
+        `TCR: ${tcrPercentage}% · RQD: ${rqdPercentage}% (${getRqdRating(rqdPercentage, lang)}) recorded down to ${nextDepth.toFixed(2)}m.`,
         [
           {
-            text: 'Next run / अगला रन',
+            text: lang === 'hi' ? `बोरिंग जारी रखें (${nextDepth.toFixed(2)}m से)` : `Continue boring (from ${nextDepth.toFixed(2)}m)`,
             onPress: () => {
-              navigation.replace('RockCoring', {
+              navigation.replace('SPTEntry', {
                 borehole: updatedBorehole,
                 projectId,
                 sessionId,
@@ -182,12 +225,21 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
             },
           },
           {
-            text: 'End coring → Closure / समाप्त',
+            text: lang === 'hi' ? 'समाप्त' : 'End coring → Closure',
             onPress: () => {
-              navigation.replace('BoringClosure', {
-                borehole: updatedBorehole,
-                projectId,
-                sessionId,
+              // Reset (not replace/navigate): the rig-setup → start-boring →
+              // SPT/soil → rock-coring chain leading here should be cleared
+              // from the back stack once coring is done, otherwise Back from
+              // Closure re-enters those stale mid-flow screens — which is
+              // what made the Rock flow feel like it was "stuck in a loop"
+              // (Back kept landing you back inside Soil Description with
+              // "Rock" still selected, letting you re-enter Rock Coring).
+              navigation.reset({
+                index: 1,
+                routes: [
+                  { name: 'BoringList', params: { projectId } },
+                  { name: 'BoringClosure', params: { borehole: updatedBorehole, projectId, sessionId } },
+                ],
               });
             },
           },
@@ -213,17 +265,23 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
             <Text style={styles.langText}>{lang === 'hi' ? 'En' : 'हिं'}</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.headerSub}>Rock encountered at {currentDepth}m</Text>
+        <Text style={styles.headerSub}>
+          {lang === 'hi' ? `कोरिंग रन ${currentDepth}m से` : `Coring run from ${currentDepth}m`}
+        </Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.rockBanner}>
           <Text style={styles.rockVal}>⛰️ Rock Coring Mode</Text>
-          <Text style={styles.rockSub}>TCR & RQD auto-calculated / टीसीआर और आरक्यूडी गणना</Text>
+          <Text style={styles.rockSub}>
+            {lang === 'hi' ? 'टीसीआर और आरक्यूडी गणना' : 'TCR & RQD auto-calculated'}
+          </Text>
         </View>
 
         {/* Weathering grade (IS 4078) */}
-        <Text style={styles.fieldLabel}>Weathering grade (IS 4078) / अपक्षय ग्रेड</Text>
+        <Text style={styles.fieldLabel}>
+          {lang === 'hi' ? 'अपक्षय ग्रेड' : 'Weathering grade (IS 4078)'}
+        </Text>
         <View style={styles.weatherGrid}>
           {WEATHERING_GRADES.map((g) => (
             <TouchableOpacity
@@ -240,7 +298,9 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
 
         {/* Inputs */}
         <View style={styles.inputGroup}>
-          <Text style={styles.fieldLabel}>Core Run Length (cm) / रन लंबाई (सेमी)</Text>
+          <Text style={styles.fieldLabel}>
+            {lang === 'hi' ? 'रन लंबाई (सेमी)' : 'Core Run Length (cm)'}
+          </Text>
           <TextInput
             style={styles.input}
             value={runLength}
@@ -252,7 +312,9 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.fieldLabel}>Total Core Recovery (TCR) (cm) / कुल कोर रिकवरी</Text>
+          <Text style={styles.fieldLabel}>
+            {lang === 'hi' ? 'कुल कोर रिकवरी' : 'Total Core Recovery (TCR) (cm)'}
+          </Text>
           <TextInput
             style={styles.input}
             value={tcr}
@@ -264,7 +326,9 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.fieldLabel}>Solid Core Pieces &gt; 10cm (RQD) (cm) / 10सेमी से बड़े ठोस टुकड़े</Text>
+          <Text style={styles.fieldLabel}>
+            {lang === 'hi' ? '10सेमी से बड़े ठोस टुकड़े' : 'Solid Core Pieces > 10cm (RQD) (cm)'}
+          </Text>
           <TextInput
             style={styles.input}
             value={rqdPieces}
@@ -282,29 +346,48 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
         >
           <Text style={[styles.photoBtnText, photoCaptured && styles.photoBtnTextDone]}>
             {photoCaptured
-              ? '✓ Photo captured — uploads on sync / फोटो ली गई'
-              : '📷 Core Box Photo / कोर बॉक्स फोटो'}
+              ? (lang === 'hi' ? 'फोटो ली गई' : '✓ Photo captured — uploads on sync')
+              : (lang === 'hi' ? 'कोर बॉक्स फोटो' : '📷 Core Box Photo')}
           </Text>
         </TouchableOpacity>
 
         {/* Real-time Math Outputs */}
         <View style={styles.calcResults}>
           <View style={styles.calcRow}>
-            <Text style={styles.calcLabel}>TCR / कोर रिकवरी %:</Text>
+            <Text style={styles.calcLabel}>{lang === 'hi' ? 'कोर रिकवरी %:' : 'TCR'}</Text>
             <Text style={styles.calcVal}>{tcrPercentage}%</Text>
           </View>
           <View style={styles.calcRow}>
-            <Text style={styles.calcLabel}>RQD / रॉक गुणवत्ता %:</Text>
+            <Text style={styles.calcLabel}>{lang === 'hi' ? 'रॉक गुणवत्ता %:' : 'RQD'}</Text>
             <Text style={styles.calcVal}>{rqdPercentage}%</Text>
           </View>
           <View style={[styles.calcRow, styles.lastRow]}>
-            <Text style={styles.calcLabel}>Rock Quality Rating / रॉक ग्रेड:</Text>
-            <Text style={styles.ratingVal}>{getRqdRating(rqdPercentage)}</Text>
+            <Text style={styles.calcLabel}>{lang === 'hi' ? 'रॉक ग्रेड:' : 'Rock Quality Rating'}</Text>
+            <Text style={styles.ratingVal}>{getRqdRating(rqdPercentage, lang)}</Text>
           </View>
         </View>
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-          <Text style={styles.saveBtnText}>Save Run & Continue / सुरक्षित करें →</Text>
+          <Text style={styles.saveBtnText}>
+            {lang === 'hi' ? 'सुरक्षित करें →' : 'Save Run & Continue'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Exit the coring loop without closing the borehole — end-of-day /
+            equipment pauses happen mid-rock too, not only during SPT. */}
+        <TouchableOpacity
+          style={styles.terminateBtn}
+          onPress={() =>
+            navigation.navigate('Terminate', {
+              borehole,
+              projectId,
+              currentDepth,
+            })
+          }
+        >
+          <Text style={styles.terminateBtnText}>
+            {lang === 'hi' ? '⏸ बोरिंग रोकें/थकावट' : '⏸ Terminate / Pause'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -479,6 +562,21 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: colors.white,
     fontSize: 18,
+    fontWeight: '700',
+  },
+  terminateBtn: {
+    borderWidth: 0.5,
+    borderColor: colors.redMid,
+    backgroundColor: colors.redLight,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  terminateBtnText: {
+    color: colors.redMid,
+    fontSize: 16,
     fontWeight: '700',
   },
 });

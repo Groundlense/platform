@@ -4,7 +4,7 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-  
+  console.log('⏳ Starting seed script...');
   const groundlenseOrg = await prisma.organization.upsert({
     where: { id: 'groundlense-seed' },
     update: {},
@@ -35,8 +35,10 @@ async function main() {
     },
   });
 
+  console.log('🔑 Hashing passwords...');
   const passwordHash = await bcrypt.hash('Password@123', 10);
   const pinHash = await bcrypt.hash('1234', 10);
+  console.log('✅ Passwords hashed. Seeding users...');
 
   // Super Admin
   const superadmin = await prisma.user.upsert({
@@ -213,6 +215,7 @@ async function main() {
     'ORG_KYC_VERIFY',
   ];
 
+  console.log('🎭 Seeding roles...');
   for (const role of roles) {
     await prisma.role.upsert({
       where: { code: role.code },
@@ -246,6 +249,7 @@ async function main() {
     }
   }
 
+  console.log('👥 Assigning roles to users...');
   // Assign roles
   await assignRole('superadmin@groundlense.com', 'SUPER_ADMIN');
   
@@ -257,6 +261,8 @@ async function main() {
   await assignRole('pm@abcgeotech.com', 'GEOTECH_MANAGER');
   await assignRole('engineer@abcgeotech.com', 'GEOTECH_ENGINEER');
   await assignRole('GL-W-0001', 'FIELD_WORKER', true);
+  
+  console.log('🔑 Seeding permissions...');
   for (const permissionCode of permissions) {
     await prisma.permission.upsert({
       where: { code: permissionCode },
@@ -297,6 +303,7 @@ async function main() {
     }
   }
 
+  console.log('🔗 Mapping permissions to roles...');
   // 1. GEOTECH_ADMIN permissions
   const geotechAdminPermissions = [
     'PROJECT_CREATE',
@@ -420,6 +427,8 @@ async function main() {
   for (const perm of epcViewerPermissions) {
     await assignPermission('EPC_VIEWER', perm);
   }
+  
+  console.log('🔄 Checking and updating user employee codes...');
   // Update any existing users without an employeeCode
   const usersToUpdate = await prisma.user.findMany({
     where: { OR: [{ employeeCode: null }, { employeeCode: '' }] },

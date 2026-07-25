@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
+import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
 import { api } from '../services/api';
@@ -17,8 +18,6 @@ import { media } from '../services/media';
 import { location, GpsFix } from '../services/location';
 import { rawDecimalCoords } from '../utils/geo';
 import PhotoGallery from '../components/PhotoGallery';
-
-const SPT_INTERVAL_M = 1.5;
 
 function toNum(val: any): number | null {
   const n = Number(val);
@@ -34,7 +33,7 @@ function fmtDateTime(iso: any): string | null {
 
 export default function StartBoringScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, isResuming } = route.params || {};
-  const [lang, setLang] = useState<'en' | 'hi'>('hi');
+  const { lang, setLang } = useLanguage();
 
   const [weather, setWeather] = useState('Clear');
   const [starting, setStarting] = useState(false);
@@ -45,6 +44,14 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
   const [resumeDepth, setResumeDepth] = useState(0);
   const [sessionCount, setSessionCount] = useState(0);
   const [lastSession, setLastSession] = useState<any>(null);
+
+  // Project-level SPT spacing (set at project setup, locked once boring starts)
+  const [sptIntervalM, setSptIntervalM] = useState(1.5);
+
+  useEffect(() => {
+    if (!projectId) return;
+    storage.getProjectSptInterval(projectId).then(setSptIntervalM).catch(() => {});
+  }, [projectId]);
 
   const resuming = !!isResuming || borehole?.status === 'TERMINATED';
 
@@ -70,7 +77,7 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
           setGpsFix(fix);
           setGpsSearching(false);
         }
-      });
+      }, lang);
       if (watchId === null && !cancelled) setGpsSearching(false);
     })();
     return () => {
@@ -139,12 +146,12 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
   };
 
   const startDepth = resuming ? resumeDepth : 0;
-  const nextIntervalNo = Math.floor(startDepth / SPT_INTERVAL_M) + 1;
+  const nextIntervalNo = Math.floor(startDepth / sptIntervalM) + 1;
 
   // Real camera capture — queued locally, uploaded on sync once the first
   // interval of this session exists on the server.
   const handleRigPhoto = async () => {
-    const shot = await media.capturePhoto('SITE_SETUP');
+    const shot = await media.capturePhoto('SITE_SETUP', lang);
     if (!shot) return; // cancelled / unavailable / denied — honest Alert already shown
     await media.queuePhoto({
       boreholeId: borehole.id,
@@ -163,8 +170,11 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
 
   const handleOpenMaps = () => {
     if (!hasPlannedCoords) return;
-    // Turn-by-turn navigation to the planned point
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${plannedLat},${plannedLng}&travelmode=walking`;
+    // Drop a pin instead of requesting a route: boreholes are usually
+    // off-road, and Google's walking router answers "can't find a way
+    // there" for points with no path network nearby. From the pin the
+    // worker starts directions in whatever mode Google can actually route.
+    const url = `https://www.google.com/maps/search/?api=1&query=${plannedLat},${plannedLng}`;
     Linking.openURL(url).catch(() => {
       Alert.alert('Error', 'Could not open Google Maps on this device.');
     });
@@ -173,16 +183,41 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
   const handleStartBoring = async () => {
     if (starting) return;
 
+    // The initial groundwater observation (IS 1892) is mandatory before the
+    // first session ever starts — the undisturbed 0 m reading can't be
+    // recreated once drilling begins.
+    if (!resuming && sessionCount === 0) {
+      const observations = await storage.getWaterTable(borehole.id);
+      if (!Array.isArray(observations) || observations.length === 0) {
+        Alert.alert(
+          lang === 'hi' ? 'भूजल स्तर आवश्यक' : 'Water table reading required',
+          lang === 'hi'
+            ? 'पहली बार बोरिंग शुरू करने से पहले प्रारंभिक भूजल स्तर दर्ज करना अनिवार्य है (IS 1892)।'
+            : 'Before starting this boring for the first time, record the initial groundwater level at 0 m (IS 1892).',
+          [
+            { text: lang === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+            {
+              text: lang === 'hi' ? 'अभी दर्ज करें' : 'Record now',
+              onPress: () => navigation.navigate('WaterTable', { borehole, projectId, currentDepth: 0 }),
+            },
+          ],
+        );
+        return;
+      }
+    }
+
     // Far from the planned point? Confirm before starting — the deviation
     // is recorded either way, never hidden.
     if (distanceM !== null && distanceM > 100) {
       const proceed = await new Promise<boolean>((resolve) => {
         Alert.alert(
-          'Away from planned point / नियोजित स्थान से दूर',
-          `You appear to be ${location.formatDistance(distanceM)} from the planned borehole location. Start anyway? The deviation will be recorded. / आप नियोजित स्थान से ${location.formatDistance(distanceM)} दूर हैं। फिर भी शुरू करें?`,
+          lang === 'hi' ? 'नियोजित स्थान से दूर' : 'Away from planned point',
+          lang === 'hi'
+            ? `आप नियोजित स्थान से ${location.formatDistance(distanceM)} दूर हैं। फिर भी शुरू करें?`
+            : `You appear to be ${location.formatDistance(distanceM)} from the planned borehole location. Start anyway? The deviation will be recorded.`,
           [
-            { text: 'Cancel / रद्द करें', onPress: () => resolve(false) },
-            { text: 'Start anyway / फिर भी शुरू करें', onPress: () => resolve(true) },
+            { text: lang === 'hi' ? 'रद्द करें' : 'Cancel', onPress: () => resolve(false) },
+            { text: lang === 'hi' ? 'फिर भी शुरू करें' : 'Start anyway', onPress: () => resolve(true) },
           ],
         );
       });
@@ -192,7 +227,7 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
     setStarting(true);
     try {
       // Freshest available arrival position (watch fix, else one-shot)
-      const arrivalFix = gpsFix ?? (await location.getCurrentPosition({ silent: true }));
+      const arrivalFix = gpsFix ?? (await location.getCurrentPosition({ silent: true, lang }));
       // Try to open a real server session; fall back to a local-only record offline
       let sessionId = `sess-${Date.now()}`;
       try {
@@ -281,7 +316,7 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
           <Text style={styles.headerTitle}>{t('startBoringBtn', lang)}</Text>
         </View>
         <View style={styles.errorBox}>
-          <Text style={styles.errorTitle}>No borehole selected / कोई बोरहोल नहीं चुना गया</Text>
+          <Text style={styles.errorTitle}>{lang === 'hi' ? 'कोई बोरहोल नहीं चुना गया' : 'No borehole selected'}</Text>
           <TouchableOpacity style={styles.startBtn} onPress={() => navigation.goBack()}>
             <Text style={styles.startBtnText}>{t('back', lang)}</Text>
           </TouchableOpacity>
@@ -316,9 +351,9 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
         {/* Resume banner — non-dismissable, real previous-session context */}
         {resuming && (
           <View style={styles.resumeBanner}>
-            <Text style={styles.resumeTitle}>↩ Resuming from previous session / पिछले सेशन से जारी</Text>
+            <Text style={styles.resumeTitle}>↩ {lang === 'hi' ? 'पिछले सेशन से जारी' : 'Resuming from previous session'}</Text>
             <View style={styles.resumeRow}>
-              <Text style={styles.resumeLbl}>Terminated at / यहाँ रुका</Text>
+              <Text style={styles.resumeLbl}>{lang === 'hi' ? 'यहाँ रुका' : 'Terminated at'}</Text>
               <Text style={styles.resumeVal}>
                 {[
                   `${resumeDepth.toFixed(1)}m`,
@@ -329,14 +364,14 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
               </Text>
             </View>
             <View style={styles.resumeRow}>
-              <Text style={styles.resumeLbl}>Reason / कारण</Text>
+              <Text style={styles.resumeLbl}>{lang === 'hi' ? 'कारण' : 'Reason'}</Text>
               <Text style={styles.resumeVal}>
-                {lastSession?.terminationReason || 'Not recorded / दर्ज नहीं'}
+                {lastSession?.terminationReason || (lang === 'hi' ? 'दर्ज नहीं' : 'Not recorded')}
               </Text>
             </View>
             {!!lastSession?.worker && (
               <View style={styles.resumeRow}>
-                <Text style={styles.resumeLbl}>Previous worker / पिछला कर्मचारी</Text>
+                <Text style={styles.resumeLbl}>{lang === 'hi' ? 'पिछला कर्मचारी' : 'Previous worker'}</Text>
                 <Text style={styles.resumeVal}>
                   {[
                     [lastSession.worker.firstName, lastSession.worker.lastName]
@@ -351,30 +386,39 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
             )}
             {sessionCount > 0 && (
               <View style={styles.resumeRow}>
-                <Text style={styles.resumeLbl}>Previous session / पिछला सेशन</Text>
+                <Text style={styles.resumeLbl}>{lang === 'hi' ? 'पिछला सेशन' : 'Previous session'}</Text>
                 <Text style={styles.resumeVal}>Session {sessionCount}</Text>
               </View>
             )}
             <View style={styles.resumeRow}>
-              <Text style={styles.resumeLbl}>Resuming from / यहाँ से शुरू</Text>
+              <Text style={styles.resumeLbl}>{lang === 'hi' ? 'यहाँ से शुरू' : 'Resuming from'}</Text>
               <Text style={[styles.resumeVal, styles.resumeValRust]}>
                 {resumeDepth.toFixed(1)}m · Session {sessionCount + 1} · Interval {nextIntervalNo}
               </Text>
             </View>
-            <Text style={styles.resumeAuto}>Restart depth auto-detected from recorded data / गहराई अपने आप मिली</Text>
+            <Text style={styles.resumeAuto}>{lang === 'hi' ? 'गहराई अपने आप मिली' : 'Restart depth auto-detected from recorded data'}</Text>
           </View>
         )}
 
         {/* Planned location card — real coordinates from the engineer's plan */}
         <View style={styles.locationCard}>
-          <Text style={styles.locationTitle}>📍 Planned location / नियोजित स्थान</Text>
+          <Text style={styles.locationTitle}>📍 {lang === 'hi' ? 'नियोजित स्थान' : 'Planned location'}</Text>
           {hasPlannedCoords ? (
             <Text style={styles.locationCoords}>
               Lat {plannedLat!.toFixed(6)} · Lng {plannedLng!.toFixed(6)}
             </Text>
+          ) : borehole?.latitude != null && borehole?.longitude != null ? (
+            // Values exist but aren't decimal degrees — almost always an
+            // unconverted UTM (Easting/Northing) import. Say so explicitly
+            // instead of pretending nothing was uploaded.
+            <Text style={styles.locationMissing}>
+              {lang === 'hi'
+                ? 'निर्देशांक UTM (ईस्टिंग/नॉर्थिंग) में हैं — वेब पोर्टल के सेटअप टैब में "Fix coordinates" से बदलवाएं'
+                : 'Coordinates are UTM (Easting/Northing) — ask the office to convert them via "Fix coordinates" in the portal Setup tab'}
+            </Text>
           ) : (
             <Text style={styles.locationMissing}>
-              Planned coordinates not set for this borehole / निर्देशांक उपलब्ध नहीं
+              {lang === 'hi' ? 'निर्देशांक उपलब्ध नहीं' : 'Planned coordinates not set for this borehole'}
             </Text>
           )}
           <TouchableOpacity
@@ -392,7 +436,7 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
             {gpsFix && distanceM !== null ? (
               atLocation ? (
                 <>
-                  <Text style={styles.trackerOkTitle}>✓ You are at the borehole location / आप सही स्थान पर हैं</Text>
+                  <Text style={styles.trackerOkTitle}>✓ {lang === 'hi' ? 'आप सही स्थान पर हैं' : 'You are at the borehole location'}</Text>
                   <Text style={styles.trackerSub}>
                     {location.formatDistance(distanceM)} from planned point · GPS ±
                     {gpsFix.accuracyM != null ? Math.round(gpsFix.accuracyM) : '—'}m
@@ -406,11 +450,13 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
                     </Text>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.trackerDistance}>
-                        {location.formatDistance(distanceM)} away / दूर
+                        {location.formatDistance(distanceM)} {lang === 'hi' ? 'दूर' : 'away'}
                       </Text>
                       {bearing !== null && (
                         <Text style={styles.trackerDirection}>
-                          Walk {location.compassLabel(bearing).en} / {location.compassLabel(bearing).hi} जाएँ
+                          {lang === 'hi'
+                            ? `${location.compassLabel(bearing).hi} जाएँ`
+                            : `Walk ${location.compassLabel(bearing).en}`}
                         </Text>
                       )}
                     </View>
@@ -422,23 +468,25 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
                 </>
               )
             ) : gpsSearching ? (
-              <Text style={styles.trackerSearching}>📡 Getting GPS fix… move to open sky / GPS खोज रहा है…</Text>
+              <Text style={styles.trackerSearching}>📡 {lang === 'hi' ? 'GPS खोज रहा है…' : 'Getting GPS fix… move to open sky'}</Text>
             ) : (
               <Text style={styles.trackerSearching}>
-                GPS unavailable — allow location permission and move to open sky / GPS उपलब्ध नहीं — लोकेशन अनुमति दें
+                {lang === 'hi' ? 'GPS उपलब्ध नहीं — लोकेशन अनुमति दें' : 'GPS unavailable — allow location permission and move to open sky'}
               </Text>
             )}
           </View>
         )}
 
         {/* Rig photo */}
-        <Text style={styles.fieldLabel}>Rig photo / रिग की फोटो</Text>
+        <Text style={styles.fieldLabel}>{lang === 'hi' ? 'रिग की फोटो' : 'Rig photo'}</Text>
         <TouchableOpacity
           style={[styles.cameraBtn, rigPhotoCaptured && styles.cameraBtnDone]}
           onPress={handleRigPhoto}
         >
           <Text style={[styles.cameraBtnText, rigPhotoCaptured && styles.cameraBtnTextDone]}>
-            {rigPhotoCaptured ? '✓ Rig Photo Captured / फोटो ले लिया गया' : '📷 Capture Rig Photo / रिग की फोटो लें'}
+            {rigPhotoCaptured
+              ? lang === 'hi' ? '✓ फोटो ले लिया गया' : '✓ Rig Photo Captured'
+              : lang === 'hi' ? '📷 रिग की फोटो लें' : '📷 Capture Rig Photo'}
           </Text>
         </TouchableOpacity>
 
@@ -465,7 +513,7 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
         </View>
 
         {/* Photos of this borehole — queued + synced, tap for geo-tag details */}
-        <PhotoGallery borehole={borehole} />
+        <PhotoGallery borehole={borehole} lang={lang} />
 
         <TouchableOpacity style={styles.startBtn} onPress={handleStartBoring} disabled={starting}>
           <Text style={styles.startBtnText}>

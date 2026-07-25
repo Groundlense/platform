@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { AppState, StatusBar } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
@@ -24,6 +25,7 @@ import EngineerQueryScreen from './src/screens/EngineerQueryScreen';
 import { syncManager } from './src/services/sync';
 import { storage } from './src/services/storage';
 import { media } from './src/services/media';
+import { LanguageProvider } from './src/utils/LanguageContext';
 import BrandHeader from './src/components/BrandHeader';
 
 // Initialize Navigation Stack
@@ -90,15 +92,29 @@ function App() {
       }
     });
 
+    // When connectivity returns — sync immediately instead of waiting for
+    // the next 15s tick. Fires only on the offline→online transition.
+    let wasConnected: boolean | null = null;
+    const netInfoSub = NetInfo.addEventListener((state) => {
+      const isConnected =
+        state.isConnected === true && state.isInternetReachable !== false;
+      if (isConnected && wasConnected === false) {
+        runBackgroundSync('reconnect', false).catch(() => {});
+      }
+      wasConnected = isConnected;
+    });
+
     return () => {
       clearInterval(interval);
       appStateSub.remove();
+      netInfoSub();
     };
   }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
+        <LanguageProvider>
         <SafeAreaProvider style={{ flex: 1 }}>
           <StatusBar barStyle="light-content" backgroundColor="#993C1D" />
           <NavigationContainer>
@@ -141,6 +157,7 @@ function App() {
             </Stack.Navigator>
           </NavigationContainer>
         </SafeAreaProvider>
+        </LanguageProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

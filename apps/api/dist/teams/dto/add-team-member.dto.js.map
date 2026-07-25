@@ -1,1 +1,0 @@
-{"version":3,"file":"add-team-member.dto.js","sourceRoot":"","sources":["../../../src/teams/dto/add-team-member.dto.ts"],"names":[],"mappings":";;;;;;;;;;;;AAAA,6CAA8C;AAC9C,qDAA2C;AAE3C,MAAa,gBAAgB;IAM3B,MAAM,CAAS;CAChB;AAPD,4CAOC;AADC;IALC,IAAA,qBAAW,EAAC;QACX,WAAW,EAAE,mCAAmC;QAChD,OAAO,EAAE,sCAAsC;KAChD,CAAC;IACD,IAAA,0BAAQ,GAAE;;gDACI"}

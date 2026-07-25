@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
+import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
 
@@ -41,7 +42,7 @@ function parseDateDDMMYYYY(value: string): Date | null {
 
 export default function RigSetupScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId } = route.params;
-  const [lang, setLang] = useState<'en' | 'hi'>('hi');
+  const { lang, setLang } = useLanguage();
 
   // Input states — selectors default to the most common field choices,
   // identity/date fields are derived from real data below.
@@ -74,7 +75,7 @@ export default function RigSetupScreen({ route, navigation }: { route: any; navi
     // Validate the start date before queueing anything
     const parsedDate = parseDateDDMMYYYY(startDate);
     if (!parsedDate) {
-      setDateError('Enter a valid date as DD-MM-YYYY / सही तारीख DD-MM-YYYY में लिखें');
+      setDateError(lang === 'hi' ? 'सही तारीख DD-MM-YYYY में लिखें' : 'Enter a valid date as DD-MM-YYYY');
       return;
     }
     setDateError(null);
@@ -143,8 +144,11 @@ export default function RigSetupScreen({ route, navigation }: { route: any; navi
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* Info box IS 1892 */}
         <View style={styles.infoBoxGreen}>
-          <Text style={styles.infoBoxGreenTitle}>IS 1892 — Borelog header required</Text>
-          <Text style={styles.infoBoxGreenSub}>ये जानकारी बोरलॉग के लिए जरूरी है</Text>
+          {lang === 'hi' ? (
+            <Text style={styles.infoBoxGreenTitle}>ये जानकारी बोरलॉग के लिए जरूरी है</Text>
+          ) : (
+            <Text style={styles.infoBoxGreenTitle}>IS 1892 — Borelog header required</Text>
+          )}
         </View>
 
         {/* Rig Type Grid */}
@@ -203,7 +207,7 @@ export default function RigSetupScreen({ route, navigation }: { route: any; navi
                 onPress={() => setFluid(fl)}
               >
                 <Text style={[styles.tileText, isSelected && styles.tileTextSelected]}>
-                  {fl === 'Water' ? 'Water / पानी' : 'Bentonite mud'} {isSelected && '✓'}
+                  {fl === 'Water' ? (lang === 'hi' ? 'पानी' : 'Water') : 'Bentonite mud'} {isSelected && '✓'}
                 </Text>
               </TouchableOpacity>
             );
@@ -236,10 +240,10 @@ export default function RigSetupScreen({ route, navigation }: { route: any; navi
             style={[styles.input, styles.monoText]}
             value={drillerId}
             onChangeText={setDrillerId}
-            placeholder="Loading from your profile… / प्रोफाइल से…"
+            placeholder={lang === 'hi' ? 'प्रोफाइल से…' : 'Loading from your profile…'}
             placeholderTextColor={colors.grayMid}
           />
-          <Text style={styles.microHint}>Auto-filled from your login · editable / आपके लॉगिन से</Text>
+          <Text style={styles.microHint}>{lang === 'hi' ? 'आपके लॉगिन से' : "Auto-filled from your login · editable"}</Text>
         </View>
 
         {/* Start Date */}
@@ -266,8 +270,11 @@ export default function RigSetupScreen({ route, navigation }: { route: any; navi
 
         {/* Warning Info box */}
         <View style={styles.infoBoxAmber}>
-          <Text style={styles.infoBoxAmberTitle}>Locked after first boring starts</Text>
-          <Text style={styles.infoBoxAmberSub}>पहले SPT के बाद यह डेटा बदला नहीं जा सकता</Text>
+          {lang === 'hi' ? (
+            <Text style={styles.infoBoxAmberTitle}>पहले SPT के बाद यह डेटा बदला नहीं जा सकता</Text>
+          ) : (
+            <Text style={styles.infoBoxAmberTitle}>Locked after first boring starts</Text>
+          )}
         </View>
 
         <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>
