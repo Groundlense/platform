@@ -528,8 +528,9 @@ const styles = StyleSheet.create({
   },
   sumRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
     paddingVertical: 6,
     borderBottomWidth: 0.5,
     borderBottomColor: colors.grayLight,
@@ -542,9 +543,11 @@ const styles = StyleSheet.create({
     color: colors.grayMid,
   },
   sumVal: {
+    flex: 1,
     fontSize: 14,
     fontWeight: '700',
     color: colors.grayDark,
+    textAlign: 'right',
   },
   gwtConfirmBlock: {
     backgroundColor: colors.blueLight,
@@ -562,7 +565,7 @@ const styles = StyleSheet.create({
   },
   gwtBtnRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'stretch',
     gap: 6,
   },
   gwtBtn: {
@@ -570,14 +573,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.grayLight,
     borderRadius: 4,
     paddingVertical: 6,
+    paddingHorizontal: 8,
+    minHeight: 44,
     alignItems: 'center',
-  },
-  gwtBtnSelected: {
-    backgroundColor: colors.blueDark,
+    justifyContent: 'center',
   },
   gwtBtnText: {
     fontSize: 15,
     color: colors.grayDark,
+    textAlign: 'center',
+  },
+  gwtBtnSelected: {
+    backgroundColor: colors.blueDark,
   },
   gwtBtnTextSelected: {
     color: colors.white,

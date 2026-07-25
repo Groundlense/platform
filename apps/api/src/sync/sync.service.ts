@@ -10,6 +10,10 @@ import * as crypto from 'crypto';
 import { DatabaseService } from '../database/database.service';
 import { IntegrityService } from '../common/integrity/integrity.service';
 import {
+  isCloudinaryConfigured,
+  uploadToCloudinary,
+} from '../media/cloudinary';
+import {
   CreateSyncOperationsDto,
   SyncOperationItemDto,
 } from './dto/create-sync-operations.dto';
@@ -479,6 +483,21 @@ export class SyncService {
 
       fs.writeFileSync(absolutePath, buffer);
       filePath = filename;
+
+      // Same permanent-storage rule as the multipart upload path: disk on
+      // Render is ephemeral, so move the photo to Cloudinary when possible.
+      if (isCloudinaryConfigured()) {
+        try {
+          filePath = await uploadToCloudinary(absolutePath, {
+            folder: 'groundlense',
+            fileName: payload.fileName || filename,
+            mimeType: payload.mimeType || 'image/jpeg',
+          });
+          fs.unlinkSync(absolutePath);
+        } catch {
+          // Keep the local copy — never lose the photo over a storage error.
+        }
+      }
     }
 
     const existing = await this.db.media.findFirst({

@@ -1419,6 +1419,9 @@ export default function PortalClient({
   };
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Reset immediately so picking the same (corrected) file again still
+    // fires a change event — re-uploads are a normal part of this flow.
+    e.target.value = "";
     if (!file) return;
     if (!proj?.id) {
       alert("Project ID not found.");
@@ -1483,6 +1486,7 @@ export default function PortalClient({
 
         let createdCount = 0;
         let errorCount = 0;
+        const lockedRows: string[] = [];
         const coordFailures: string[] = [];
 
         for (let i = 1; i < rows.length; i++) {
@@ -1547,13 +1551,20 @@ export default function PortalClient({
           const res = await createBoreholeAction(formData);
           if (res.success) {
             createdCount++;
+          } else if (/locked/i.test(String(res.error || ""))) {
+            // Boring already started in the field — its row is intentionally
+            // untouched, not an import failure.
+            lockedRows.push(bhNo);
           } else {
             console.error("Failed to import borehole:", bhNo, res.error);
             errorCount++;
           }
         }
 
-        let summary = `Successfully processed file. Imported ${createdCount} boreholes.`;
+        let summary = `Successfully processed file. Imported/updated ${createdCount} boreholes.`;
+        if (lockedRows.length > 0) {
+          summary += `\nSkipped ${lockedRows.length} locked boring(s) already started in the field: ${lockedRows.join(", ")}.`;
+        }
         if (errorCount > 0) summary += ` Failed to import ${errorCount} boreholes.`;
         if (coordFailures.length > 0) {
           summary += `\n\nCoordinates NOT set for ${coordFailures.length} borehole(s) (created without location):\n${coordFailures.join("\n")}`;
@@ -2983,12 +2994,12 @@ export default function PortalClient({
               <div className="card-title">
                 <span>📍 Boring Locations</span>
                 <div className="flex gap-2">
-                  <span className="ct-lock self-center">🔒 Locked after boring start</span>
-                  {!setupIsLocked && (
-                    <span className="ct-action self-center" onClick={() => setShowExcelSec(!showExcelSec)}>
-                      {showExcelSec ? "✕ Close Excel tool" : "📂 Excel Import / Export"}
-                    </span>
-                  )}
+                  <span className="ct-lock self-center">
+                    {setupIsLocked ? "🔒 Started borings are locked — others can be re-uploaded" : "🔒 Locked after boring start"}
+                  </span>
+                  <span className="ct-action self-center" onClick={() => setShowExcelSec(!showExcelSec)}>
+                    {showExcelSec ? "✕ Close Excel tool" : "📂 Excel Import / Export"}
+                  </span>
                 </div>
               </div>
 
@@ -3421,8 +3432,13 @@ export default function PortalClient({
                   </button>
                 </div>
               ) : (
-                <div className="ib ib-r mt-3 mb-0">
-                  🔒 Data collection has started in the field. Configuration and borehole setup are locked.
+                <div className="btn-row justify-between items-center mt-3">
+                  <div className="ib ib-r mb-0">
+                    🔒 Boring has started — started locations are locked, but the Excel file can still be re-uploaded to update the rest.
+                  </div>
+                  <button className="btn btn-w flex items-center gap-1" onClick={() => setShowExcelSec(!showExcelSec)}>
+                    📂 Import / Export Excel
+                  </button>
                 </div>
               )}
             </div>
@@ -4333,26 +4349,17 @@ export default function PortalClient({
                     {selectedBorehole.media.length === 0 ? (
                       <div className="text-[9px] text-text-ter py-2">No site photos uploaded yet — they appear when field teams sync.</div>
                     ) : (
-                      <div className="photo-grid">
-                        {selectedBorehole.media.slice(0, 9).map((med: any) => (
-                          <div
-                            key={med.id}
-                            className="photo-thumb"
-                            title={med.fileName}
-                            onClick={() => setPhotoView({ med, bh: selectedBorehole })}
-                          >
-                            {med.mimeType?.startsWith("image/") ? (
-                              // Authenticated media proxy
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={`/api/media/${med.id}`} alt={med.fileName || "Site photo"} />
-                            ) : med.mimeType?.startsWith("video/") ? (
-                              <div className="pt-icon" title="Video — click to play">▶ 🎬</div>
-                            ) : (
-                              <div className="pt-icon">📎</div>
-                            )}
-                            <div className="pt-label">{med.mimeType?.startsWith("video/") ? `🎬 ${med.photoType || "Video"}` : (med.photoType || med.fileName || "Photo")}</div>
-                          </div>
-                        ))}
+                      <div className="flex items-center justify-between gap-2 py-2">
+                        <div className="text-[9px] text-text-sec">
+                          {selectedBorehole.media.length} photo{selectedBorehole.media.length === 1 ? "" : "s"} uploaded from the field
+                        </div>
+                        <button
+                          className="btn btn-w btn-sm"
+                          onClick={() => { window.location.href = `/api/projects/${proj.id}/photos-zip`; }}
+                          title="Downloads every uploaded photo for this project as a ZIP, organised by borehole"
+                        >
+                          ⬇ Download images
+                        </button>
                       </div>
                     )}
                   </div>

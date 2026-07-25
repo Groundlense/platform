@@ -109,6 +109,22 @@ export const api = {
     return response.data;
   },
 
+  /** Sends a password-reset OTP to the worker's mobile number (SMS). */
+  async forgotPassword(mobile: string) {
+    const response = await apiClient.post('/auth/forgot-password', { mobile });
+    return response.data; // { success, message, isMock }
+  },
+
+  /** Sets a new PIN/password after verifying the SMS OTP. */
+  async resetPassword(mobile: string, code: string, newPassword: string) {
+    const response = await apiClient.post('/auth/reset-password', {
+      mobile,
+      code,
+      newPassword,
+    });
+    return response.data; // { success, message }
+  },
+
   async logout() {
     const refreshToken = await storage.getRefreshToken();
     if (refreshToken) {

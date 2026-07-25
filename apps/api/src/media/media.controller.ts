@@ -148,13 +148,19 @@ export class MediaController {
     @Res()
     res: Response,
   ) {
-    const { media, absolutePath } = await this.mediaService.getFile(
+    const { media, absolutePath, redirectUrl } = await this.mediaService.getFile(
       mediaId,
       user,
     );
 
+    // Cloudinary-backed media: hand the client the permanent URL. Both the
+    // web proxy (fetch) and the mobile image loader follow redirects.
+    if (redirectUrl) {
+      return res.redirect(302, redirectUrl);
+    }
+
     res.setHeader('Content-Type', media.mimeType ?? 'application/octet-stream');
 
-    return res.sendFile(absolutePath);
+    return res.sendFile(absolutePath!);
   }
 }

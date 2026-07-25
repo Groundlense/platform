@@ -12,6 +12,7 @@ const KEYS = {
   SAMPLES: (boreholeId: string) => `@samples:${boreholeId}`,
   WATER_TABLE: (boreholeId: string) => `@water_table:${boreholeId}`,
   SESSIONS: (boreholeId: string) => `@sessions:${boreholeId}`,
+  SPT_INTERVAL_OVERRIDE: (boreholeId: string) => `@spt_interval:${boreholeId}`,
   SYNC_QUEUE: '@sync_queue',
   SEEN_ASSIGNMENTS: '@seen_assignments',
   CACHE_VERSION: '@cache_version',
@@ -39,7 +40,8 @@ function isDomainKey(key: string): boolean {
     key.startsWith('@intervals:') ||
     key.startsWith('@samples:') ||
     key.startsWith('@water_table:') ||
-    key.startsWith('@sessions:')
+    key.startsWith('@sessions:') ||
+    key.startsWith('@spt_interval:')
   );
 }
 
@@ -175,6 +177,23 @@ export const storage = {
     const project = projects.find((p: any) => p?.id === projectId);
     const value = Number(project?.sptIntervalM);
     return Number.isFinite(value) && value > 0 ? value : 1.5;
+  },
+
+  /**
+   * Per-borehole SPT interval override, entered by the worker when the
+   * boring continues after a rock-coring detour (the project spacing may
+   * no longer apply below the rock band).
+   */
+  async setBoreholeSptInterval(boreholeId: string, meters: number): Promise<void> {
+    await AsyncStorage.setItem(KEYS.SPT_INTERVAL_OVERRIDE(boreholeId), String(meters));
+  },
+
+  /** Effective SPT interval for a borehole: override first, else project setting. */
+  async getSptInterval(projectId: string, boreholeId: string): Promise<number> {
+    const raw = await AsyncStorage.getItem(KEYS.SPT_INTERVAL_OVERRIDE(boreholeId));
+    const override = Number(raw);
+    if (Number.isFinite(override) && override > 0) return override;
+    return this.getProjectSptInterval(projectId);
   },
 
   // --- Boreholes ---

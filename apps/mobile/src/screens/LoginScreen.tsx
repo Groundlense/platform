@@ -20,7 +20,7 @@ import { api } from '../services/api';
 import { sha256Hex } from '../utils/hash';
 
 export default function LoginScreen({ navigation }: { navigation: any }) {
-  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
+  const [activeTab, setActiveTab] = useState<'login' | 'register' | 'forgot'>('login');
   const { lang, setLang } = useLanguage();
 
   // Login inputs
@@ -133,6 +133,96 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
     }
   };
 
+  // Forgot-password inputs — OTP goes to the worker's mobile number
+  const [forgotStep, setForgotStep] = useState<'mobile' | 'reset'>('mobile');
+  const [forgotMobile, setForgotMobile] = useState('');
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [forgotPass, setForgotPass] = useState('');
+  const [forgotPass2, setForgotPass2] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [forgotBusy, setForgotBusy] = useState(false);
+
+  const openForgot = () => {
+    setForgotStep('mobile');
+    setForgotOtp('');
+    setForgotPass('');
+    setForgotPass2('');
+    setForgotError('');
+    setActiveTab('forgot');
+  };
+
+  const handleSendResetOtp = async () => {
+    const mobile = forgotMobile.trim();
+    if (!mobile) {
+      setForgotError(lang === 'hi' ? 'मोबाइल नंबर दर्ज करें' : 'Enter your mobile number');
+      return;
+    }
+    setForgotError('');
+    setForgotBusy(true);
+    try {
+      await api.forgotPassword(mobile);
+      setForgotStep('reset');
+      Alert.alert(
+        lang === 'hi' ? 'OTP भेजा गया' : 'OTP sent',
+        lang === 'hi'
+          ? 'आपके मोबाइल नंबर पर 6 अंकों का OTP भेजा गया है।'
+          : 'A 6-digit OTP was sent to your mobile number.'
+      );
+    } catch (err: any) {
+      const serverMsg = err?.response?.data?.message;
+      setForgotError(
+        serverMsg
+          ? (Array.isArray(serverMsg) ? serverMsg.join(', ') : serverMsg)
+          : lang === 'hi'
+            ? 'OTP भेज नहीं सके — नंबर जांचें या इंटरनेट से जुड़ें'
+            : 'Could not send OTP — check the number and your connection'
+      );
+    } finally {
+      setForgotBusy(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    const mobile = forgotMobile.trim();
+    const code = forgotOtp.trim();
+    if (!code || !forgotPass || !forgotPass2) {
+      setForgotError(lang === 'hi' ? 'OTP और नया पिन दर्ज करें' : 'Enter the OTP and your new PIN');
+      return;
+    }
+    if (forgotPass.length < 4) {
+      setForgotError(lang === 'hi' ? 'पिन कम से कम 4 अक्षर का हो' : 'PIN must be at least 4 characters');
+      return;
+    }
+    if (forgotPass !== forgotPass2) {
+      setForgotError(lang === 'hi' ? 'पिन मेल नहीं खाते' : 'PINs do not match');
+      return;
+    }
+    setForgotError('');
+    setForgotBusy(true);
+    try {
+      await api.resetPassword(mobile, code, forgotPass);
+      Alert.alert(
+        lang === 'hi' ? 'पिन बदल गया' : 'PIN reset',
+        lang === 'hi'
+          ? 'नया पिन सेट हो गया — अब लॉगिन करें।'
+          : 'Your new PIN is set — log in now.'
+      );
+      setLoginId(mobile);
+      setActiveTab('login');
+    } catch (err: any) {
+      const serverMsg = err?.response?.data?.message;
+      setForgotError(
+        serverMsg
+          ? (Array.isArray(serverMsg) ? serverMsg.join(', ') : serverMsg)
+          : lang === 'hi'
+            ? 'रीसेट विफल — OTP जांचें'
+            : 'Reset failed — check the OTP'
+      );
+    } finally {
+      setForgotBusy(false);
+    }
+  };
+
   // Register inputs
   const [regMobile, setRegMobile] = useState('');
   const [regPassword, setRegPassword] = useState('');
@@ -236,7 +326,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
           /* LOGIN VIEW */
           <View style={styles.formCard}>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{lang === 'hi' ? 'वर्कर ID या ईमेल' : 'Worker ID or Email'}</Text>
+              <Text style={styles.inputLabel}>{lang === 'hi' ? 'वर्कर ID या मोबाइल नंबर' : 'Worker ID or Mobile Number'}</Text>
               <TextInput
                 style={styles.input}
                 value={loginId}
@@ -244,7 +334,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
                   setLoginId(text);
                   if (loginError) setLoginError('');
                 }}
-                placeholder="GL-W-XXXX"
+                placeholder={lang === 'hi' ? 'GL-W-XXXX या 9876543210' : 'GL-W-XXXX or 9876543210'}
                 autoCapitalize="none"
                 autoCorrect={false}
                 placeholderTextColor={colors.grayMid}
@@ -286,12 +376,133 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
               )}
             </TouchableOpacity>
 
+            <TouchableOpacity onPress={openForgot}>
+              <Text style={styles.forgotLink}>
+                {lang === 'hi' ? 'पिन/पासवर्ड भूल गए?' : 'Forgot PIN / password?'}
+              </Text>
+            </TouchableOpacity>
+
             <View style={styles.divider} />
 
             <View style={styles.infoBoxBlue}>
               <Text style={styles.infoBoxBlueTitle}>{lang === 'hi' ? 'ऑफलाइन काम करता है' : 'Works offline'}</Text>
               <Text style={styles.infoBoxBlueSub}>{t('offlineMessage', lang)}</Text>
             </View>
+          </View>
+        ) : activeTab === 'forgot' ? (
+          /* FORGOT PASSWORD VIEW — SMS OTP to the worker's mobile number */
+          <View style={styles.formCard}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.rust, marginBottom: 12, textAlign: 'center' }}>
+              {lang === 'hi' ? 'पिन/पासवर्ड रीसेट करें' : 'Reset PIN / Password'}
+            </Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>{lang === 'hi' ? 'मोबाइल नंबर' : 'Mobile Number'}</Text>
+              <TextInput
+                style={styles.input}
+                value={forgotMobile}
+                onChangeText={(text) => {
+                  setForgotMobile(text);
+                  if (forgotError) setForgotError('');
+                }}
+                placeholder="e.g. 9876543210"
+                keyboardType="phone-pad"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={forgotStep === 'mobile'}
+                placeholderTextColor={colors.grayMid}
+              />
+            </View>
+
+            {forgotStep === 'reset' && (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{lang === 'hi' ? 'OTP (SMS से)' : 'OTP (from SMS)'}</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={forgotOtp}
+                    onChangeText={(text) => {
+                      setForgotOtp(text.replace(/[^0-9]/g, ''));
+                      if (forgotError) setForgotError('');
+                    }}
+                    placeholder="6-digit code"
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    placeholderTextColor={colors.grayMid}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{lang === 'hi' ? 'नया पिन/पासवर्ड' : 'New PIN / Password'}</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={forgotPass}
+                    onChangeText={(text) => {
+                      setForgotPass(text);
+                      if (forgotError) setForgotError('');
+                    }}
+                    placeholder={lang === 'hi' ? 'नया पिन चुनें' : 'Choose a new PIN'}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholderTextColor={colors.grayMid}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{lang === 'hi' ? 'नए पिन की पुष्टि करें' : 'Confirm New PIN'}</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={forgotPass2}
+                    onChangeText={(text) => {
+                      setForgotPass2(text);
+                      if (forgotError) setForgotError('');
+                    }}
+                    placeholder={lang === 'hi' ? 'दोबारा दर्ज करें' : 'Re-enter new PIN'}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholderTextColor={colors.grayMid}
+                  />
+                </View>
+              </>
+            )}
+
+            {forgotError ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorBoxText}>{forgotError}</Text>
+              </View>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.primaryBtn, forgotBusy && styles.primaryBtnDisabled]}
+              onPress={forgotStep === 'mobile' ? handleSendResetOtp : handleResetPassword}
+              disabled={forgotBusy}
+            >
+              {forgotBusy ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={styles.primaryBtnText}>
+                  {forgotStep === 'mobile'
+                    ? (lang === 'hi' ? 'OTP भेजें' : 'Send OTP')
+                    : (lang === 'hi' ? 'पिन रीसेट करें' : 'Reset PIN')}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            {forgotStep === 'reset' && (
+              <TouchableOpacity onPress={handleSendResetOtp} disabled={forgotBusy}>
+                <Text style={styles.forgotLink}>
+                  {lang === 'hi' ? 'OTP दोबारा भेजें' : 'Resend OTP'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => setActiveTab('login')}>
+              <Text style={styles.secondaryBtnText}>
+                {lang === 'hi' ? 'लॉगिन पर वापस जाएं' : 'Back to Login'}
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : (
           /* REGISTER VIEW — active password activation form */
@@ -528,6 +739,13 @@ const styles = StyleSheet.create({
     height: 0.5,
     backgroundColor: colors.grayBorder,
     marginVertical: 12,
+  },
+  forgotLink: {
+    fontSize: 15,
+    color: colors.blueDark,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 10,
   },
   errorBox: {
     backgroundColor: colors.redLight,

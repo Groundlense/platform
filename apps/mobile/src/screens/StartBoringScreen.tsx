@@ -49,11 +49,15 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
   const [sptIntervalM, setSptIntervalM] = useState(1.5);
 
   useEffect(() => {
-    if (!projectId) return;
-    storage.getProjectSptInterval(projectId).then(setSptIntervalM).catch(() => {});
-  }, [projectId]);
+    if (!projectId || !borehole?.id) return;
+    storage.getSptInterval(projectId, borehole.id).then(setSptIntervalM).catch(() => {});
+  }, [projectId, borehole?.id]);
 
-  const resuming = !!isResuming || borehole?.status === 'TERMINATED';
+  // Treat any borehole with recorded progress as a resume — an IN_PROGRESS
+  // boring reopened from the list must continue from its last depth, never
+  // restart at 0.0 m.
+  const resuming =
+    !!isResuming || borehole?.status === 'TERMINATED' || sessionCount > 0 || resumeDepth > 0;
 
   // Original coordinates as uploaded only — never a UTM-guessed conversion.
   // A wrong guess here would walk the worker to the wrong physical spot, so
@@ -145,8 +149,15 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
     }
   };
 
-  const startDepth = resuming ? resumeDepth : 0;
-  const nextIntervalNo = Math.floor(startDepth / sptIntervalM) + 1;
+  // currentDepth handed to the SPT loop is the depth of the UPCOMING test
+  // (the bottom of the interval about to be drilled). A fresh boring never
+  // tests at 0.0 m — the first SPT happens one interval down (e.g. 1.5 m).
+  // A resumed boring continues at the next grid depth after the deepest
+  // recorded data.
+  const startDepth = resuming
+    ? Math.round((Math.floor(resumeDepth / sptIntervalM + 1e-9) + 1) * sptIntervalM * 100) / 100
+    : sptIntervalM;
+  const nextIntervalNo = Math.max(1, Math.round(startDepth / sptIntervalM));
 
   // Real camera capture — queued locally, uploaded on sync once the first
   // interval of this session exists on the server.
@@ -182,29 +193,6 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
 
   const handleStartBoring = async () => {
     if (starting) return;
-
-    // The initial groundwater observation (IS 1892) is mandatory before the
-    // first session ever starts — the undisturbed 0 m reading can't be
-    // recreated once drilling begins.
-    if (!resuming && sessionCount === 0) {
-      const observations = await storage.getWaterTable(borehole.id);
-      if (!Array.isArray(observations) || observations.length === 0) {
-        Alert.alert(
-          lang === 'hi' ? 'भूजल स्तर आवश्यक' : 'Water table reading required',
-          lang === 'hi'
-            ? 'पहली बार बोरिंग शुरू करने से पहले प्रारंभिक भूजल स्तर दर्ज करना अनिवार्य है (IS 1892)।'
-            : 'Before starting this boring for the first time, record the initial groundwater level at 0 m (IS 1892).',
-          [
-            { text: lang === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-            {
-              text: lang === 'hi' ? 'अभी दर्ज करें' : 'Record now',
-              onPress: () => navigation.navigate('WaterTable', { borehole, projectId, currentDepth: 0 }),
-            },
-          ],
-        );
-        return;
-      }
-    }
 
     // Far from the planned point? Confirm before starting — the deviation
     // is recorded either way, never hidden.
@@ -391,9 +379,9 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
               </View>
             )}
             <View style={styles.resumeRow}>
-              <Text style={styles.resumeLbl}>{lang === 'hi' ? 'यहाँ से शुरू' : 'Resuming from'}</Text>
+              <Text style={styles.resumeLbl}>{lang === 'hi' ? 'अगला SPT' : 'Next SPT at'}</Text>
               <Text style={[styles.resumeVal, styles.resumeValRust]}>
-                {resumeDepth.toFixed(1)}m · Session {sessionCount + 1} · Interval {nextIntervalNo}
+                {startDepth.toFixed(1)}m · Session {sessionCount + 1} · Interval {nextIntervalNo}
               </Text>
             </View>
             <Text style={styles.resumeAuto}>{lang === 'hi' ? 'गहराई अपने आप मिली' : 'Restart depth auto-detected from recorded data'}</Text>
@@ -517,7 +505,9 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
 
         <TouchableOpacity style={styles.startBtn} onPress={handleStartBoring} disabled={starting}>
           <Text style={styles.startBtnText}>
-            ▶ {resuming ? `${t('resume', lang)} — ${resumeDepth.toFixed(1)}m` : t('startBoringBtn', lang)}
+            ▶ {resuming
+              ? `${t('resume', lang)} — ${lang === 'hi' ? 'अगला SPT' : 'next SPT'} ${startDepth.toFixed(1)}m`
+              : `${t('startBoringBtn', lang)} — ${lang === 'hi' ? 'पहला SPT' : 'first SPT'} ${startDepth.toFixed(1)}m`}
           </Text>
         </TouchableOpacity>
       </ScrollView>

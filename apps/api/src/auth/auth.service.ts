@@ -842,20 +842,35 @@ export class AuthService {
     };
   }
 
-  async forgotPassword(email: string) {
-    const user = await this.db.user.findUnique({
-      where: { email },
-    });
-    if (!user) {
-      throw new NotFoundException('No account found with this email');
+  /**
+   * Sends a password-reset OTP to an email OR a mobile number (SMS).
+   * Mobile is the field-worker path — their accounts often have no email.
+   */
+  async forgotPassword(input: { email?: string; mobile?: string }) {
+    const { email, mobile } = input;
+    if (!email && !mobile) {
+      throw new BadRequestException('Provide an email or mobile number');
     }
 
+    const user = mobile
+      ? await this.db.user.findFirst({ where: { mobile } })
+      : await this.db.user.findUnique({ where: { email } });
+    if (!user) {
+      throw new NotFoundException(
+        mobile
+          ? 'No account found with this mobile number'
+          : 'No account found with this email',
+      );
+    }
+
+    const type = mobile ? 'MOBILE' : 'EMAIL';
+    const target = (mobile ?? email)!;
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
     await this.db.otp.upsert({
       where: {
-        type_target: { type: 'EMAIL', target: email },
+        type_target: { type, target },
       },
       update: {
         code,
@@ -863,36 +878,76 @@ export class AuthService {
         expiresAt,
       },
       create: {
-        type: 'EMAIL',
-        target: email,
+        type,
+        target,
         code,
         verified: false,
         expiresAt,
       },
     });
 
-    await this.sendEmailOtp(email, code);
+    let isMock = true;
+    if (mobile) {
+      isMock = !(
+        process.env.TWILIO_ACCOUNT_SID &&
+        process.env.TWILIO_AUTH_TOKEN &&
+        process.env.TWILIO_PHONE_NUMBER
+      );
+      await this.sendSmsOtp(mobile, code);
+    } else {
+      isMock = !(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+      await this.sendEmailOtp(email!, code);
+    }
 
     return {
       success: true,
-      message: 'Password reset OTP sent successfully to your email.',
+      message: mobile
+        ? 'Password reset OTP sent to your mobile number.'
+        : 'Password reset OTP sent successfully to your email.',
+      isMock,
     };
   }
 
-  async resetPassword(email: string, code: string, newPassword: string) {
+  async resetPassword(input: {
+    email?: string;
+    mobile?: string;
+    code: string;
+    newPassword: string;
+  }) {
+    const { email, mobile, code, newPassword } = input;
+    if (!email && !mobile) {
+      throw new BadRequestException('Provide an email or mobile number');
+    }
+
+    const type = mobile ? 'MOBILE' : 'EMAIL';
+    const target = (mobile ?? email)!;
+
     const record = await this.db.otp.findUnique({
       where: {
-        type_target: { type: 'EMAIL', target: email },
+        type_target: { type, target },
       },
     });
 
-    if (!record || record.code !== code || record.expiresAt < new Date()) {
+    // Same mock bypass as verifyOtp: without an SMS provider configured the
+    // real code only ever lands in the server log, so '123456' stands in.
+    const smsMock =
+      type === 'MOBILE' &&
+      !(
+        process.env.TWILIO_ACCOUNT_SID &&
+        process.env.TWILIO_AUTH_TOKEN &&
+        process.env.TWILIO_PHONE_NUMBER
+      );
+    const codeOk =
+      (record && record.code === code && record.expiresAt >= new Date()) ||
+      (smsMock && code === '123456');
+
+    if (!codeOk) {
       throw new BadRequestException('Invalid or expired verification OTP');
     }
 
-    const user = await this.db.user.findUnique({
-      where: { email },
-    });
+    const user = mobile
+      ? await this.db.user.findFirst({ where: { mobile } })
+      : await this.db.user.findUnique({ where: { email } });
 
     if (!user) {
       throw new NotFoundException('User account not found');
@@ -900,15 +955,22 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
-    await this.db.$transaction([
-      this.db.user.update({
-        where: { id: user.id },
-        data: { passwordHash },
-      }),
-      this.db.otp.delete({
-        where: { type_target: { type: 'EMAIL', target: email } },
-      }),
-    ]);
+    await this.db.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+    if (record) {
+      await this.db.otp.delete({
+        where: { type_target: { type, target } },
+      });
+    }
+
+    await this.activityLogsService.log(
+      user.id,
+      'PASSWORD_RESET',
+      'USER',
+      user.id,
+    );
 
     return {
       success: true,
