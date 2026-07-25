@@ -14,7 +14,7 @@ const API_BASE = process.env.API_URL || "http://localhost:3000/api/v1";
  * token, and streams the file back. Use /api/media/:id as the <img> src.
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -23,10 +23,17 @@ export async function GET(
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
+  // Forward Range requests so <video> playback can seek without downloading
+  // the whole file (the backend's res.sendFile supports byte ranges).
+  const range = req.headers.get("range");
+
   let upstream: Response;
   try {
     upstream = await fetch(`${API_BASE}/media/${encodeURIComponent(id)}/file`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(range ? { Range: range } : {}),
+      },
       cache: "no-store",
     });
   } catch {
@@ -37,11 +44,18 @@ export async function GET(
     return new NextResponse("Not found", { status: upstream.status || 404 });
   }
 
+  const headers: Record<string, string> = {
+    "Content-Type": upstream.headers.get("content-type") ?? "application/octet-stream",
+    "Cache-Control": "private, max-age=300",
+  };
+  for (const h of ["content-range", "accept-ranges", "content-length"]) {
+    const v = upstream.headers.get(h);
+    if (v) headers[h] = v;
+  }
+
+  // 206 Partial Content passes through unchanged for range requests.
   return new NextResponse(upstream.body, {
-    status: 200,
-    headers: {
-      "Content-Type": upstream.headers.get("content-type") ?? "application/octet-stream",
-      "Cache-Control": "private, max-age=300",
-    },
+    status: upstream.status,
+    headers,
   });
 }

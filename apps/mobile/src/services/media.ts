@@ -21,6 +21,7 @@ export type PhotoPurpose =
   | 'SPT'
   | 'CORE_BOX'
   | 'CLOSURE'
+  | 'CLOSURE_VIDEO'
   | 'SAMPLE'
   | 'SITE_SETUP';
 
@@ -54,7 +55,9 @@ export interface QueuedPhoto {
 // physically impossible to take.
 let cameraKnownUnavailable = false;
 
-async function ensureAndroidCameraPermission(): Promise<boolean> {
+async function ensureAndroidCameraPermission(
+  lang: 'en' | 'hi' = 'hi'
+): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
   try {
     const alreadyGranted = await PermissionsAndroid.check(
@@ -64,11 +67,13 @@ async function ensureAndroidCameraPermission(): Promise<boolean> {
     const result = await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.CAMERA,
       {
-        title: 'Camera permission / कैमरा अनुमति',
+        title: lang === 'en' ? 'Camera permission' : 'कैमरा अनुमति',
         message:
-          'GroundLense needs the camera to photograph samples for the boring record. / नमूनों की फोटो लेने के लिए कैमरा चाहिए।',
-        buttonPositive: 'Allow / अनुमति दें',
-        buttonNegative: 'Deny / मना करें',
+          lang === 'en'
+            ? 'GroundLense needs the camera to photograph samples for the boring record.'
+            : 'नमूनों की फोटो लेने के लिए कैमरा चाहिए।',
+        buttonPositive: lang === 'en' ? 'Allow' : 'अनुमति दें',
+        buttonNegative: lang === 'en' ? 'Deny' : 'मना करें',
       }
     );
     return result === PermissionsAndroid.RESULTS.GRANTED;
@@ -88,12 +93,19 @@ export const media = {
    * worker cancelled / the camera is unavailable / permission was denied
    * (each failure shows an honest Alert — nothing is fabricated).
    */
-  async capturePhoto(purpose: PhotoPurpose): Promise<CapturedPhoto | null> {
-    const permitted = await ensureAndroidCameraPermission();
+  async capturePhoto(
+    purpose: PhotoPurpose,
+    lang: 'en' | 'hi' = 'hi'
+  ): Promise<CapturedPhoto | null> {
+    const permitted = await ensureAndroidCameraPermission(lang);
     if (!permitted) {
       Alert.alert(
-        'Camera permission denied / कैमरा अनुमति नहीं मिली',
-        'Allow camera access in phone settings to attach a real photo. You can continue without one. / फोन सेटिंग्स में कैमरा अनुमति दें। बिना फोटो भी जारी रख सकते हैं।'
+        lang === 'en'
+          ? 'Camera permission denied'
+          : 'कैमरा अनुमति नहीं मिली',
+        lang === 'en'
+          ? 'Allow camera access in phone settings to attach a real photo. You can continue without one.'
+          : 'फोन सेटिंग्स में कैमरा अनुमति दें। बिना फोटो भी जारी रख सकते हैं।'
       );
       return null;
     }
@@ -115,19 +127,27 @@ export const media = {
       if (result.errorCode === 'camera_unavailable') {
         cameraKnownUnavailable = true;
         Alert.alert(
-          'Camera unavailable / कैमरा उपलब्ध नहीं',
-          'No usable camera was found on this device. Continue without a photo. / इस डिवाइस पर कैमरा नहीं मिला। बिना फोटो जारी रखें।'
+          lang === 'en' ? 'Camera unavailable' : 'कैमरा उपलब्ध नहीं',
+          lang === 'en'
+            ? 'No usable camera was found on this device. Continue without a photo.'
+            : 'इस डिवाइस पर कैमरा नहीं मिला। बिना फोटो जारी रखें।'
         );
       } else if (result.errorCode === 'permission') {
         Alert.alert(
-          'Camera permission denied / कैमरा अनुमति नहीं मिली',
-          'Allow camera access in phone settings to attach a real photo. / फोन सेटिंग्स में कैमरा अनुमति दें।'
+          lang === 'en'
+            ? 'Camera permission denied'
+            : 'कैमरा अनुमति नहीं मिली',
+          lang === 'en'
+            ? 'Allow camera access in phone settings to attach a real photo.'
+            : 'फोन सेटिंग्स में कैमरा अनुमति दें।'
         );
       } else {
         Alert.alert(
-          'Camera error / कैमरा त्रुटि',
+          lang === 'en' ? 'Camera error' : 'कैमरा त्रुटि',
           result.errorMessage ||
-            'The camera could not be opened. / कैमरा नहीं खुल सका।'
+            (lang === 'en'
+              ? 'The camera could not be opened.'
+              : 'कैमरा नहीं खुल सका।')
         );
       }
       return null;
@@ -143,6 +163,73 @@ export const media = {
     return {
       uri: asset.uri,
       fileName: asset.fileName || `${purpose.toLowerCase()}_${Date.now()}.${ext}`,
+      type: mimeType,
+      ...(fix
+        ? { gpsLat: fix.lat, gpsLng: fix.lng, accuracyM: fix.accuracyM ?? undefined }
+        : {}),
+    };
+  },
+
+  /**
+   * Records a VIDEO with the real camera (closure / rig-removal depth
+   * verification). Same honesty rules as capturePhoto: null on cancel,
+   * unavailability or denied permission — never a fabricated file.
+   */
+  async captureVideo(
+    purpose: PhotoPurpose,
+    lang: 'en' | 'hi' = 'hi'
+  ): Promise<CapturedPhoto | null> {
+    const permitted = await ensureAndroidCameraPermission(lang);
+    if (!permitted) {
+      Alert.alert(
+        lang === 'en' ? 'Camera permission denied' : 'कैमरा अनुमति नहीं मिली',
+        lang === 'en'
+          ? 'Allow camera access in phone settings to record the video.'
+          : 'वीडियो के लिए फोन सेटिंग्स में कैमरा अनुमति दें।'
+      );
+      return null;
+    }
+
+    const gpsPromise = location.getCurrentPosition({ silent: true });
+
+    const result = await launchCamera({
+      mediaType: 'video',
+      videoQuality: 'low', // field uploads ride on 2G/3G — keep files small
+      durationLimit: 90,
+      saveToPhotos: false,
+      cameraType: 'back',
+    });
+
+    if (result.didCancel) return null;
+
+    if (result.errorCode) {
+      if (result.errorCode === 'camera_unavailable') {
+        cameraKnownUnavailable = true;
+        Alert.alert(
+          lang === 'en' ? 'Camera unavailable' : 'कैमरा उपलब्ध नहीं',
+          lang === 'en'
+            ? 'No usable camera was found on this device.'
+            : 'इस डिवाइस पर कैमरा नहीं मिला।'
+        );
+      } else {
+        Alert.alert(
+          lang === 'en' ? 'Camera error' : 'कैमरा त्रुटि',
+          result.errorMessage ||
+            (lang === 'en' ? 'The camera could not be opened.' : 'कैमरा नहीं खुल सका।')
+        );
+      }
+      return null;
+    }
+
+    const asset = result.assets && result.assets[0];
+    if (!asset?.uri) return null;
+
+    const fix = await gpsPromise;
+
+    const mimeType = asset.type || 'video/mp4';
+    return {
+      uri: asset.uri,
+      fileName: asset.fileName || `${purpose.toLowerCase()}_${Date.now()}.mp4`,
       type: mimeType,
       ...(fix
         ? { gpsLat: fix.lat, gpsLng: fix.lng, accuracyM: fix.accuracyM ?? undefined }

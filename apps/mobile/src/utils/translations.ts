@@ -188,15 +188,13 @@ export const translations = {
 };
 
 /**
- * Helper to translate keys dynamically with optional dual language presentation
+ * Translates a key into exactly the requested language — never both at
+ * once. The app must show one language at a time, matching the user's
+ * language toggle.
  */
-export function t(key: keyof typeof translations.en, lang: 'en' | 'hi' = 'en', showDual = true): string {
+export function t(key: keyof typeof translations.en, lang: 'en' | 'hi' = 'en'): string {
   const enVal = translations.en[key] || '';
   const hiVal = translations.hi[key] || '';
-  
-  if (showDual && enVal && hiVal && enVal !== hiVal) {
-    return `${enVal} / ${hiVal}`;
-  }
-  
-  return lang === 'hi' ? hiVal : enVal;
+
+  return lang === 'hi' ? (hiVal || enVal) : enVal;
 }

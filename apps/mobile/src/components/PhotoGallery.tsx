@@ -48,13 +48,13 @@ function fmtDateTime(iso: string | null): string {
   return `${d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}, ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-function fmtGps(p: GalleryPhoto): string {
-  if (p.gpsLat == null || p.gpsLng == null) return 'Not captured / दर्ज नहीं';
+function fmtGps(p: GalleryPhoto, lang: 'en' | 'hi'): string {
+  if (p.gpsLat == null || p.gpsLng == null) return lang === 'hi' ? 'दर्ज नहीं' : 'Not captured';
   const acc = p.accuracyM != null ? ` (±${Math.round(p.accuracyM)} m)` : '';
   return `${Math.abs(p.gpsLat).toFixed(6)}°${p.gpsLat >= 0 ? 'N' : 'S'}, ${Math.abs(p.gpsLng).toFixed(6)}°${p.gpsLng >= 0 ? 'E' : 'W'}${acc}`;
 }
 
-export default function PhotoGallery({ borehole }: { borehole: any }) {
+export default function PhotoGallery({ borehole, lang }: { borehole: any; lang: 'en' | 'hi' }) {
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<GalleryPhoto | null>(null);
@@ -63,9 +63,13 @@ export default function PhotoGallery({ borehole }: { borehole: any }) {
     try {
       const result: GalleryPhoto[] = [];
 
-      // 1. Locally queued photos (not yet synced)
+      // 1. Locally queued photos (not yet synced). Queued closure VIDEOS
+      // upload through the same queue but can't render in an <Image>
+      // thumbnail — skip them here like the server branch does below.
       const queue = await media.getPhotoQueue();
-      for (const q of queue.filter((p) => p.boreholeId === borehole.id)) {
+      for (const q of queue.filter(
+        (p) => p.boreholeId === borehole.id && !p.mimeType?.startsWith('video/'),
+      )) {
         result.push({
           key: `local-${q.id}`,
           uri: q.uri,
@@ -140,17 +144,17 @@ export default function PhotoGallery({ borehole }: { borehole: any }) {
         ['Structure Type', borehole.structureType || '—'],
         ['Chainage', borehole.chainage || '—'],
         ['Span', borehole.span || '—'],
-        ['GPS (capture)', fmtGps(selected)],
+        ['GPS (capture)', fmtGps(selected, lang)],
         ['Date / Time', fmtDateTime(selected.takenAt)],
         ['Type', `${selected.purpose ?? '—'}${selected.intervalNo != null ? ` · interval #${selected.intervalNo}` : ''}`],
-        ['Status', selected.pending ? '⏳ Waiting for sync / सिंक बाकी' : '✓ Synced / सिंक हो गया'],
+        ['Status', selected.pending ? (lang === 'hi' ? '⏳ सिंक बाकी' : '⏳ Waiting for sync') : (lang === 'hi' ? '✓ सिंक हो गया' : '✓ Synced')],
       ]
     : [];
 
   return (
     <View style={styles.card}>
       <Text style={styles.title}>
-        📷 Photos / फोटो ({photos.length})
+        📷 {lang === 'hi' ? 'फोटो' : 'Photos'} ({photos.length})
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         {photos.map((p) => (

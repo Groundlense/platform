@@ -9,13 +9,14 @@ import {
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
+import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
 import { api } from '../services/api';
 
 export default function TerminateScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, currentDepth } = route.params || {};
-  const [lang, setLang] = useState<'en' | 'hi'>('hi');
+  const { lang } = useLanguage();
 
   const depth = Number(currentDepth);
   const safeDepth = Number.isFinite(depth) && depth >= 0 ? depth : 0;
@@ -130,7 +131,7 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
       <View style={styles.container}>
         <View style={styles.popupCard}>
           <Text style={styles.popupTitle}>⏹ {t('confirmTerminate', lang)}</Text>
-          <Text style={styles.popupSub}>No borehole selected / कोई बोरहोल नहीं चुना गया</Text>
+          <Text style={styles.popupSub}>{lang === 'hi' ? 'कोई बोरहोल नहीं चुना गया' : 'No borehole selected'}</Text>
           <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.goBack()}>
             <Text style={styles.cancelBtnText}>{t('back', lang)}</Text>
           </TouchableOpacity>
@@ -149,7 +150,7 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
           </Text>
 
           {/* Reasons Grid */}
-          <Text style={styles.fieldLabel}>{t('reason', lang)} / कारण</Text>
+          <Text style={styles.fieldLabel}>{t('reason', lang)}</Text>
           <View style={styles.grid2x2}>
             {reasons.map((r) => {
               const isSelected = reason === r.code;
@@ -178,7 +179,7 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
               onPress={() => setWillResume(true)}
             >
               <Text style={[styles.tileText, willResume && styles.tileTextActive]}>
-                Yes — resume later / हाँ — बाद में
+                {lang === 'hi' ? 'हाँ — बाद में' : 'Yes — resume later'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -186,7 +187,7 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
               onPress={() => setWillResume(false)}
             >
               <Text style={[styles.tileText, !willResume && styles.tileTextActive]}>
-                No — permanent stop / नहीं
+                {lang === 'hi' ? 'नहीं' : 'No — permanent stop'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -210,7 +211,7 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
               style={styles.submitBtn}
               onPress={handleConfirm}
             >
-              <Text style={styles.submitBtnText}>Confirm / पुष्टि करें</Text>
+              <Text style={styles.submitBtnText}>{lang === 'hi' ? 'पुष्टि करें' : 'Confirm'}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

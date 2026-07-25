@@ -20,3 +20,16 @@ export function calculateProgress(completed: number, total: number): number {
   if (total === 0) return 0;
   return Math.round((completed / total) * 100);
 }
+
+// Bounds mirror the API DTOs (0.5–10 m); one decimal place because the DB
+// column is DECIMAL(4,1) and Postgres would otherwise round silently.
+export function validateSptIntervalM(raw: string): string | null {
+  const value = parseFloat(raw);
+  if (!Number.isFinite(value) || value < 0.5 || value > 10) {
+    return "SPT test interval must be between 0.5 and 10 m.";
+  }
+  if (Math.abs(value * 10 - Math.round(value * 10)) > 1e-9) {
+    return "SPT test interval supports at most one decimal place (e.g. 1.5 m).";
+  }
+  return null;
+}

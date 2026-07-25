@@ -9,16 +9,20 @@ import {
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
+import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
 import { api } from '../services/api';
 
 export default function BoringListScreen({ route, navigation }: { route: any; navigation: any }) {
   const { projectId, projectCode, projectName } = route.params || {};
 
-  const [lang, setLang] = useState<'en' | 'hi'>('hi');
+  const { lang, setLang } = useLanguage();
   const [boreholes, setBoreholes] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [offline, setOffline] = useState(false);
+  // True network failure vs. a server that answered with an error — the two
+  // used to be conflated as "offline" even when Wi-Fi/data was fine.
+  const [serverError, setServerError] = useState(false);
   // True when the list comes from the worker's real team assignments
   // (GET /boreholes/assigned) rather than the project-wide fallback.
   const [assignedMode, setAssignedMode] = useState(false);
@@ -37,7 +41,7 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
       if (fresh.length === 0) return;
       await storage.addSeenAssignments(fresh.map((bh: any) => bh.id));
       Alert.alert(
-        'New borehole assigned / नई बोरिंग सौंपी गई',
+        lang === 'hi' ? 'नई बोरिंग सौंपी गई' : 'New borehole assigned',
         fresh.map((bh: any) => bh.boreholeCode || bh.name || bh.id).join(', ')
       );
     } catch (err) {
@@ -48,6 +52,7 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
   const loadBoreholes = async () => {
     setLoading(true);
     setOffline(false);
+    setServerError(false);
     try {
       // Prefer the worker's real team assignments for this project.
       let fresh: any[] | null = null;
@@ -74,10 +79,15 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
       if (fromAssignments) {
         await notifyNewAssignments(fresh);
       }
-    } catch (err) {
-      // Offline (or server error) — fall back to whatever is cached.
-      // Never fabricate boreholes: an empty cache shows the honest empty state.
-      setOffline(true);
+    } catch (err: any) {
+      // No response at all = device has no network reaching the server.
+      // A response (even an error one, e.g. 401/500) means the server was
+      // reached — that's not "offline", it's a server-side problem.
+      const isNetworkError = !err?.response;
+      setOffline(isNetworkError);
+      setServerError(!isNetworkError);
+      // Either way, fall back to whatever is cached — never fabricate
+      // boreholes: an empty cache shows the honest empty state.
       try {
         const cached = await storage.getBoreholes(projectId);
         setBoreholes(cached);
@@ -153,17 +163,19 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
       case 'COMPLETED':
         return ['Complete', final, fmtDate(bh.completedAt)].filter(Boolean).join(' · ');
       case 'TERMINATED':
-        return ['Terminated', final, 'Resume today / आज जारी रखें'].filter(Boolean).join(' · ');
+        return ['Terminated', final, lang === 'hi' ? 'आज जारी रखें' : 'Resume today'].filter(Boolean).join(' · ');
       case 'IN_PROGRESS':
         return ['In progress', final && planned ? `${final} of ${planned}` : final || (planned ? `of ${planned}` : null)]
           .filter(Boolean)
           .join(' · ');
       case 'ABANDONED':
-        return 'Abandoned / छोड़ा गया';
+        return lang === 'hi' ? 'छोड़ा गया' : 'Abandoned';
       case 'SUSPENDED':
-        return 'Suspended / निलंबित';
+        return lang === 'hi' ? 'निलंबित' : 'Suspended';
       default:
-        return planned ? `Pending / बाकी है · planned ${planned}` : 'Pending / बाकी है';
+        return lang === 'hi'
+          ? (planned ? `बाकी है · planned ${planned}` : 'बाकी है')
+          : (planned ? `Pending · planned ${planned}` : 'Pending');
     }
   };
 
@@ -188,7 +200,7 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
           <Text style={styles.headerTitle}>{t('boringList', lang)}</Text>
         </View>
         <View style={styles.emptyBox}>
-          <Text style={styles.emptyTitle}>No project selected / कोई प्रोजेक्ट नहीं चुना गया</Text>
+          <Text style={styles.emptyTitle}>{lang === 'hi' ? 'कोई प्रोजेक्ट नहीं चुना गया' : 'No project selected'}</Text>
           <TouchableOpacity
             style={styles.primaryBtn}
             onPress={() => navigation.navigate('ProjectSelection')}
@@ -225,9 +237,9 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
             <Text style={styles.projSub}>
               {total > 0
                 ? assignedMode
-                  ? `${total} assigned to you / आपको सौंपी गई`
-                  : `${total} boring${total === 1 ? '' : 's'} in this project / इस प्रोजेक्ट में`
-                : 'No borings assigned yet / अभी कोई बोरिंग नहीं'}
+                  ? (lang === 'hi' ? 'आपको सौंपी गई' : `${total} assigned to you`)
+                  : (lang === 'hi' ? 'इस प्रोजेक्ट में' : `${total} boring${total === 1 ? '' : 's'} in this project`)
+                : (lang === 'hi' ? 'अभी कोई बोरिंग नहीं' : 'No borings assigned yet')}
             </Text>
           </View>
           <TouchableOpacity
@@ -238,11 +250,13 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
           </TouchableOpacity>
         </View>
 
-        {/* Offline notice */}
-        {offline && (
+        {/* Offline / server-error notice */}
+        {(offline || serverError) && (
           <View style={styles.offlineBox}>
             <Text style={styles.offlineText}>
-              Offline — showing saved data / ऑफलाइन — सहेजा गया डेटा
+              {offline
+                ? (lang === 'hi' ? 'ऑफलाइन — सहेजा गया डेटा दिखाया जा रहा है' : 'Offline — showing saved data')
+                : (lang === 'hi' ? 'सर्वर से कनेक्ट नहीं हो सका — सहेजा गया डेटा दिखाया जा रहा है' : "Couldn't reach the server — showing saved data")}
             </Text>
           </View>
         )}
@@ -253,20 +267,20 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
         {/* Loading / Empty / List */}
         {loading ? (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyTitle}>Loading borings… / लोड हो रहा है…</Text>
+            <Text style={styles.emptyTitle}>{lang === 'hi' ? 'लोड हो रहा है…' : 'Loading borings…'}</Text>
           </View>
         ) : total === 0 ? (
           <View style={styles.emptyBox}>
             <Text style={styles.emptyTitle}>
-              No borings assigned yet / कोई बोरिंग नहीं
+              {lang === 'hi' ? 'कोई बोरिंग नहीं' : 'No borings assigned yet'}
             </Text>
             <Text style={styles.emptySub}>
               {offline
-                ? 'Connect to the network and sync to load your borings. / नेटवर्क मिलने पर सिंक करें।'
-                : 'Ask your engineer to assign boreholes to this project. / इंजीनियर से बोरहोल असाइन करवाएं।'}
+                ? (lang === 'hi' ? 'नेटवर्क मिलने पर सिंक करें।' : 'Connect to the network and sync to load your borings.')
+                : (lang === 'hi' ? 'इंजीनियर से बोरहोल असाइन करवाएं।' : 'Ask your engineer to assign boreholes to this project.')}
             </Text>
             <TouchableOpacity style={styles.primaryBtn} onPress={loadBoreholes}>
-              <Text style={styles.primaryBtnText}>Retry / फिर कोशिश करें</Text>
+              <Text style={styles.primaryBtnText}>{lang === 'hi' ? 'फिर कोशिश करें' : 'Retry'}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -288,7 +302,7 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
                   </Text>
                 ) : (
                   <Text style={styles.bhCoordinatesNoGps}>
-                    ⚠️ No GPS coordinates mapped / जीपीएस मैप नहीं है
+                    {lang === 'hi' ? '⚠️ जीपीएस मैप नहीं है' : '⚠️ No GPS coordinates mapped'}
                   </Text>
                 )}
               </View>
@@ -316,7 +330,7 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
             onPress={() => handleSelectBorehole(terminatedBoring)}
           >
             <Text style={styles.primaryBtnText}>
-              {t('resume', lang)} {(terminatedBoring.boreholeCode || '').split('-').pop()} / जारी रखें
+              {t('resume', lang)} {(terminatedBoring.boreholeCode || '').split('-').pop()}
             </Text>
           </TouchableOpacity>
         ) : pendingBoring ? (
@@ -325,7 +339,7 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
             onPress={() => handleSelectBorehole(pendingBoring)}
           >
             <Text style={styles.primaryBtnText}>
-              {t('start', lang)} {(pendingBoring.boreholeCode || '').split('-').pop()} / शुरू करें
+              {t('start', lang)} {(pendingBoring.boreholeCode || '').split('-').pop()}
             </Text>
           </TouchableOpacity>
         ) : null}

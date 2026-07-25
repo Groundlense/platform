@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createProjectAction, createPaymentAction } from "@/app/actions/projects";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, validateSptIntervalM } from "@/lib/utils";
 
 interface GeotechOrg {
   id: string;
@@ -49,6 +49,7 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, epcOrgs, u
 
   // Step 2
   const [bhCount, setBhCount] = useState(3);
+  const [sptInterval, setSptInterval] = useState("1.5"); // meters between SPT tests
 
   // Created project + payment status
   const [project, setProject] = useState<any>(null);
@@ -86,6 +87,7 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, epcOrgs, u
     setTenderId("");
     setStartDate("");
     setBhCount(3);
+    setSptInterval("1.5");
     setProject(null);
     setPaymentRecorded(false);
     setError(null);
@@ -131,6 +133,13 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, epcOrgs, u
       setStep(1);
       return;
     }
+
+    const sptError = validateSptIntervalM(sptInterval);
+    if (sptError) {
+      setError(sptError);
+      setStep(2);
+      return;
+    }
     
     let targetGeotechOrgId = geotechOrgId.trim();
     if (orgType === "GEOTECH_CONTRACTOR" && user?.organizationId) {
@@ -155,6 +164,7 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, epcOrgs, u
     if (startDate) fd.set("startDate", startDate);
     if (endDate) fd.set("targetCompletionDate", endDate);
     if (tenderId) fd.set("tenderId", tenderId.trim());
+    fd.set("sptIntervalM", String(parseFloat(sptInterval)));
 
     startTransition(async () => {
       const res = await createProjectAction(fd);
@@ -230,7 +240,7 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, epcOrgs, u
               startDate={startDate} setStartDate={setStartDate}
             />
           )}
-          {step === 2 && <Step2 bhCount={bhCount} setBhCount={setBhCount} />}
+          {step === 2 && <Step2 bhCount={bhCount} setBhCount={setBhCount} sptInterval={sptInterval} setSptInterval={setSptInterval} />}
           {step === 3 && (
             <Step3
               projectCode={projectCode}
@@ -391,7 +401,17 @@ function Step1({
 }
 
 /* Step 2 — Boring setup (count drives the real payment amount) */
-function Step2({ bhCount, setBhCount }: { bhCount: number; setBhCount: (n: number) => void }) {
+const SPT_INTERVAL_OPTIONS = ["1.5", "3", "5"];
+
+function Step2({ bhCount, setBhCount, sptInterval, setSptInterval }: {
+  bhCount: number;
+  setBhCount: (n: number) => void;
+  sptInterval: string;
+  setSptInterval: (v: string) => void;
+}) {
+  const [customSpt, setCustomSpt] = useState(!SPT_INTERVAL_OPTIONS.includes(sptInterval));
+  // Only flag once something is typed — the Create button still blocks an empty value.
+  const customSptError = customSpt && sptInterval !== "" ? validateSptIntervalM(sptInterval) : null;
   return (
     <div className="animate-fade-in">
       <div className="section-lbl">Boring setup</div>
@@ -403,6 +423,62 @@ function Step2({ bhCount, setBhCount }: { bhCount: number; setBhCount: (n: numbe
           <span className="font-display text-[28px] font-semibold text-text-pri min-w-[40px] text-center">{bhCount}</span>
           <button onClick={() => setBhCount(bhCount + 1)} className="w-8 h-8 rounded-[7px] bg-bg-raised border border-border text-text-pri text-[16px] cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all">+</button>
           <span className="text-[11px] text-text-ter ml-2">@ {formatCurrency(5000)} each = <span className="text-amber-d font-medium">{formatCurrency(bhCount * 5000)}</span></span>
+        </div>
+      </div>
+
+      <div className="bg-bg-card border border-border rounded-lg mb-3" style={{ padding: "14px" }}>
+        <div className="text-[10px] text-text-sec uppercase tracking-wider mb-2">SPT test interval</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {SPT_INTERVAL_OPTIONS.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => { setCustomSpt(false); setSptInterval(opt); }}
+              className={`rounded-[7px] text-[12px] font-medium cursor-pointer transition-all border ${
+                !customSpt && sptInterval === opt
+                  ? "bg-rust-mid border-rust-mid text-text-pri"
+                  : "bg-bg-raised border-border text-text-sec hover:border-rust-mid hover:text-rust-d"
+              }`}
+              style={{ padding: "8px 18px" }}
+            >
+              {opt} m
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => { if (!customSpt) { setCustomSpt(true); setSptInterval(""); } }}
+            className={`rounded-[7px] text-[12px] font-medium cursor-pointer transition-all border ${
+              customSpt
+                ? "bg-rust-mid border-rust-mid text-text-pri"
+                : "bg-bg-raised border-border text-text-sec hover:border-rust-mid hover:text-rust-d"
+            }`}
+            style={{ padding: "8px 18px" }}
+          >
+            Custom
+          </button>
+          {customSpt && (
+            <span className="flex items-center gap-1">
+              <input
+                type="number"
+                step={0.1}
+                min={0.5}
+                max={10}
+                autoFocus
+                value={sptInterval}
+                onChange={(e) => setSptInterval(e.target.value)}
+                placeholder="e.g. 2"
+                className="w-[80px] rounded-[7px] text-[12px] bg-bg-raised border border-border text-text-pri outline-none focus:border-rust-mid"
+                style={{ padding: "8px 10px" }}
+              />
+              <span className="text-[11px] text-text-sec">m</span>
+            </span>
+          )}
+        </div>
+        {customSptError && (
+          <div className="text-[10px] text-rust-d mt-2">{customSptError}</div>
+        )}
+        <div className="text-[9px] text-text-ter mt-2 leading-relaxed">
+          Depth interval between SPT tests for every boring in this project — 0.5 to 10 m, one decimal place. Locked once fieldwork starts.
         </div>
       </div>
 

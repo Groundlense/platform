@@ -71,6 +71,8 @@ export class ProjectsService {
         createdByUserId: userId,
         epcOrganizationId: dto.epcOrganizationId || epcOrgId,
         geotechOrganizationId: dto.geotechOrganizationId || geotechOrgId,
+        // DB default (1.5 m) applies when the client doesn't send it.
+        ...(dto.sptIntervalM != null ? { sptIntervalM: dto.sptIntervalM } : {}),
       },
     });
 
@@ -203,6 +205,7 @@ export class ProjectsService {
       data.endDate = endDate;
       data.targetCompletionDate = endDate;
     }
+    if (dto.sptIntervalM !== undefined) data.sptIntervalM = dto.sptIntervalM;
 
     const project = await this.db.project.update({
       where: { id: projectId },

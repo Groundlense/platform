@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { colors } from '../utils/theme';
 import { t } from '../utils/translations';
+import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
 import { calculateRawN, calculateOverburdenCorrection, applyDilatancyCorrection, getDensityInterpretation } from '../utils/calculations';
 import { media } from '../services/media';
@@ -17,7 +18,7 @@ import { media } from '../services/media';
 export default function SPTEntryScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, sessionId, currentDepth, intervalNo } = route.params ?? {};
 
-  const [lang, setLang] = useState<'en' | 'hi'>('hi');
+  const { lang, setLang } = useLanguage();
 
   // Blow count states — always entered fresh per interval, never pre-filled.
   const [blow15, setBlow15] = useState(0); // 0-15cm
@@ -35,6 +36,9 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
 
   const [photoCaptured, setPhotoCaptured] = useState(false);
 
+  // Project-level SPT spacing (set at project setup, locked once boring starts)
+  const [sptIntervalM, setSptIntervalM] = useState(1.5);
+
   useEffect(() => {
     if (!borehole?.id) return;
     (async () => {
@@ -44,8 +48,11 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
         const depth = Number(latest.depth);
         if (Number.isFinite(depth)) setWaterTableDepth(depth);
       }
+      if (projectId) {
+        setSptIntervalM(await storage.getProjectSptInterval(projectId));
+      }
     })();
-  }, [borehole?.id]);
+  }, [borehole?.id, projectId]);
 
   // Missing navigation params — never fabricate a borehole.
   if (!borehole?.id || currentDepth == null || intervalNo == null) {
@@ -56,7 +63,7 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
         </View>
         <View style={{ padding: 24 }}>
           <Text style={{ fontSize: 18, color: colors.redMid, fontWeight: '700' }}>
-            Boring data missing — reopen from the boring list. / डेटा नहीं मिला — सूची से दोबारा खोलें।
+            {lang === 'hi' ? 'डेटा नहीं मिला — सूची से दोबारा खोलें।' : 'Boring data missing — reopen from the boring list.'}
           </Text>
           <TouchableOpacity style={[styles.nextBtn, { marginTop: 16 }]} onPress={() => navigation.goBack()}>
             <Text style={styles.nextBtnText}>← Back</Text>
@@ -66,10 +73,11 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
     );
   }
 
-  // Planned interval count from the engineer's real planned depth (1.5 m spacing)
+  // Planned interval count from the engineer's real planned depth, using
+  // the project's configured SPT spacing
   const plannedDepthNum = Number(borehole.plannedDepth);
   const plannedIntervals = Number.isFinite(plannedDepthNum) && plannedDepthNum > 0
-    ? Math.ceil(plannedDepthNum / 1.5)
+    ? Math.ceil(plannedDepthNum / sptIntervalM)
     : null;
 
   // Computed values
@@ -101,7 +109,7 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
   // Real camera capture — photo is queued locally and uploaded on sync
   // once this interval exists on the server.
   const handleTakePhoto = async () => {
-    const shot = await media.capturePhoto('SPT');
+    const shot = await media.capturePhoto('SPT', lang);
     if (!shot) return; // cancelled / unavailable / denied — honest Alert already shown
     await media.queuePhoto({
       boreholeId: borehole.id,
@@ -121,7 +129,7 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
   const handleNext = () => {
     if (!isRefusal && blow30 === 0 && blow45 === 0) {
       Alert.alert(
-        'Blows Required / ब्लो गिनती दर्ज करें',
+        lang === 'hi' ? 'ब्लो गिनती दर्ज करें' : 'Blows Required',
         'Enter the blow counts for the 15–30cm and 30–45cm drives (or mark refusal).'
       );
       return;
@@ -160,11 +168,11 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
     // exists, ask before moving on without the split spoon photo.
     if (!photoCaptured && !media.isCameraKnownUnavailable()) {
       Alert.alert(
-        'No photo attached / फोटो नहीं ली गई',
-        'Take the split spoon photo before continuing? / आगे बढ़ने से पहले स्प्लिट स्पून फोटो लें?',
+        lang === 'hi' ? 'फोटो नहीं ली गई' : 'No photo attached',
+        lang === 'hi' ? 'आगे बढ़ने से पहले स्प्लिट स्पून फोटो लें?' : 'Take the split spoon photo before continuing?',
         [
-          { text: '📷 Take photo / फोटो लें', onPress: () => { handleTakePhoto(); } },
-          { text: 'Continue without photo / बिना फोटो जारी रखें', onPress: goToSoilDescription },
+          { text: lang === 'hi' ? '📷 फोटो लें' : '📷 Take photo', onPress: () => { handleTakePhoto(); } },
+          { text: lang === 'hi' ? 'बिना फोटो जारी रखें' : 'Continue without photo', onPress: goToSoilDescription },
         ]
       );
       return;
@@ -233,7 +241,7 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
 
         {/* Active interval values */}
         <Text style={styles.fieldLabel}>
-          Blows count / ब्लो गिनती — tap segment to edit
+          {lang === 'hi' ? 'ब्लो गिनती — tap segment to edit' : 'Blows count — tap segment to edit'}
         </Text>
         <View style={styles.blowGrid}>
           <TouchableOpacity
@@ -303,7 +311,9 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
         <Text style={styles.fieldLabel}>
           {waterTableDepth !== undefined
             ? `Overburden correction uses recorded WT at ${waterTableDepth.toFixed(2)} m`
-            : 'WT not recorded yet — overburden correction assumes dry profile / भूजल स्तर दर्ज नहीं'}
+            : lang === 'hi'
+              ? 'भूजल स्तर दर्ज नहीं'
+              : 'WT not recorded yet — overburden correction assumes dry profile'}
         </Text>
 
         {/* Dilatancy prompt */}
@@ -341,7 +351,9 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
 
         {isRefusal && (
           <View style={styles.refusalBox}>
-            <Text style={styles.refusalTitle}>Refusal — partial penetration before N=100</Text>
+            <Text style={styles.refusalTitle}>
+              {lang === 'hi' ? 'रिफ्यूजल — कितने mm तक घुसा (IS 2131)' : 'Refusal — partial penetration before N=100'}
+            </Text>
             <View style={styles.refusalInputRow}>
               <TextInput
                 style={styles.refusalInput}
@@ -351,7 +363,6 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
               />
               <Text style={styles.refusalUnit}>mm penetrated (of 150mm)</Text>
             </View>
-            <Text style={styles.refusalSub}>रिफ्यूजल — कितने mm तक घुसा (IS 2131)</Text>
           </View>
         )}
 
@@ -362,7 +373,7 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
         >
           <Text style={[styles.photoBtnText, photoCaptured && styles.photoBtnTextDone]}>
             {photoCaptured
-              ? '✓ Photo captured — uploads on sync / फोटो ली गई'
+              ? (lang === 'hi' ? '✓ फोटो ली गई' : '✓ Photo captured — uploads on sync')
               : `📷 ${t('splitSpoonPhoto', lang)}`}
           </Text>
         </TouchableOpacity>

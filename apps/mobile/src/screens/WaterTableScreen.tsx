@@ -10,12 +10,13 @@ import {
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
+import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
 
 export default function WaterTableScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, currentDepth } = route.params;
-  const [lang, setLang] = useState<'en' | 'hi'>('hi');
+  const { lang } = useLanguage();
 
   // Inputs always start empty — the worker records what they observe.
   const [wtDepth, setWtDepth] = useState('');
@@ -54,9 +55,11 @@ export default function WaterTableScreen({ route, navigation }: { route: any; na
       );
 
       Alert.alert(
-        'Water Table Logged / भूजल स्तर दर्ज',
+        lang === 'hi' ? 'भूजल स्तर दर्ज' : 'Water Table Logged',
         readingType === 'DRILLING_LEVEL'
-          ? `Water table level logged at ${wtDepth}m.\n\nRecord the 24-hour stable reading tomorrow from this screen — reminder notifications coming soon. / 24 घंटे बाद स्थिर रीडिंग दर्ज करें।`
+          ? (lang === 'hi'
+              ? `24 घंटे बाद स्थिर रीडिंग दर्ज करें।`
+              : `Water table level logged at ${wtDepth}m.\n\nRecord the 24-hour stable reading tomorrow from this screen — reminder notifications coming soon.`)
           : `24-hour stable reading logged at ${wtDepth}m (IS 6935).`,
         [
           {
@@ -89,7 +92,7 @@ export default function WaterTableScreen({ route, navigation }: { route: any; na
               onPress={() => setReadingType('DRILLING_LEVEL')}
             >
               <Text style={[styles.toggleBtnText, readingType === 'DRILLING_LEVEL' && styles.toggleBtnTextActive]}>
-                During drilling / ड्रिलिंग के दौरान
+                {lang === 'hi' ? 'ड्रिलिंग के दौरान' : 'During drilling'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -97,7 +100,7 @@ export default function WaterTableScreen({ route, navigation }: { route: any; na
               onPress={() => setReadingType('STABILIZED_LEVEL')}
             >
               <Text style={[styles.toggleBtnText, readingType === 'STABILIZED_LEVEL' && styles.toggleBtnTextActive]}>
-                24hr stable / 24 घंटे स्थिर
+                {lang === 'hi' ? '24 घंटे स्थिर' : '24hr stable'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -128,7 +131,7 @@ export default function WaterTableScreen({ route, navigation }: { route: any; na
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.fieldLabel}>Remarks / टिप्पणी</Text>
+            <Text style={styles.fieldLabel}>{lang === 'hi' ? 'टिप्पणी' : 'Remarks'}</Text>
             <TextInput
               style={styles.input}
               value={remarks}

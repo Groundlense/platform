@@ -69,6 +69,7 @@ enum SampleType {
 
 enum MediaType {
   PHOTO
+  VIDEO
   DOCUMENT
 }
 
@@ -84,6 +85,7 @@ enum PhotoType {
   CORE_BOX
   SITE_SETUP
   WATER_LEVEL
+  CLOSURE_VIDEO
 }
 
 enum WaterReadingType {
@@ -456,6 +458,9 @@ model Project {
   totalBoringsPlanned  Int?
   targetCompletionDate DateTime?
   lockedAt             DateTime?
+  // Depth interval in meters between SPT tests (typical 1.5 / 3 / 5).
+  // Part of project setup — frozen once fieldwork starts.
+  sptIntervalM         Decimal   @default(1.5) @db.Decimal(4, 1)
 
   // Relations
   epcOrganization     Organization? @relation("ProjectEpcOrganization", fields: [epcOrganizationId], references: [id])

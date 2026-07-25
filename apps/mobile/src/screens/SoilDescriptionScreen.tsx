@@ -10,10 +10,11 @@ import {
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
+import { useLanguage } from '../utils/LanguageContext';
 
 export default function SoilDescriptionScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, sessionId, currentDepth, intervalNo, sptData } = route.params;
-  const [lang, setLang] = useState<'en' | 'hi'>('hi');
+  const { lang, setLang } = useLanguage();
 
   // Selection states
   const [selectedSoil, setSelectedSoil] = useState('Sand');
@@ -23,15 +24,15 @@ export default function SoilDescriptionScreen({ route, navigation }: { route: an
 
   // Soil types mapping matching the specification
   const soilTypes = [
-    { code: 'Sand', name: 'Sand / बालू', hi: 'SP / SW', icon: '🟤', mappedCode: 'SP — Poorly graded sand' },
-    { code: 'Clay', name: 'Clay / मिट्टी', hi: 'CI / CH', icon: '🟫', mappedCode: 'CH — Highly plastic clay' },
-    { code: 'Silt', name: 'Silt / गाद', hi: 'ML / MH', icon: '⚫', mappedCode: 'ML — Low plasticity silt' },
-    { code: 'Rock', name: 'Rock / चट्टान', hi: 'Rocky', icon: '🪨', mappedCode: 'ROCK — Core recovery mode' },
-    { code: 'Red Clay', name: 'Red Clay', hi: 'Lateritic · CI', icon: '🔴', mappedCode: 'CI — Medium plastic clay' },
-    { code: 'Boulder Clay', name: 'Boulder clay', hi: 'With boulders', icon: '🗿', mappedCode: 'GC — Clayey gravel with boulders' },
-    { code: 'Silty Sand', name: 'Silty Sand', hi: 'SM · ML-CL', icon: '🔵', mappedCode: 'SM — Silty sand' },
-    { code: 'Sandy Silt', name: 'Sandy Silt', hi: 'ML-CL · gravel', icon: '🟡', mappedCode: 'ML — Sandy silt' },
-    { code: 'Filled Soil', name: 'Filled soil ★', hi: 'भरी हुई / disturbed', icon: '⚠️', mappedCode: 'FILL — Disturbed filled soil' },
+    { code: 'Sand', nameEn: 'Sand', nameHi: 'बालू', hi: 'SP / SW', icon: '🟤', mappedCode: 'SP — Poorly graded sand' },
+    { code: 'Clay', nameEn: 'Clay', nameHi: 'मिट्टी', hi: 'CI / CH', icon: '🟫', mappedCode: 'CH — Highly plastic clay' },
+    { code: 'Silt', nameEn: 'Silt', nameHi: 'गाद', hi: 'ML / MH', icon: '⚫', mappedCode: 'ML — Low plasticity silt' },
+    { code: 'Rock', nameEn: 'Rock', nameHi: 'चट्टान', hi: 'Rocky', icon: '🪨', mappedCode: 'ROCK — Core recovery mode' },
+    { code: 'Red Clay', nameEn: 'Red Clay', nameHi: 'Red Clay', hi: 'Lateritic · CI', icon: '🔴', mappedCode: 'CI — Medium plastic clay' },
+    { code: 'Boulder Clay', nameEn: 'Boulder clay', nameHi: 'Boulder clay', hi: 'With boulders', icon: '🗿', mappedCode: 'GC — Clayey gravel with boulders' },
+    { code: 'Silty Sand', nameEn: 'Silty Sand', nameHi: 'Silty Sand', hi: 'SM · ML-CL', icon: '🔵', mappedCode: 'SM — Silty sand' },
+    { code: 'Sandy Silt', nameEn: 'Sandy Silt', nameHi: 'Sandy Silt', hi: 'ML-CL · gravel', icon: '🟡', mappedCode: 'ML — Sandy silt' },
+    { code: 'Filled Soil', nameEn: 'Filled soil ★', nameHi: 'Filled soil ★', hi: 'भरी हुई / disturbed', icon: '⚠️', mappedCode: 'FILL — Disturbed filled soil' },
   ];
 
   const colorsList = [
@@ -43,10 +44,10 @@ export default function SoilDescriptionScreen({ route, navigation }: { route: an
   ];
 
   const consistencies = [
-    { name: 'Loose / ढीला', val: 'Loose' },
-    { name: 'Medium / मध्यम', val: 'Medium' },
-    { name: 'Dense / घना', val: 'Dense' },
-    { name: 'Stiff / कड़ा', val: 'Stiff' },
+    { nameEn: 'Loose', nameHi: 'ढीला', val: 'Loose' },
+    { nameEn: 'Medium', nameHi: 'मध्यम', val: 'Medium' },
+    { nameEn: 'Dense', nameHi: 'घना', val: 'Dense' },
+    { nameEn: 'Stiff', nameHi: 'कड़ा', val: 'Stiff' },
   ];
 
   const currentSoilMap = soilTypes.find(s => s.code === selectedSoil) || soilTypes[0];
@@ -55,8 +56,10 @@ export default function SoilDescriptionScreen({ route, navigation }: { route: an
   const handleVoiceNote = () => {
     // No speech-to-text library is installed — honest disabled state, never fabricate a transcript.
     Alert.alert(
-      'Voice transcription coming soon / वॉयस जल्द',
-      'Speech-to-text is not available in this version. Please type your observation in the note box below. / अभी वॉयस सुविधा उपलब्ध नहीं है — नीचे नोट बॉक्स में लिखें।'
+      lang === 'hi' ? 'वॉयस जल्द' : 'Voice transcription coming soon',
+      lang === 'hi'
+        ? 'अभी वॉयस सुविधा उपलब्ध नहीं है — नीचे नोट बॉक्स में लिखें।'
+        : 'Speech-to-text is not available in this version. Please type your observation in the note box below.'
     );
   };
 
@@ -67,13 +70,17 @@ export default function SoilDescriptionScreen({ route, navigation }: { route: an
       uscsCode: currentSoilMap.mappedCode.split(' ')[0],
       color: colorsList.find(c => c.value === selectedColor)?.name || 'Brown',
       consistency: selectedConsistency,
-      description: `${selectedConsistency} ${currentSoilMap.name.split(' ')[0]} of ${colorsList.find(c => c.value === selectedColor)?.name || 'Brown'} color.`,
+      description: `${selectedConsistency} ${currentSoilMap.nameEn.split(' ')[0]} of ${colorsList.find(c => c.value === selectedColor)?.name || 'Brown'} color.`,
       fieldNote: fieldNoteText.trim() || undefined,
     };
 
     if (isRock) {
       // Rock encountered — exit the SPT loop and switch to core mode (Screen 8).
-      navigation.navigate('RockCoring', {
+      // replace (not navigate): this screen shouldn't stay on the back
+      // stack once we're in Rock Coring — Back from RockCoring landing
+      // here again (with "Rock" still selected) is what let the flow be
+      // re-entered repeatedly ("stuck in a loop").
+      navigation.replace('RockCoring', {
         borehole,
         projectId,
         sessionId,
@@ -134,7 +141,7 @@ export default function SoilDescriptionScreen({ route, navigation }: { route: an
               >
                 <Text style={styles.soilIcon}>{s.icon}</Text>
                 <Text style={[styles.soilName, isSelected && styles.soilTextSelected]}>
-                  {s.name}
+                  {lang === 'hi' ? s.nameHi : s.nameEn}
                 </Text>
                 <Text style={[styles.soilHi, isSelected && styles.soilTextSelected]}>
                   {s.hi}
@@ -187,7 +194,7 @@ export default function SoilDescriptionScreen({ route, navigation }: { route: an
                   styles.consistencyText,
                   isSelected && styles.consistencyTextActive
                 ]}>
-                  {c.name}
+                  {lang === 'hi' ? c.nameHi : c.nameEn}
                 </Text>
               </TouchableOpacity>
             );
@@ -197,27 +204,30 @@ export default function SoilDescriptionScreen({ route, navigation }: { route: an
         {/* Voice note — speech-to-text not installed, honest disabled state */}
         <TouchableOpacity style={styles.voiceBtnDisabled} onPress={handleVoiceNote}>
           <Text style={styles.voiceBtnDisabledText}>
-            🎙 Voice transcription coming soon / वॉयस जल्द
+            🎙 {lang === 'hi' ? 'वॉयस जल्द' : 'Voice transcription coming soon'}
           </Text>
         </TouchableOpacity>
 
         {/* Typed field note — replaces voice note until speech is available */}
-        <Text style={styles.fieldLabel}>Field note (optional) / टिप्पणी (वैकल्पिक)</Text>
+        <Text style={styles.fieldLabel}>{lang === 'hi' ? 'टिप्पणी (वैकल्पिक)' : 'Field note (optional)'}</Text>
         <TextInput
           style={styles.noteInput}
           multiline
           numberOfLines={3}
           value={fieldNoteText}
           onChangeText={setFieldNoteText}
-          placeholder="Type any unusual observation here / यहाँ लिखें"
+          placeholder={lang === 'hi' ? 'यहाँ लिखें' : 'Type any unusual observation here'}
           placeholderTextColor={colors.grayMid}
         />
 
         {/* Rock branch notice */}
         {isRock ? (
           <View style={styles.rockNotice}>
-            <Text style={styles.rockNoticeTitle}>Rock encountered — switching to core mode</Text>
-            <Text style={styles.rockNoticeSub}>चट्टान मिली — रॉक कोरिंग शुरू करें</Text>
+            {lang === 'hi' ? (
+              <Text style={styles.rockNoticeSub}>चट्टान मिली — रॉक कोरिंग शुरू करें</Text>
+            ) : (
+              <Text style={styles.rockNoticeTitle}>Rock encountered — switching to core mode</Text>
+            )}
           </View>
         ) : null}
 
@@ -227,7 +237,9 @@ export default function SoilDescriptionScreen({ route, navigation }: { route: an
           onPress={handleNext}
         >
           <Text style={styles.nextBtnText}>
-            {isRock ? 'Next → Rock coring / रॉक कोरिंग' : 'Next → Sample collection'}
+            {isRock
+              ? (lang === 'hi' ? 'रॉक कोरिंग' : 'Next → Rock coring')
+              : 'Next → Sample collection'}
           </Text>
         </TouchableOpacity>
       </ScrollView>

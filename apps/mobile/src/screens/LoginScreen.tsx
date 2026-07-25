@@ -14,12 +14,14 @@ import {
 } from 'react-native';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
+import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
 import { api } from '../services/api';
+import { sha256Hex } from '../utils/hash';
 
 export default function LoginScreen({ navigation }: { navigation: any }) {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
-  const [lang, setLang] = useState<'en' | 'hi'>('en');
+  const { lang, setLang } = useLanguage();
 
   // Login inputs
   const [loginId, setLoginId] = useState('');
@@ -30,7 +32,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   const handleLogin = async () => {
     const identifier = loginId.trim();
     if (!identifier || !loginPin) {
-      setLoginError('Enter your worker ID and PIN / वर्कर ID और पिन दर्ज करें');
+      setLoginError(lang === 'hi' ? 'वर्कर ID और पिन दर्ज करें' : 'Enter your worker ID and PIN');
       return;
     }
     setLoginError('');
@@ -48,40 +50,81 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
       const wiped = await storage.ensureCacheOwner(profile?.id);
       if (wiped) {
         Alert.alert(
-          'Fresh start / नया खाता',
-          'Cached data from the previous account was cleared. Your projects will load from the server. / पिछले खाते का डेटा हटा दिया गया।'
+          lang === 'hi' ? 'नया खाता' : 'Fresh start',
+          lang === 'hi'
+            ? 'पिछले खाते का डेटा हटा दिया गया।'
+            : 'Cached data from the previous account was cleared. Your projects will load from the server.'
         );
       }
 
       await storage.saveUser(profile);
+
+      // Record everything needed to log this worker in offline later:
+      // every identifier they might type (code, email, mobile) plus a
+      // hash of the PIN they just used.
+      await storage.saveOfflineLogin({
+        userId: profile?.id,
+        identifiers: [
+          profile?.employeeCode,
+          profile?.email,
+          profile?.phone,
+          profile?.mobile,
+          identifier,
+        ]
+          .filter(Boolean)
+          .map((v: any) => String(v).trim().toLowerCase()),
+        pinHash: sha256Hex(loginPin),
+      });
+
       navigation.replace('ProjectSelection');
     } catch (err: any) {
       const isNetworkError = !err?.response;
       if (isNetworkError) {
         // Offline: allow continuing ONLY for the user who previously logged
-        // in on this device, matched by the entered worker ID. No tokens are
-        // fabricated — the stored session is reused and the normal
-        // 401/refresh flow handles expiry once back online.
+        // in on this device. Identifier is matched against every known id
+        // (code/email/mobile) and the PIN is verified against the stored
+        // hash. No tokens are fabricated — the stored session is reused and
+        // the normal 401/refresh flow handles expiry once back online.
+        const offlineRecord = await storage.getOfflineLogin();
         const storedUser = await storage.getUser();
-        const storedIds = storedUser
-          ? [storedUser.employeeCode, storedUser.email].filter(Boolean)
-          : [];
-        const matchesStoredUser = storedIds.some(
-          (v: string) => String(v).toLowerCase() === identifier.toLowerCase()
+        const enteredId = identifier.toLowerCase();
+
+        const knownIds = new Set(
+          (offlineRecord?.identifiers || []).concat(
+            storedUser
+              ? [storedUser.employeeCode, storedUser.email, storedUser.phone, storedUser.mobile]
+                  .filter(Boolean)
+                  .map((v: any) => String(v).trim().toLowerCase())
+              : []
+          )
         );
-        if (matchesStoredUser) {
+        const matchesStoredUser = knownIds.has(enteredId);
+        // Older installs have no stored PIN hash — fall back to id-only match.
+        const pinOk = offlineRecord?.pinHash
+          ? sha256Hex(loginPin) === offlineRecord.pinHash
+          : true;
+
+        if (matchesStoredUser && pinOk) {
           navigation.replace('ProjectSelection');
           return;
         }
+        if (matchesStoredUser && !pinOk) {
+          setLoginError(lang === 'hi' ? 'गलत पिन' : 'Incorrect PIN');
+          return;
+        }
         setLoginError(
-          storedUser
-            ? 'You are offline — use the worker ID you last logged in with / आप ऑफलाइन हैं — पिछली बार वाली वर्कर ID इस्तेमाल करें'
-            : 'Connect to the internet for first login / पहली बार लॉगिन के लिए इंटरनेट से जुड़ें'
+          storedUser || offlineRecord
+            ? (lang === 'hi'
+                ? 'आप ऑफलाइन हैं — पिछली बार वाली वर्कर ID इस्तेमाल करें'
+                : 'You are offline — use the worker ID you last logged in with')
+            : (lang === 'hi'
+                ? 'पहली बार लॉगिन के लिए इंटरनेट से जुड़ें'
+                : 'Connect to the internet for first login')
         );
       } else {
         const serverMsg = err.response?.data?.message;
         setLoginError(
-          'Login failed — check your ID and PIN / लॉगिन विफल — ID और पिन जांचें' +
+          (lang === 'hi' ? 'लॉगिन विफल — ID और पिन जांचें' : 'Login failed — check your ID and PIN') +
             (serverMsg ? `\n(${Array.isArray(serverMsg) ? serverMsg.join(', ') : serverMsg})` : '')
         );
       }
@@ -101,15 +144,15 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   const handleRegister = async () => {
     const mobile = regMobile.trim();
     if (!mobile || !regPassword || !regConfirmPassword) {
-      setRegError('Enter your mobile number and password / मोबाइल नंबर और पासवर्ड दर्ज करें');
+      setRegError(lang === 'hi' ? 'मोबाइल नंबर और पासवर्ड दर्ज करें' : 'Enter your mobile number and password');
       return;
     }
     if (regPassword.length < 4) {
-      setRegError('Password must be at least 4 characters / पासवर्ड कम से कम 4 अक्षर का होना चाहिए');
+      setRegError(lang === 'hi' ? 'पासवर्ड कम से कम 4 अक्षर का होना चाहिए' : 'Password must be at least 4 characters');
       return;
     }
     if (regPassword !== regConfirmPassword) {
-      setRegError('Passwords do not match / पासवर्ड मेल नहीं खाते');
+      setRegError(lang === 'hi' ? 'पासवर्ड मेल नहीं खाते' : 'Passwords do not match');
       return;
     }
     setRegError('');
@@ -121,15 +164,19 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
       setRegPassword('');
       setRegConfirmPassword('');
       Alert.alert(
-        'Account activated / खाता सक्रिय',
-        'Account activated successfully! Please log in now. / खाता सफलतापूर्वक सक्रिय हो गया! कृपया अब लॉगिन करें।'
+        lang === 'hi' ? 'खाता सक्रिय' : 'Account activated',
+        lang === 'hi'
+          ? 'खाता सफलतापूर्वक सक्रिय हो गया! कृपया अब लॉगिन करें।'
+          : 'Account activated successfully! Please log in now.'
       );
       setActiveTab('login');
     } catch (err: any) {
       const serverMsg = err.response?.data?.message;
       setRegError(
-        'Activation failed / सक्रियण विफल रहा\n' +
-          (serverMsg ? (Array.isArray(serverMsg) ? serverMsg.join(', ') : serverMsg) : 'Check mobile number / मोबाइल नंबर जांचें')
+        (lang === 'hi' ? 'सक्रियण विफल रहा' : 'Activation failed') + '\n' +
+          (serverMsg
+            ? (Array.isArray(serverMsg) ? serverMsg.join(', ') : serverMsg)
+            : (lang === 'hi' ? 'मोबाइल नंबर जांचें' : 'Check mobile number'))
       );
     } finally {
       setRegistering(false);
@@ -189,7 +236,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
           /* LOGIN VIEW */
           <View style={styles.formCard}>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Worker ID or Email / वर्कर ID या ईमेल</Text>
+              <Text style={styles.inputLabel}>{lang === 'hi' ? 'वर्कर ID या ईमेल' : 'Worker ID or Email'}</Text>
               <TextInput
                 style={styles.input}
                 value={loginId}
@@ -205,7 +252,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>PIN or Password / पिन या पासवर्ड</Text>
+              <Text style={styles.inputLabel}>{lang === 'hi' ? 'पिन या पासवर्ड' : 'PIN or Password'}</Text>
               <TextInput
                 style={styles.input}
                 value={loginPin}
@@ -242,7 +289,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
             <View style={styles.divider} />
 
             <View style={styles.infoBoxBlue}>
-              <Text style={styles.infoBoxBlueTitle}>Works offline / ऑफलाइन काम करता है</Text>
+              <Text style={styles.infoBoxBlueTitle}>{lang === 'hi' ? 'ऑफलाइन काम करता है' : 'Works offline'}</Text>
               <Text style={styles.infoBoxBlueSub}>{t('offlineMessage', lang)}</Text>
             </View>
           </View>
@@ -250,11 +297,11 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
           /* REGISTER VIEW — active password activation form */
           <View style={styles.formCard}>
             <Text style={{ fontSize: 18, fontWeight: '700', color: colors.rust, marginBottom: 12, textAlign: 'center' }}>
-              Activate Account / खाता सक्रिय करें
+              {lang === 'hi' ? 'खाता सक्रिय करें' : 'Activate Account'}
             </Text>
             
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Mobile Number / मोबाइल नंबर</Text>
+              <Text style={styles.inputLabel}>{lang === 'hi' ? 'मोबाइल नंबर' : 'Mobile Number'}</Text>
               <TextInput
                 style={styles.input}
                 value={regMobile}
@@ -271,7 +318,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Password / पासवर्ड</Text>
+              <Text style={styles.inputLabel}>{lang === 'hi' ? 'पासवर्ड' : 'Password'}</Text>
               <TextInput
                 style={styles.input}
                 value={regPassword}
@@ -288,7 +335,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Confirm Password / पासवर्ड की पुष्टि करें</Text>
+              <Text style={styles.inputLabel}>{lang === 'hi' ? 'पासवर्ड की पुष्टि करें' : 'Confirm Password'}</Text>
               <TextInput
                 style={styles.input}
                 value={regConfirmPassword}
@@ -318,13 +365,13 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
               {registering ? (
                 <ActivityIndicator size="small" color={colors.white} />
               ) : (
-                <Text style={styles.primaryBtnText}>Activate / सक्रिय करें</Text>
+                <Text style={styles.primaryBtnText}>{lang === 'hi' ? 'सक्रिय करें' : 'Activate'}</Text>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.secondaryBtn} onPress={() => setActiveTab('login')}>
               <Text style={styles.secondaryBtnText}>
-                Go to Login / लॉगिन पर जाएं
+                {lang === 'hi' ? 'लॉगिन पर जाएं' : 'Go to Login'}
               </Text>
             </TouchableOpacity>
           </View>

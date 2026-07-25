@@ -38,6 +38,7 @@ import {
   type BoreholeIntegrity,
 } from "@/app/actions/portal";
 import { createCrewMemberAction, findUserByMobileAction } from "@/app/actions/crew";
+import { validateSptIntervalM } from "@/lib/utils";
 import { createBoreholeAction, assignBoreholeTeamAction, approveProjectJoinRequestAction, rejectProjectJoinRequestAction, updateProjectAction, updateBoreholeLocationAction } from "@/app/actions/projects";
 
 interface PortalClientProps {
@@ -1580,6 +1581,13 @@ export default function PortalClient({
 
   // ── Setup tab: Investigation Parameters state ──
   const [isEditingInvestigationParameters, setIsEditingInvestigationParameters] = useState(false);
+  // SPT test interval (m) — the one persisted investigation parameter
+  // (projects.sptIntervalM). Locked with the rest of setup once fieldwork starts.
+  const [sptIntervalM, setSptIntervalM] = useState<string>(
+    proj?.sptIntervalM != null ? String(Number(proj.sptIntervalM)) : "1.5"
+  );
+  // True while the user is typing a non-preset interval in the edit form.
+  const [sptCustomMode, setSptCustomMode] = useState(false);
   const [boringMethod, setBoringMethod] = useState("rotary");
   const [drillingFluid, setDrillingFluid] = useState("bentonite");
   const [casingUsed, setCasingUsed] = useState("yes");
@@ -1597,6 +1605,7 @@ export default function PortalClient({
       setProjectState(proj.state ?? "");
       setInvestigationStart(proj.startDate ? new Date(proj.startDate).toISOString().split('T')[0] : "");
       setExpectedCompletion((proj.endDate ?? proj.targetCompletionDate) ? new Date((proj.endDate ?? proj.targetCompletionDate)!).toISOString().split('T')[0] : "");
+      setSptIntervalM(proj.sptIntervalM != null ? String(Number(proj.sptIntervalM)) : "1.5");
     }
   }, [proj]);
 
@@ -1632,6 +1641,32 @@ export default function PortalClient({
       return;
     }
     setIsEditingProjectDetails(false);
+    router.refresh();
+  };
+
+  // Persists the SPT interval (the only server-backed investigation
+  // parameter). The API enforces the setup lock server-side too.
+  const [savingInvestigationParams, setSavingInvestigationParams] = useState(false);
+  const [investigationParamsError, setInvestigationParamsError] = useState("");
+
+  const handleSaveInvestigationParameters = async () => {
+    if (!proj?.id) return;
+    const sptError = validateSptIntervalM(sptIntervalM);
+    if (sptError) {
+      setInvestigationParamsError(sptError);
+      return;
+    }
+    const parsed = parseFloat(sptIntervalM);
+    setSavingInvestigationParams(true);
+    setInvestigationParamsError("");
+    const res = await updateProjectAction(proj.id, { sptIntervalM: parsed });
+    setSavingInvestigationParams(false);
+    if ((res as any).error) {
+      setInvestigationParamsError((res as any).error);
+      return;
+    }
+    setIsEditingInvestigationParameters(false);
+    setSptCustomMode(false);
     router.refresh();
   };
 
@@ -3275,8 +3310,12 @@ export default function PortalClient({
                                 </select>
                               )}
                             </td>
-                            <td className="font-mono text-[10px]">{bh.latitude ?? "—"}</td>
-                            <td className="font-mono text-[10px]">{bh.longitude ?? "—"}</td>
+                            <td className="font-mono text-[10px]" title={!isPlottable && hasRawCoords ? `Raw value: ${bh.latitude}` : undefined}>
+                              {!hasRawCoords ? "—" : isPlottable ? bh.latitude : <span className="text-amber-d">UTM — needs conversion</span>}
+                            </td>
+                            <td className="font-mono text-[10px]" title={!isPlottable && hasRawCoords ? `Raw value: ${bh.longitude}` : undefined}>
+                              {!hasRawCoords ? "—" : isPlottable ? bh.longitude : <span className="text-amber-d">UTM — needs conversion</span>}
+                            </td>
                             <td className="font-mono text-[10px]">
                               {!hasRawCoords ? (
                                 "—"
@@ -3527,11 +3566,10 @@ export default function PortalClient({
                     {!setupIsLocked ? (
                       isEditingInvestigationParameters ? (
                         <>
-                          <span className="ct-action cursor-pointer text-green-d bg-green-light border-green-d" onClick={() => {
-                            setIsEditingInvestigationParameters(false);
-                            alert("Investigation parameters saved successfully!");
-                          }}>Save</span>
-                          <span className="ct-action cursor-pointer text-text-sec bg-bg-card border-border" onClick={() => setIsEditingInvestigationParameters(false)}>Cancel</span>
+                          <span className={`ct-action cursor-pointer text-green-d bg-green-light border-green-d ${savingInvestigationParams ? "opacity-60 pointer-events-none" : ""}`} onClick={handleSaveInvestigationParameters}>
+                            {savingInvestigationParams ? "Saving..." : "Save"}
+                          </span>
+                          <span className="ct-action cursor-pointer text-text-sec bg-bg-card border-border" onClick={() => { setIsEditingInvestigationParameters(false); setInvestigationParamsError(""); setSptCustomMode(false); setSptIntervalM(proj?.sptIntervalM != null ? String(Number(proj.sptIntervalM)) : "1.5"); }}>Cancel</span>
                         </>
                       ) : (
                         <span className="ct-action cursor-pointer" onClick={() => setIsEditingInvestigationParameters(true)}>Edit</span>
@@ -3545,7 +3583,54 @@ export default function PortalClient({
               <div className="ib ib-a">
                 ⚠ These parameters apply to ALL borings in this project. Cannot be changed once any boring is started by a field worker.
               </div>
+              {investigationParamsError && (
+                <div className="ib ib-r p-2 text-[10px] font-medium mb-2">
+                  ❌ {investigationParamsError}
+                </div>
+              )}
               <div className="grid2">
+                <div className="fg">
+                  <div className="fl">SPT Test Interval{setupIsLocked ? " 🔒" : ""}</div>
+                  <select
+                    className="fs text-amber-d"
+                    disabled={!isEditingInvestigationParameters}
+                    value={sptCustomMode ? "custom" : sptIntervalM}
+                    onChange={(e) => {
+                      if (e.target.value === "custom") {
+                        setSptCustomMode(true);
+                        setSptIntervalM("");
+                      } else {
+                        setSptCustomMode(false);
+                        setSptIntervalM(e.target.value);
+                      }
+                    }}
+                    title={setupIsLocked ? "Locked — fieldwork has started" : undefined}
+                  >
+                    <option value="1.5">Every 1.5 m (IS 2131 Standard)</option>
+                    <option value="3">Every 3 m</option>
+                    <option value="5">Every 5 m</option>
+                    {!sptCustomMode && !["1.5", "3", "5"].includes(sptIntervalM) && (
+                      <option value={sptIntervalM}>Every {sptIntervalM} m</option>
+                    )}
+                    <option value="custom">Custom…</option>
+                  </select>
+                  {sptCustomMode && isEditingInvestigationParameters && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <input
+                        type="number"
+                        step={0.1}
+                        min={0.5}
+                        max={10}
+                        autoFocus
+                        className="fs text-amber-d"
+                        value={sptIntervalM}
+                        onChange={(e) => setSptIntervalM(e.target.value)}
+                        placeholder="0.5 – 10 m, e.g. 2"
+                      />
+                      <span className="text-[11px] text-text-sec">m</span>
+                    </div>
+                  )}
+                </div>
                 <div className="fg">
                   <div className="fl">Boring Method</div>
                   <select 
@@ -3912,7 +3997,7 @@ export default function PortalClient({
               >
                 <div className="flex items-center justify-between px-4 py-2 border-b border-border">
                   <div className="text-[12px] font-bold text-text-pri">
-                    📍 {bh.boreholeCode} — site photo
+                    📍 {bh.boreholeCode} — {med.mimeType?.startsWith("video/") ? "site video" : "site photo"}
                   </div>
                   <button
                     className="text-text-ter hover:text-text-pri text-[15px] cursor-pointer bg-transparent border-0"
@@ -3921,14 +4006,23 @@ export default function PortalClient({
                     ✕
                   </button>
                 </div>
-                {med.mimeType?.startsWith("image/") && (
+                {med.mimeType?.startsWith("video/") ? (
+                  // Same authenticated media proxy as photos — the proxy
+                  // forwards the backend's Content-Type (video/mp4 etc.).
+                  <video
+                    src={`/api/media/${med.id}`}
+                    controls
+                    preload="metadata"
+                    className="w-full max-h-[58vh] object-contain bg-black"
+                  />
+                ) : med.mimeType?.startsWith("image/") ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={`/api/media/${med.id}`}
                     alt={med.fileName || "Site photo"}
                     className="w-full max-h-[58vh] object-contain bg-black"
                   />
-                )}
+                ) : null}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 p-4">
                   {rows.map(([label, value]) => (
                     <div key={label} className="flex justify-between gap-3 border-b border-border/40 pb-1">
@@ -4188,8 +4282,8 @@ export default function PortalClient({
                     <div className="dr"><span className="dr-l">Start</span><span className="dr-v ok">{fmtDateTime(selectedBorehole.startedAt)}</span></div>
                     <div className="dr"><span className="dr-l">End</span><span className="dr-v ok">{selectedBorehole.completedAt ? fmtDateTime(selectedBorehole.completedAt) : selectedBorehole.status === "IN_PROGRESS" ? "In progress" : "—"}</span></div>
                     <div className="dr"><span className="dr-l">Total depth</span><span className="dr-v">{fmtNum(selectedBorehole.finalDepth, 1, "m")}</span></div>
-                    <div className="dr"><span className="dr-l">Latitude</span><span className="dr-v">{selectedBorehole.latitude ?? "—"}</span></div>
-                    <div className="dr"><span className="dr-l">Longitude</span><span className="dr-v">{selectedBorehole.longitude ?? "—"}</span></div>
+                    <div className="dr"><span className="dr-l">Latitude</span><span className="dr-v">{selectedBorehole.latitude == null ? "—" : selectedBorehole._rawCoords ? selectedBorehole.latitude : "UTM — needs conversion"}</span></div>
+                    <div className="dr"><span className="dr-l">Longitude</span><span className="dr-v">{selectedBorehole.longitude == null ? "—" : selectedBorehole._rawCoords ? selectedBorehole.longitude : "UTM — needs conversion"}</span></div>
                     <div className="dr"><span className="dr-l">GPS deviation</span>{(() => {
                       const dev = gpsDeviationM(selectedBorehole);
                       return dev != null
@@ -4251,10 +4345,12 @@ export default function PortalClient({
                               // Authenticated media proxy
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={`/api/media/${med.id}`} alt={med.fileName || "Site photo"} />
+                            ) : med.mimeType?.startsWith("video/") ? (
+                              <div className="pt-icon" title="Video — click to play">▶ 🎬</div>
                             ) : (
                               <div className="pt-icon">📎</div>
                             )}
-                            <div className="pt-label">{med.photoType || med.fileName || "Photo"}</div>
+                            <div className="pt-label">{med.mimeType?.startsWith("video/") ? `🎬 ${med.photoType || "Video"}` : (med.photoType || med.fileName || "Photo")}</div>
                           </div>
                         ))}
                       </div>

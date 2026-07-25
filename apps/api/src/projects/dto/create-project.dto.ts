@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsDateString,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class CreateProjectDto {
   @ApiProperty({
@@ -90,4 +98,17 @@ export class CreateProjectDto {
   @IsOptional()
   @IsString()
   partnerSearchQuery?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Depth interval in meters between SPT tests (typical 1.5, 3 or 5)',
+    example: 1.5,
+    minimum: 0.5,
+    maximum: 10,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.5)
+  @Max(10)
+  sptIntervalM?: number;
 }

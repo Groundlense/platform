@@ -1057,13 +1057,14 @@ export default function ContractorClient({
               <div className="photos-strip">
                 {photos.map((p: any) => {
                   const isImage = p.mimeType?.startsWith("image/");
+                  const isVideo = p.mimeType?.startsWith("video/");
                   const isBroken = brokenPhotoIds.has(p.id);
                   return (
                     <div
                       key={p.id}
                       className="photo-card shadow-sm hover:scale-[1.01] transition-all"
-                      style={{ cursor: isImage && !isBroken ? "pointer" : "default" }}
-                      onClick={() => { if (isImage && !isBroken) setExpandedPhoto(p); }}
+                      style={{ cursor: (isImage || isVideo) && !isBroken ? "pointer" : "default" }}
+                      onClick={() => { if ((isImage || isVideo) && !isBroken) setExpandedPhoto(p); }}
                     >
                       <div className="photo-img" style={{ background: "#F1EFE8", color: "#5F5E5A" }}>
                         {isImage ? (
@@ -1081,6 +1082,11 @@ export default function ContractorClient({
                               onError={() => setBrokenPhotoIds((prev) => new Set(prev).add(p.id))}
                             />
                           )
+                        ) : isVideo ? (
+                          <>
+                            <span className="text-[20px]">🎬</span>
+                            <span className="font-semibold">▶ Video — click to play</span>
+                          </>
                         ) : (
                           <>
                             <RiImageLine className="text-[20px]" />
@@ -1127,13 +1133,23 @@ export default function ContractorClient({
                       ✕
                     </button>
                   </div>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/api/media/${expandedPhoto.id}`}
-                    alt={expandedPhoto.fileName || "Site photo"}
-                    className="max-w-[90vw] max-h-[calc(90vh-90px)] object-contain bg-black"
-                    onError={() => { setBrokenPhotoIds((prev) => new Set(prev).add(expandedPhoto.id)); setExpandedPhoto(null); }}
-                  />
+                  {expandedPhoto.mimeType?.startsWith("video/") ? (
+                    <video
+                      src={`/api/media/${expandedPhoto.id}`}
+                      controls
+                      preload="metadata"
+                      className="max-w-[90vw] max-h-[calc(90vh-90px)] object-contain bg-black"
+                      onError={() => { setBrokenPhotoIds((prev) => new Set(prev).add(expandedPhoto.id)); setExpandedPhoto(null); }}
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`/api/media/${expandedPhoto.id}`}
+                      alt={expandedPhoto.fileName || "Site photo"}
+                      className="max-w-[90vw] max-h-[calc(90vh-90px)] object-contain bg-black"
+                      onError={() => { setBrokenPhotoIds((prev) => new Set(prev).add(expandedPhoto.id)); setExpandedPhoto(null); }}
+                    />
+                  )}
                   <div className="px-4 py-2 text-[10px] text-[#888780]">
                     Captured {fmtDate(expandedPhoto.createdAt) ?? "—"}
                   </div>

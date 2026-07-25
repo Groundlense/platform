@@ -1,4 +1,4 @@
-const API_BASE = (process.env.API_URL || 'http://localhost:3000/api/v1').replace(/\/+$/, '');
+const API_BASE = (process.env.API_URL || 'http://127.0.0.1:3000/api/v1').replace(/\/+$/, '');
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
