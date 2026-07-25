@@ -139,21 +139,11 @@ export class UsersService {
         },
       });
       if (existingMobile) {
-        // Compare names (case-insensitive, trimmed)
-        const nameInput = (dto.firstName || "").trim().toLowerCase();
-        const nameExisting = (existingMobile.firstName || "").trim().toLowerCase();
-        const nameMismatch = nameInput !== nameExisting;
-
-        // Compare roles
-        const existingRoleCodes = existingMobile.roles.map((r: any) => r.role.code.toLowerCase());
-        const inputRoleCode = (dto.roleCode || "").trim().toLowerCase();
-        const roleMismatch = inputRoleCode ? !existingRoleCodes.includes(inputRoleCode) : false;
-
-        if (nameMismatch || roleMismatch) {
-          throw new BadRequestException("Mobile number assigned to another member.");
-        }
-
-        // Return existing user cleanly with isExisting flag
+        // The mobile number is the identity here — reuse the existing user
+        // so they can be added as a member of another project. A typed
+        // name/role that differs from the stored record must not block the
+        // add (it used to, which silently left the user off the second
+        // project and off the mobile app's project list).
         return {
           ...existingMobile,
           isExisting: true,

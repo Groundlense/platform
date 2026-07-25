@@ -116,7 +116,49 @@ export class BoreholesService {
 
   async create(projectId: string, user: any, dto: CreateBoreholeDto) {
     await this.access.assertProjectAccess(user, projectId);
-    await this.assertSetupUnlocked(projectId, user);
+
+    // Lock is per borehole, not per project: an Excel re-upload may update
+    // any boring that hasn't started, even after fieldwork began elsewhere
+    // in the project. A boring past PLANNED is immutable from setup.
+    const existing = await this.db.borehole.findUnique({
+      where: {
+        projectId_boreholeCode: {
+          projectId,
+          boreholeCode: dto.boreholeCode,
+        },
+      },
+    });
+
+    if (existing) {
+      if (existing.status !== 'PLANNED') {
+        throw new ForbiddenException(
+          `Borehole ${dto.boreholeCode} is locked — fieldwork on it has started`,
+        );
+      }
+
+      const updated = await this.db.borehole.update({
+        where: { id: existing.id },
+        data: {
+          name: dto.name,
+          latitude: dto.latitude,
+          longitude: dto.longitude,
+          groundLevelRL: dto.groundLevelRL,
+          plannedDepth: dto.plannedDepth,
+          structureType: dto.structureType,
+          chainage: dto.chainage,
+          span: dto.span,
+        },
+      });
+
+      await this.activityLogsService.log(
+        user.id,
+        'BOREHOLE_UPDATED',
+        'BOREHOLE',
+        updated.id,
+      );
+
+      return updated;
+    }
 
     const borehole = await this.db.borehole.create({
       data: {

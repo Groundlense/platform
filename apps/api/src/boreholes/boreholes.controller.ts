@@ -383,15 +383,30 @@ export class BoreholesController {
     archive.on('error', (err) => res.destroy(err));
     archive.pipe(res);
 
-    // Files missing on disk (e.g. an ephemeral storage wipe) are skipped,
-    // not fatal — the rest of the archive still downloads.
+    // Unreachable files (missing on disk after an ephemeral storage wipe,
+    // or a failed Cloudinary fetch) are skipped, not fatal — the rest of
+    // the archive still downloads.
     for (const m of media) {
       if (!m.mimeType?.startsWith('image/')) continue;
+      const entryName = `${m.boreholeCode}/${m.fileName || m.id}`;
+
+      if (/^https?:\/\//i.test(m.filePath)) {
+        // Cloudinary-backed photo — pull the bytes over HTTP.
+        try {
+          const upstream = await fetch(m.filePath);
+          if (!upstream.ok) continue;
+          archive.append(Buffer.from(await upstream.arrayBuffer()), {
+            name: entryName,
+          });
+        } catch {
+          continue;
+        }
+        continue;
+      }
+
       const absolutePath = join(process.cwd(), 'uploads', m.filePath);
       if (!existsSync(absolutePath)) continue;
-      archive.file(absolutePath, {
-        name: `${m.boreholeCode}/${m.fileName || m.id}`,
-      });
+      archive.file(absolutePath, { name: entryName });
     }
 
     await archive.finalize();

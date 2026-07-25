@@ -120,12 +120,14 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
     setSaving(true);
 
     try {
+      const sptIntervalM = await storage.getSptInterval(projectId, borehole.id);
+
       // 1. Create the interval record locally
       const intervalRecord = {
         id: `interval-${borehole.id}-${intervalNo}`,
         boreholeId: borehole.id,
         intervalNo,
-        fromDepth: currentDepth - 1.5 < 0 ? 0 : currentDepth - 1.5,
+        fromDepth: currentDepth - sptIntervalM < 0 ? 0 : currentDepth - sptIntervalM,
         toDepth: currentDepth,
         soilDescription: soilData.description,
         nValue: sptData.correctedN,
@@ -225,7 +227,6 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
 
       // Loop exit by the borehole's REAL planned depth (no magic numbers).
       // If plannedDepth is missing, keep looping — worker exits via Terminate.
-      const sptIntervalM = await storage.getProjectSptInterval(projectId);
       const nextDepth = Math.round((currentDepth + sptIntervalM) * 100) / 100;
       const nextInterval = intervalNo + 1;
       const plannedDepth = parseFloat(borehole.plannedDepth);

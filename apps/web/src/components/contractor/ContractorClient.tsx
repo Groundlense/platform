@@ -183,11 +183,6 @@ export default function ContractorClient({
   // is portaled to document.body and positioned via position:fixed off this,
   // so it can never get clipped by an ancestor's overflow/scroll container.
   const [hoverRect, setHoverRect] = useState<DOMRect | null>(null);
-  const [expandedPhoto, setExpandedPhoto] = useState<any>(null);
-  // Media ids whose <img> failed to load — most likely the file is missing
-  // on disk (e.g. Render's ephemeral /uploads wiped on redeploy) rather than
-  // a rendering bug, so we say so instead of showing a silent broken icon.
-  const [brokenPhotoIds, setBrokenPhotoIds] = useState<Set<string>>(new Set());
 
   // Boreholes grouped by real per-borehole structureType + chainage (the
   // ProjectSite/siteId mechanism is unused by every borehole-creation path
@@ -1044,118 +1039,27 @@ export default function ContractorClient({
               )}
             </div>
 
-            {/* Site Photos section — real uploaded media via the authenticated proxy */}
-            <div className="sec-label mt-4">Site photos — timestamped uploads</div>
-            {photos.length === 0 ? (
-              <div
-                className="flex flex-col items-center justify-center gap-2 mb-[14px] bg-white border border-[#F5C4B3] rounded-[7px] py-8 text-center"
-              >
-                <RiCameraLine className="text-[20px] text-[#B4B2A9]" />
-                <div className="text-[11px] text-[#888780]">No site photos uploaded yet</div>
-              </div>
-            ) : (
-              <div className="photos-strip">
-                {photos.map((p: any) => {
-                  const isImage = p.mimeType?.startsWith("image/");
-                  const isVideo = p.mimeType?.startsWith("video/");
-                  const isBroken = brokenPhotoIds.has(p.id);
-                  return (
-                    <div
-                      key={p.id}
-                      className="photo-card shadow-sm hover:scale-[1.01] transition-all"
-                      style={{ cursor: (isImage || isVideo) && !isBroken ? "pointer" : "default" }}
-                      onClick={() => { if ((isImage || isVideo) && !isBroken) setExpandedPhoto(p); }}
-                    >
-                      <div className="photo-img" style={{ background: "#F1EFE8", color: "#5F5E5A" }}>
-                        {isImage ? (
-                          isBroken ? (
-                            <>
-                              <RiAlertLine className="text-[16px] text-[#E24B4A]" />
-                              <span className="font-semibold text-center px-1">Photo unavailable</span>
-                            </>
-                          ) : (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={`/api/media/${p.id}`}
-                              alt={p.fileName || "Site photo"}
-                              loading="lazy"
-                              onError={() => setBrokenPhotoIds((prev) => new Set(prev).add(p.id))}
-                            />
-                          )
-                        ) : isVideo ? (
-                          <>
-                            <span className="text-[20px]">🎬</span>
-                            <span className="font-semibold">▶ Video — click to play</span>
-                          </>
-                        ) : (
-                          <>
-                            <RiImageLine className="text-[20px]" />
-                            <span className="font-semibold">{truncate(p.fileName, 20) || "File"}</span>
-                          </>
-                        )}
-                      </div>
-                      <div className="photo-info">
-                        <div className="photo-bh">
-                          {p.bhCode}
-                          {p.from != null ? ` · ${p.from}–${p.to ?? "?"}m` : ""}
-                        </div>
-                        <div className="photo-date">{fmtDate(p.createdAt) ?? "—"}</div>
-                        <div className="photo-tag">{truncate(p.fileName, 32) || "—"}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Photo lightbox — click any thumbnail to expand */}
-            {expandedPhoto && (
-              <div
-                className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/85"
-                onClick={() => setExpandedPhoto(null)}
-              >
-                <div
-                  className="bg-white rounded-[10px] overflow-hidden max-w-[90vw] max-h-[90vh] flex flex-col"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#F5C4B3]">
-                    <div className="text-[12px] font-medium text-[#412402]">
-                      {expandedPhoto.bhCode}
-                      {expandedPhoto.from != null ? ` · ${expandedPhoto.from}–${expandedPhoto.to ?? "?"}m` : ""}
-                      {" · "}
-                      {truncate(expandedPhoto.fileName, 40) || "Site photo"}
-                    </div>
-                    <button
-                      onClick={() => setExpandedPhoto(null)}
-                      className="text-[13px] text-[#888780] hover:text-[#412402] px-2"
-                      aria-label="Close"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  {expandedPhoto.mimeType?.startsWith("video/") ? (
-                    <video
-                      src={`/api/media/${expandedPhoto.id}`}
-                      controls
-                      preload="metadata"
-                      className="max-w-[90vw] max-h-[calc(90vh-90px)] object-contain bg-black"
-                      onError={() => { setBrokenPhotoIds((prev) => new Set(prev).add(expandedPhoto.id)); setExpandedPhoto(null); }}
-                    />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={`/api/media/${expandedPhoto.id}`}
-                      alt={expandedPhoto.fileName || "Site photo"}
-                      className="max-w-[90vw] max-h-[calc(90vh-90px)] object-contain bg-black"
-                      onError={() => { setBrokenPhotoIds((prev) => new Set(prev).add(expandedPhoto.id)); setExpandedPhoto(null); }}
-                    />
-                  )}
-                  <div className="px-4 py-2 text-[10px] text-[#888780]">
-                    Captured {fmtDate(expandedPhoto.createdAt) ?? "—"}
-                  </div>
+            {/* Site photos: no inline gallery — download everything as a ZIP */}
+            <div className="sec-label mt-4">Site photos</div>
+            <div className="flex items-center justify-between gap-3 mb-[14px] bg-white border border-[#F5C4B3] rounded-[7px] px-4 py-3">
+              <div className="flex items-center gap-2">
+                <RiCameraLine className="text-[16px] text-[#B4B2A9]" />
+                <div className="text-[11px] text-[#5F5E5A]">
+                  {photos.length === 0
+                    ? "No site photos uploaded yet"
+                    : `${photos.length} photo${photos.length === 1 ? "" : "s"} uploaded from the field`}
                 </div>
               </div>
-            )}
+              <button
+                className="dl-btn-sec"
+                disabled={photos.length === 0}
+                onClick={() => { window.location.href = `/api/projects/${project.id}/photos-zip`; }}
+                title={photos.length === 0 ? "No site photos to download" : "Downloads every uploaded photo for this project as a ZIP"}
+              >
+                <RiDownloadLine className="text-[14px]" />
+                Download all photos
+              </button>
+            </div>
 
             {/* Document downloads strip */}
             <div className="dl-row mt-4 print-hide">

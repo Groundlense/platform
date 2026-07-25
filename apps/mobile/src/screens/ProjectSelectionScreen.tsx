@@ -28,8 +28,13 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
 
   useEffect(() => {
     loadUserData();
-    loadProjects();
-  }, []);
+    // 'focus' fires on the initial mount and every return to this screen,
+    // so the project list re-syncs whenever the worker lands here.
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadProjects();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const loadUserData = async () => {
     const cachedUser = await storage.getUser();
@@ -42,10 +47,11 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
       const cachedProjects = await storage.getProjects();
       setProjects(cachedProjects);
 
-      // If we have no cached projects, trigger an initial sync
-      if (cachedProjects.length === 0) {
-        await handleSync();
-      }
+      // Always refresh from the server too — a membership added on the
+      // portal after the last sync (e.g. this user joining a second
+      // project) must appear without a manual "Sync" tap. The cached list
+      // above keeps the screen usable offline while this runs.
+      await handleSync();
     } catch (err) {
       console.warn(err);
     } finally {

@@ -2,11 +2,17 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 
 import { join } from 'path';
 import { existsSync } from 'fs';
+import { unlink } from 'fs/promises';
 
 import { DatabaseService } from '../database/database.service';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { ProjectAccessService } from '../common/access/project-access.service';
 import { isStampable, stampGeoTag } from './photo-stamp';
+import {
+  isCloudinaryConfigured,
+  isRemoteFilePath,
+  uploadToCloudinary,
+} from './cloudinary';
 
 @Injectable()
 export class MediaService {
@@ -89,13 +95,36 @@ export class MediaService {
       }
     }
 
+    // Permanent storage: after the geo-tag is burned in, push the file to
+    // Cloudinary and store its https URL. Render's ./uploads is wiped on
+    // every redeploy, so keeping bytes only on disk loses field evidence.
+    // If the upload fails (or Cloudinary isn't configured), the local file
+    // is kept — never lose the photo over a storage hiccup.
+    let filePath = file.filename;
+    if (isCloudinaryConfigured()) {
+      try {
+        const localPath = join(process.cwd(), 'uploads', file.filename);
+        filePath = await uploadToCloudinary(localPath, {
+          folder: 'groundlense',
+          fileName: file.originalname,
+          mimeType: file.mimetype,
+        });
+        await unlink(localPath).catch(() => undefined);
+      } catch (err) {
+        this.logger.warn(
+          `Cloudinary upload failed for ${file.filename} — keeping local copy`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+
     const media = await this.db.media.create({
       data: {
         intervalId,
 
         fileName: file.originalname,
 
-        filePath: file.filename,
+        filePath,
 
         mimeType: file.mimetype,
 
@@ -137,7 +166,11 @@ export class MediaService {
     });
   }
 
-  /** Resolves a media row to an absolute file path after an access check. */
+  /**
+   * Resolves a media row after an access check. Cloudinary-backed rows
+   * (filePath is an https URL) come back as a redirect target; legacy rows
+   * resolve to an absolute path under ./uploads.
+   */
   async getFile(mediaId: string, user: any) {
     const media = await this.db.media.findUnique({
       where: { id: mediaId },
@@ -149,12 +182,16 @@ export class MediaService {
 
     await this.access.assertIntervalAccess(user, media.intervalId);
 
+    if (isRemoteFilePath(media.filePath)) {
+      return { media, absolutePath: null, redirectUrl: media.filePath };
+    }
+
     const absolutePath = join(process.cwd(), 'uploads', media.filePath);
 
     if (!existsSync(absolutePath)) {
       throw new NotFoundException('Media file missing on disk');
     }
 
-    return { media, absolutePath };
+    return { media, absolutePath, redirectUrl: null };
   }
 }

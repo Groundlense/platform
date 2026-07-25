@@ -27,7 +27,12 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import { unlink } from 'fs/promises';
 import { randomBytes } from 'crypto';
+import {
+  isCloudinaryConfigured,
+  uploadToCloudinary,
+} from '../media/cloudinary';
 import type { Response } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 
@@ -122,10 +127,28 @@ export class AuthController {
       },
     }),
   )
-  uploadLogo(@UploadedFile() file: Express.Multer.File) {
+  async uploadLogo(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('File is required');
     }
+
+    // Permanent storage when configured — local ./uploads is wiped on every
+    // Render redeploy, which silently deleted organization logos.
+    if (isCloudinaryConfigured()) {
+      try {
+        const localPath = join(file.destination, file.filename);
+        const url = await uploadToCloudinary(localPath, {
+          folder: 'groundlense/logos',
+          fileName: file.originalname,
+          mimeType: file.mimetype,
+        });
+        await unlink(localPath).catch(() => undefined);
+        return { success: true, filename: file.filename, url };
+      } catch {
+        // Fall through to the local-disk URL — never lose the upload.
+      }
+    }
+
     return {
       success: true,
       filename: file.filename,
@@ -160,16 +183,12 @@ export class AuthController {
 
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto.email);
+    return this.authService.forgotPassword(dto);
   }
 
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(
-      dto.email,
-      dto.code,
-      dto.newPassword,
-    );
+    return this.authService.resetPassword(dto);
   }
 
   @Post('create-password')

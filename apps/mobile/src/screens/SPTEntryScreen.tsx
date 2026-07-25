@@ -12,7 +12,7 @@ import { colors } from '../utils/theme';
 import { t } from '../utils/translations';
 import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
-import { calculateRawN, calculateOverburdenCorrection, applyDilatancyCorrection, getDensityInterpretation } from '../utils/calculations';
+import { calculateRawN, calculateOverburdenCorrection, getDensityInterpretation } from '../utils/calculations';
 import { media } from '../services/media';
 
 export default function SPTEntryScreen({ route, navigation }: { route: any; navigation: any }) {
@@ -21,13 +21,15 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
   const { lang, setLang } = useLanguage();
 
   // Blow count states — always entered fresh per interval, never pre-filled.
-  const [blow15, setBlow15] = useState(0); // 0-15cm
-  const [blow30, setBlow30] = useState(0); // 15-30cm
-  const [blow45, setBlow45] = useState(0); // 30-45cm
-  const [activeInterval, setActiveInterval] = useState<1 | 2 | 3>(1);
+  // Kept as strings so the worker can clear the field and type a value directly.
+  const [blow15Str, setBlow15Str] = useState('');
+  const [blow30Str, setBlow30Str] = useState('');
+  const [blow45Str, setBlow45Str] = useState('');
+  const blow15 = parseInt(blow15Str, 10) || 0; // 0-15cm
+  const blow30 = parseInt(blow30Str, 10) || 0; // 15-30cm
+  const blow45 = parseInt(blow45Str, 10) || 0; // 30-45cm
 
   // Correction flags
-  const [isBelowWaterTable, setIsBelowWaterTable] = useState(false);
   const [isRefusal, setIsRefusal] = useState(false);
   const [penetrationMm, setPenetrationMm] = useState('');
 
@@ -49,7 +51,7 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
         if (Number.isFinite(depth)) setWaterTableDepth(depth);
       }
       if (projectId) {
-        setSptIntervalM(await storage.getProjectSptInterval(projectId));
+        setSptIntervalM(await storage.getSptInterval(projectId, borehole.id));
       }
     })();
   }, [borehole?.id, projectId]);
@@ -90,21 +92,11 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
     waterTableDepth
   );
 
-  // Apply dilatancy if selected and raw/overburden N > 15
-  const finalCorrectedN = isBelowWaterTable ? applyDilatancyCorrection(overburdenN) : overburdenN;
+  const finalCorrectedN = overburdenN;
   const interpretation = getDensityInterpretation(finalCorrectedN);
 
-  const handleIncrement = () => {
-    if (activeInterval === 1) setBlow15(p => p + 1);
-    if (activeInterval === 2) setBlow30(p => p + 1);
-    if (activeInterval === 3) setBlow45(p => p + 1);
-  };
-
-  const handleDecrement = () => {
-    if (activeInterval === 1) setBlow15(p => Math.max(0, p - 1));
-    if (activeInterval === 2) setBlow30(p => Math.max(0, p - 1));
-    if (activeInterval === 3) setBlow45(p => Math.max(0, p - 1));
-  };
+  // Digits only — blow counts are whole numbers
+  const sanitizeBlows = (v: string) => v.replace(/[^0-9]/g, '');
 
   // Real camera capture — photo is queued locally and uploaded on sync
   // once this interval exists on the server.
@@ -159,7 +151,7 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
           correctedN: finalCorrectedN,
           isRefusal,
           penetrationMm: isRefusal ? parseInt(penetrationMm, 10) : undefined,
-          dilatancyApplied: isBelowWaterTable,
+          dilatancyApplied: false,
         },
       });
     };
@@ -186,7 +178,11 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
   };
 
   const handleTerminate = () => {
-    navigation.navigate('Terminate', { borehole, projectId, currentDepth });
+    // currentDepth is the depth of the UPCOMING test — the boring is only
+    // proven down to the previous completed interval, so terminate records
+    // that, never a depth that was not actually drilled and tested.
+    const completedDepth = Math.max(0, Math.round((currentDepth - sptIntervalM) * 100) / 100);
+    navigation.navigate('Terminate', { borehole, projectId, currentDepth: completedDepth });
   };
 
   return (
@@ -232,72 +228,49 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
         {/* Depth display banner */}
         <View style={styles.depthBanner}>
           <Text style={styles.depthVal}>{currentDepth.toFixed(1)} m</Text>
-          <Text style={styles.depthSub}>
-            Current depth · {activeInterval === 1 && '0–15cm interval'}
-            {activeInterval === 2 && '15–30cm interval'}
-            {activeInterval === 3 && '30–45cm interval'}
-          </Text>
+          <Text style={styles.depthSub}>Current depth</Text>
         </View>
 
-        {/* Active interval values */}
+        {/* Blow counts — typed directly per 15 cm drive */}
         <Text style={styles.fieldLabel}>
-          {lang === 'hi' ? 'ब्लो गिनती — tap segment to edit' : 'Blows count — tap segment to edit'}
+          {lang === 'hi' ? 'ब्लो गिनती दर्ज करें' : 'Blows count — type each value'}
         </Text>
         <View style={styles.blowGrid}>
-          <TouchableOpacity
-            style={[styles.blowTile, activeInterval === 1 && styles.blowTileActive]}
-            onPress={() => setActiveInterval(1)}
-          >
-            <Text style={[styles.blowLabel, activeInterval === 1 && styles.blowTextActive]}>
-              0–15cm
-            </Text>
-            <Text style={[styles.blowNum, activeInterval === 1 && styles.blowTextActive]}>
-              {blow15}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.blowTile, activeInterval === 2 && styles.blowTileActive]}
-            onPress={() => setActiveInterval(2)}
-          >
-            <Text style={[styles.blowLabel, activeInterval === 2 && styles.blowTextActive]}>
-              15–30cm
-            </Text>
-            <Text style={[styles.blowNum, activeInterval === 2 && styles.blowTextActive]}>
-              {blow30}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.blowTile, activeInterval === 3 && styles.blowTileActive]}
-            onPress={() => setActiveInterval(3)}
-          >
-            <Text style={[styles.blowLabel, activeInterval === 3 && styles.blowTextActive]}>
-              30–45cm
-            </Text>
-            <Text style={[styles.blowNum, activeInterval === 3 && styles.blowTextActive]}>
-              {blow45}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Editing keypad buttons */}
-        <View style={styles.editWidget}>
-          <Text style={styles.editTitle}>
-            Edit {activeInterval === 1 && '0-15cm'}
-            {activeInterval === 2 && '15-30cm'}
-            {activeInterval === 3 && '30-45cm'} blows
-          </Text>
-          <View style={styles.keypadRow}>
-            <TouchableOpacity style={styles.keypadBtn} onPress={handleDecrement}>
-              <Text style={styles.keypadBtnText}>-</Text>
-            </TouchableOpacity>
-            <Text style={styles.keypadDisplay}>
-              {activeInterval === 1 && blow15}
-              {activeInterval === 2 && blow30}
-              {activeInterval === 3 && blow45}
-            </Text>
-            <TouchableOpacity style={styles.keypadBtn} onPress={handleIncrement}>
-              <Text style={styles.keypadBtnText}>+</Text>
-            </TouchableOpacity>
+          <View style={styles.blowTile}>
+            <Text style={styles.blowLabel}>0–15cm</Text>
+            <TextInput
+              style={styles.blowInput}
+              value={blow15Str}
+              onChangeText={(v) => setBlow15Str(sanitizeBlows(v))}
+              keyboardType="number-pad"
+              placeholder="0"
+              placeholderTextColor={colors.grayBorder}
+              maxLength={3}
+            />
+          </View>
+          <View style={styles.blowTile}>
+            <Text style={styles.blowLabel}>15–30cm</Text>
+            <TextInput
+              style={styles.blowInput}
+              value={blow30Str}
+              onChangeText={(v) => setBlow30Str(sanitizeBlows(v))}
+              keyboardType="number-pad"
+              placeholder="0"
+              placeholderTextColor={colors.grayBorder}
+              maxLength={3}
+            />
+          </View>
+          <View style={styles.blowTile}>
+            <Text style={styles.blowLabel}>30–45cm</Text>
+            <TextInput
+              style={styles.blowInput}
+              value={blow45Str}
+              onChangeText={(v) => setBlow45Str(sanitizeBlows(v))}
+              keyboardType="number-pad"
+              placeholder="0"
+              placeholderTextColor={colors.grayBorder}
+              maxLength={3}
+            />
           </View>
         </View>
 
@@ -315,29 +288,6 @@ export default function SPTEntryScreen({ route, navigation }: { route: any; navi
               ? 'भूजल स्तर दर्ज नहीं'
               : 'WT not recorded yet — overburden correction assumes dry profile'}
         </Text>
-
-        {/* Dilatancy prompt */}
-        <View style={styles.promptBox}>
-          <Text style={styles.promptText}>{t('fineSandWT', lang)}</Text>
-          <View style={styles.promptAction}>
-            <TouchableOpacity
-              style={[styles.promptBtn, isBelowWaterTable && styles.promptBtnYes]}
-              onPress={() => setIsBelowWaterTable(true)}
-            >
-              <Text style={[styles.promptBtnText, isBelowWaterTable && styles.promptBtnTextActive]}>
-                {t('yes', lang)}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.promptBtn, !isBelowWaterTable && styles.promptBtnNo]}
-              onPress={() => setIsBelowWaterTable(false)}
-            >
-              <Text style={[styles.promptBtnText, !isBelowWaterTable && styles.promptBtnTextActive]}>
-                {t('no', lang)}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
 
         {/* Refusal Toggle */}
         <TouchableOpacity
@@ -509,68 +459,22 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: colors.grayBorder,
   },
-  blowTileActive: {
-    backgroundColor: colors.rustLight,
-    borderColor: colors.rustMid,
-    borderWidth: 1.5,
-  },
   blowLabel: {
     fontSize: 15,
     color: colors.grayMid,
   },
-  blowNum: {
-    fontSize: 21,
-    fontWeight: '700',
-    color: colors.grayDark,
-    marginTop: 2,
-  },
-  blowTextActive: {
-    color: colors.rust,
-    fontWeight: '700',
-  },
-  editWidget: {
-    backgroundColor: colors.rustLight,
-    borderColor: colors.rustMid,
-    borderWidth: 1.5,
-    borderRadius: 8,
-    padding: 10,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  editTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.rustMid,
-    textTransform: 'uppercase',
-  },
-  keypadRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 24,
-    marginTop: 6,
-  },
-  keypadBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  blowInput: {
     backgroundColor: colors.white,
     borderWidth: 0.5,
     borderColor: colors.rustMid,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  keypadBtnText: {
-    fontSize: 27,
+    borderRadius: 6,
+    marginTop: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    minWidth: 64,
+    fontSize: 21,
     fontWeight: '700',
     color: colors.rust,
-  },
-  keypadDisplay: {
-    fontSize: 38,
-    fontWeight: '700',
-    color: colors.rust,
-    minWidth: 40,
     textAlign: 'center',
   },
   calcResults: {
@@ -594,48 +498,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: colors.greenMid,
-  },
-  promptBox: {
-    backgroundColor: colors.blueLight,
-    borderWidth: 0.5,
-    borderColor: '#85B7EB',
-    borderRadius: 6,
-    padding: 8,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  promptText: {
-    fontSize: 14,
-    color: colors.blueDark,
-    fontWeight: '600',
-  },
-  promptAction: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  promptBtn: {
-    backgroundColor: colors.grayLight,
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  promptBtnYes: {
-    backgroundColor: colors.blueDark,
-  },
-  promptBtnNo: {
-    backgroundColor: colors.grayMid,
-  },
-  promptBtnText: {
-    fontSize: 15,
-    color: colors.grayDark,
-  },
-  promptBtnTextActive: {
-    color: colors.white,
-    fontWeight: '700',
   },
   refusalToggleBtn: {
     backgroundColor: colors.redLight,

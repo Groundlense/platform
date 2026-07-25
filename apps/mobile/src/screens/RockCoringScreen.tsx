@@ -7,6 +7,7 @@ import {
   TextInput,
   ScrollView,
   Alert,
+  Modal,
 } from 'react-native';
 import { colors } from '../utils/theme';
 import { storage } from '../services/storage';
@@ -33,6 +34,40 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
   const [weathering, setWeathering] = useState<string | null>(null);
 
   const [photoCaptured, setPhotoCaptured] = useState(false);
+
+  // "Continue boring" after a core run: the worker confirms the SPT
+  // interval to use below the rock band instead of the app assuming one.
+  const [intervalPrompt, setIntervalPrompt] = useState<{
+    nextDepth: number;
+    borehole: any;
+  } | null>(null);
+  const [sptIntervalStr, setSptIntervalStr] = useState('');
+
+  const handleContinueBoring = async () => {
+    if (!intervalPrompt) return;
+    const chosen = parseFloat(sptIntervalStr);
+    if (!Number.isFinite(chosen) || chosen <= 0 || chosen > 10) {
+      Alert.alert(
+        lang === 'hi' ? 'अमान्य अंतराल' : 'Invalid interval',
+        lang === 'hi'
+          ? 'SPT अंतराल मीटर में दर्ज करें (जैसे 1.5)।'
+          : 'Enter the SPT interval in meters (e.g. 1.5).'
+      );
+      return;
+    }
+    await storage.setBoreholeSptInterval(borehole.id, chosen);
+    const target = intervalPrompt;
+    setIntervalPrompt(null);
+    // currentDepth is the depth of the UPCOMING SPT test: one chosen
+    // interval below the bottom of the rock run just recorded.
+    navigation.replace('SPTEntry', {
+      borehole: target.borehole,
+      projectId,
+      sessionId,
+      currentDepth: Math.round((target.nextDepth + chosen) * 100) / 100,
+      intervalNo: intervalNo + 1,
+    });
+  };
 
   // Real camera capture — photo is queued locally and uploaded on sync
   // once this interval exists on the server.
@@ -214,14 +249,12 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
         [
           {
             text: lang === 'hi' ? `बोरिंग जारी रखें (${nextDepth.toFixed(2)}m से)` : `Continue boring (from ${nextDepth.toFixed(2)}m)`,
-            onPress: () => {
-              navigation.replace('SPTEntry', {
-                borehole: updatedBorehole,
-                projectId,
-                sessionId,
-                currentDepth: nextDepth,
-                intervalNo: intervalNo + 1,
-              });
+            onPress: async () => {
+              // Ask the worker to confirm the SPT interval below the rock
+              // band — never assume the pre-rock spacing still applies.
+              const effective = await storage.getSptInterval(projectId, borehole.id);
+              setSptIntervalStr(String(effective));
+              setIntervalPrompt({ nextDepth, borehole: updatedBorehole });
             },
           },
           {
@@ -390,6 +423,52 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* SPT interval confirmation before rejoining the SPT loop */}
+      <Modal
+        visible={intervalPrompt !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIntervalPrompt(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {lang === 'hi' ? 'SPT अंतराल की पुष्टि करें' : 'Confirm SPT interval'}
+            </Text>
+            <Text style={styles.modalSub}>
+              {lang === 'hi'
+                ? `${intervalPrompt?.nextDepth.toFixed(2)}m से बोरिंग जारी रहेगी। आगे के SPT टेस्ट किस अंतराल पर होंगे?`
+                : `Boring continues from ${intervalPrompt?.nextDepth.toFixed(2)}m. At what interval should the next SPT tests run?`}
+            </Text>
+            <View style={styles.modalInputRow}>
+              <TextInput
+                style={styles.modalInput}
+                value={sptIntervalStr}
+                onChangeText={setSptIntervalStr}
+                keyboardType="decimal-pad"
+                placeholder="1.5"
+                placeholderTextColor={colors.grayMid}
+                autoFocus
+              />
+              <Text style={styles.modalUnit}>m</Text>
+            </View>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setIntervalPrompt(null)}
+              >
+                <Text style={styles.modalCancelText}>{lang === 'hi' ? 'रद्द करें' : 'Cancel'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalOkBtn} onPress={handleContinueBoring}>
+                <Text style={styles.modalOkText}>
+                  {lang === 'hi' ? 'जारी रखें →' : 'Continue →'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -577,6 +656,79 @@ const styles = StyleSheet.create({
   terminateBtnText: {
     color: colors.redMid,
     fontSize: 16,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: colors.white,
+    borderRadius: 10,
+    padding: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.grayDark,
+  },
+  modalSub: {
+    fontSize: 14,
+    color: colors.grayMid,
+    marginTop: 6,
+  },
+  modalInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  modalInput: {
+    backgroundColor: colors.grayLight,
+    borderWidth: 0.5,
+    borderColor: colors.grayBorder,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.grayDark,
+    width: 100,
+    textAlign: 'center',
+  },
+  modalUnit: {
+    fontSize: 16,
+    color: colors.grayMid,
+    fontWeight: '600',
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 16,
+  },
+  modalCancelBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+    backgroundColor: colors.grayLight,
+  },
+  modalCancelText: {
+    fontSize: 15,
+    color: colors.grayDark,
+    fontWeight: '600',
+  },
+  modalOkBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+    backgroundColor: colors.rustMid,
+  },
+  modalOkText: {
+    fontSize: 15,
+    color: colors.white,
     fontWeight: '700',
   },
 });
