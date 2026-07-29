@@ -76,6 +76,9 @@ let BoreholesController = class BoreholesController {
     updateLocation(boreholeId, dto, user) {
         return this.boreholesService.updateLocation(boreholeId, user, dto);
     }
+    deletePlanned(projectId, user) {
+        return this.boreholesService.deletePlanned(projectId, user);
+    }
     bulkAssignTeam(projectId, dto, user) {
         return this.boreholesService.bulkAssignTeam(projectId, user, dto);
     }
@@ -258,6 +261,14 @@ __decorate([
 ], BoreholesController.prototype, "updateLocation", null);
 __decorate([
     (0, permissions_decorator_1.Permissions)('WORKER_ASSIGN'),
+    (0, common_1.Delete)('projects/:projectId/boreholes/planned'),
+    __param(0, (0, common_1.Param)('projectId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], BoreholesController.prototype, "deletePlanned", null);
+__decorate([
     (0, common_1.Patch)('projects/:projectId/boreholes/bulk-assign-team'),
     __param(0, (0, common_1.Param)('projectId')),
     __param(1, (0, common_1.Body)()),

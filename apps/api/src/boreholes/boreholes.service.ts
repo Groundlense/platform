@@ -69,11 +69,19 @@ export class BoreholesService {
     return this.db.borehole.findMany({
       where: {
         ...(projectId ? { projectId } : {}),
-        team: {
-          members: {
-            some: { userId: user.id },
+        // Assigned via EITHER path the portal offers: membership in the
+        // borehole's team, or being its named worker. Only checking the
+        // team made named-worker assignments invisible on the mobile app.
+        OR: [
+          {
+            team: {
+              members: {
+                some: { userId: user.id },
+              },
+            },
           },
-        },
+          { assignedWorkerId: user.id },
+        ],
       },
       include: {
         team: { select: { id: true, code: true, name: true } },
@@ -373,6 +381,30 @@ export class BoreholesService {
     );
 
     return borehole;
+  }
+
+  /**
+   * Deletes every PLANNED borehole in the project — the "replace" half of
+   * an Excel re-import. Borings past PLANNED have real field data and are
+   * never touched. PLANNED borings have no intervals/sessions/media, so
+   * this cannot destroy recorded work.
+   */
+  async deletePlanned(projectId: string, user: any) {
+    await this.access.assertProjectAccess(user, projectId);
+
+    const result = await this.db.borehole.deleteMany({
+      where: { projectId, status: 'PLANNED' },
+    });
+
+    await this.activityLogsService.log(
+      user.id,
+      'BOREHOLE_DELETED',
+      'PROJECT',
+      projectId,
+      { deletedCount: result.count, reason: 'excel-replace-import' },
+    );
+
+    return { deletedCount: result.count };
   }
 
   /**

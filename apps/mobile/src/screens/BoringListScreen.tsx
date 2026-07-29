@@ -73,8 +73,36 @@ export default function BoringListScreen({ route, navigation }: { route: any; na
         fresh = Array.isArray(projectWide) ? projectWide : [];
       }
 
-      await storage.saveBoreholes(projectId, fresh);
-      setBoreholes(fresh);
+      // Server rows don't carry the device-side workflow fields (rig setup,
+      // live depth, weather). A raw overwrite here used to wipe them and
+      // silently reset in-progress borings, so carry them over from the
+      // cached copy whenever the server has nothing for that field.
+      const LOCAL_ONLY_FIELDS = [
+        'currentDepth',
+        'rigSetupDone',
+        'rigType',
+        'diameter',
+        'drillingFluid',
+        'hammerType',
+        'drillerId',
+        'startDate',
+        'weather',
+      ];
+      const cachedRows = await storage.getBoreholes(projectId).catch(() => []);
+      const merged = fresh.map((srv: any) => {
+        const local = cachedRows.find((c: any) => c.id === srv.id);
+        if (!local) return srv;
+        const keep: any = {};
+        for (const k of LOCAL_ONLY_FIELDS) {
+          if ((srv[k] === undefined || srv[k] === null) && local[k] !== undefined && local[k] !== null) {
+            keep[k] = local[k];
+          }
+        }
+        return { ...srv, ...keep };
+      });
+
+      await storage.saveBoreholes(projectId, merged);
+      setBoreholes(merged);
       setAssignedMode(fromAssignments);
       if (fromAssignments) {
         await notifyNewAssignments(fresh);

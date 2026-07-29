@@ -185,9 +185,22 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
     // off-road, and Google's walking router answers "can't find a way
     // there" for points with no path network nearby. From the pin the
     // worker starts directions in whatever mode Google can actually route.
-    const url = `https://www.google.com/maps/search/?api=1&query=${plannedLat},${plannedLng}`;
-    Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open Google Maps on this device.');
+    //
+    // geo: first — it opens the device's native maps app directly (no API
+    // key involved, works with any installed maps app). The https link is
+    // the fallback for devices with no maps app: it opens in the browser.
+    const label = encodeURIComponent(borehole?.boreholeCode || 'Borehole');
+    const geoUrl = `geo:${plannedLat},${plannedLng}?q=${plannedLat},${plannedLng}(${label})`;
+    const webUrl = `https://www.google.com/maps/search/?api=1&query=${plannedLat},${plannedLng}`;
+    Linking.openURL(geoUrl).catch(() => {
+      Linking.openURL(webUrl).catch(() => {
+        Alert.alert(
+          lang === 'hi' ? 'मैप नहीं खुला' : 'Could not open maps',
+          lang === 'hi'
+            ? `कोई मैप ऐप/ब्राउज़र नहीं मिला। निर्देशांक: ${plannedLat}, ${plannedLng}`
+            : `No maps app or browser found on this device. Coordinates: ${plannedLat}, ${plannedLng}`,
+        );
+      });
     });
   };
 

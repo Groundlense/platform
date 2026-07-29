@@ -61,6 +61,11 @@ let ProjectAccessService = class ProjectAccessService {
                         },
                     },
                 },
+                {
+                    boreholes: {
+                        some: { assignedWorkerId: user.id },
+                    },
+                },
             ],
         };
     }

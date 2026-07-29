@@ -37,12 +37,13 @@ export declare class BoreholesService {
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        teamId: string | null;
-        projectId: string;
+        assignedWorkerId: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
+        projectId: string;
         siteId: string | null;
         boreholeCode: string;
+        teamId: string | null;
         latitude: import("@prisma/client/runtime/library").Decimal | null;
         longitude: import("@prisma/client/runtime/library").Decimal | null;
         groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
@@ -50,7 +51,6 @@ export declare class BoreholesService {
         finalDepth: import("@prisma/client/runtime/library").Decimal | null;
         startedAt: Date | null;
         completedAt: Date | null;
-        assignedWorkerId: string | null;
         actualLat: import("@prisma/client/runtime/library").Decimal | null;
         actualLng: import("@prisma/client/runtime/library").Decimal | null;
         actualAccuracyM: import("@prisma/client/runtime/library").Decimal | null;
@@ -60,6 +60,12 @@ export declare class BoreholesService {
         structureType: string | null;
         chainage: string | null;
         span: string | null;
+        diameter: number | null;
+        drillingFluid: string | null;
+        hammerType: string | null;
+        drillerId: string | null;
+        weather: string | null;
+        terminationReason: string | null;
     })[]>;
     findByProject(projectId: string, user: any): Promise<({
         team: {
@@ -82,12 +88,13 @@ export declare class BoreholesService {
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        teamId: string | null;
-        projectId: string;
+        assignedWorkerId: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
+        projectId: string;
         siteId: string | null;
         boreholeCode: string;
+        teamId: string | null;
         latitude: import("@prisma/client/runtime/library").Decimal | null;
         longitude: import("@prisma/client/runtime/library").Decimal | null;
         groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
@@ -95,7 +102,6 @@ export declare class BoreholesService {
         finalDepth: import("@prisma/client/runtime/library").Decimal | null;
         startedAt: Date | null;
         completedAt: Date | null;
-        assignedWorkerId: string | null;
         actualLat: import("@prisma/client/runtime/library").Decimal | null;
         actualLng: import("@prisma/client/runtime/library").Decimal | null;
         actualAccuracyM: import("@prisma/client/runtime/library").Decimal | null;
@@ -105,6 +111,12 @@ export declare class BoreholesService {
         structureType: string | null;
         chainage: string | null;
         span: string | null;
+        diameter: number | null;
+        drillingFluid: string | null;
+        hammerType: string | null;
+        drillerId: string | null;
+        weather: string | null;
+        terminationReason: string | null;
     })[]>;
     findOne(id: string, user: any): Promise<({
         project: {
@@ -140,12 +152,13 @@ export declare class BoreholesService {
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        teamId: string | null;
-        projectId: string;
+        assignedWorkerId: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
+        projectId: string;
         siteId: string | null;
         boreholeCode: string;
+        teamId: string | null;
         latitude: import("@prisma/client/runtime/library").Decimal | null;
         longitude: import("@prisma/client/runtime/library").Decimal | null;
         groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
@@ -153,7 +166,6 @@ export declare class BoreholesService {
         finalDepth: import("@prisma/client/runtime/library").Decimal | null;
         startedAt: Date | null;
         completedAt: Date | null;
-        assignedWorkerId: string | null;
         actualLat: import("@prisma/client/runtime/library").Decimal | null;
         actualLng: import("@prisma/client/runtime/library").Decimal | null;
         actualAccuracyM: import("@prisma/client/runtime/library").Decimal | null;
@@ -163,6 +175,12 @@ export declare class BoreholesService {
         structureType: string | null;
         chainage: string | null;
         span: string | null;
+        diameter: number | null;
+        drillingFluid: string | null;
+        hammerType: string | null;
+        drillerId: string | null;
+        weather: string | null;
+        terminationReason: string | null;
     }) | null>;
     create(projectId: string, user: any, dto: CreateBoreholeDto): Promise<{
         name: string | null;
@@ -170,12 +188,13 @@ export declare class BoreholesService {
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        teamId: string | null;
-        projectId: string;
+        assignedWorkerId: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
+        projectId: string;
         siteId: string | null;
         boreholeCode: string;
+        teamId: string | null;
         latitude: import("@prisma/client/runtime/library").Decimal | null;
         longitude: import("@prisma/client/runtime/library").Decimal | null;
         groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
@@ -183,7 +202,6 @@ export declare class BoreholesService {
         finalDepth: import("@prisma/client/runtime/library").Decimal | null;
         startedAt: Date | null;
         completedAt: Date | null;
-        assignedWorkerId: string | null;
         actualLat: import("@prisma/client/runtime/library").Decimal | null;
         actualLng: import("@prisma/client/runtime/library").Decimal | null;
         actualAccuracyM: import("@prisma/client/runtime/library").Decimal | null;
@@ -193,6 +211,12 @@ export declare class BoreholesService {
         structureType: string | null;
         chainage: string | null;
         span: string | null;
+        diameter: number | null;
+        drillingFluid: string | null;
+        hammerType: string | null;
+        drillerId: string | null;
+        weather: string | null;
+        terminationReason: string | null;
     }>;
     getIntervals(boreholeId: string, user: any): Promise<{
         soilDescription: string | null;
@@ -290,12 +314,13 @@ export declare class BoreholesService {
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        teamId: string | null;
-        projectId: string;
+        assignedWorkerId: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
+        projectId: string;
         siteId: string | null;
         boreholeCode: string;
+        teamId: string | null;
         latitude: import("@prisma/client/runtime/library").Decimal | null;
         longitude: import("@prisma/client/runtime/library").Decimal | null;
         groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
@@ -303,7 +328,6 @@ export declare class BoreholesService {
         finalDepth: import("@prisma/client/runtime/library").Decimal | null;
         startedAt: Date | null;
         completedAt: Date | null;
-        assignedWorkerId: string | null;
         actualLat: import("@prisma/client/runtime/library").Decimal | null;
         actualLng: import("@prisma/client/runtime/library").Decimal | null;
         actualAccuracyM: import("@prisma/client/runtime/library").Decimal | null;
@@ -313,6 +337,12 @@ export declare class BoreholesService {
         structureType: string | null;
         chainage: string | null;
         span: string | null;
+        diameter: number | null;
+        drillingFluid: string | null;
+        hammerType: string | null;
+        drillerId: string | null;
+        weather: string | null;
+        terminationReason: string | null;
     }>;
     updateLocation(boreholeId: string, user: any, dto: UpdateBoreholeLocationDto): Promise<{
         name: string | null;
@@ -320,12 +350,13 @@ export declare class BoreholesService {
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        teamId: string | null;
-        projectId: string;
+        assignedWorkerId: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
+        projectId: string;
         siteId: string | null;
         boreholeCode: string;
+        teamId: string | null;
         latitude: import("@prisma/client/runtime/library").Decimal | null;
         longitude: import("@prisma/client/runtime/library").Decimal | null;
         groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
@@ -333,7 +364,6 @@ export declare class BoreholesService {
         finalDepth: import("@prisma/client/runtime/library").Decimal | null;
         startedAt: Date | null;
         completedAt: Date | null;
-        assignedWorkerId: string | null;
         actualLat: import("@prisma/client/runtime/library").Decimal | null;
         actualLng: import("@prisma/client/runtime/library").Decimal | null;
         actualAccuracyM: import("@prisma/client/runtime/library").Decimal | null;
@@ -343,6 +373,15 @@ export declare class BoreholesService {
         structureType: string | null;
         chainage: string | null;
         span: string | null;
+        diameter: number | null;
+        drillingFluid: string | null;
+        hammerType: string | null;
+        drillerId: string | null;
+        weather: string | null;
+        terminationReason: string | null;
+    }>;
+    deletePlanned(projectId: string, user: any): Promise<{
+        deletedCount: number;
     }>;
     bulkAssignTeam(projectId: string, user: any, dto: BulkAssignTeamDto): Promise<{
         assignedIds: string[];
@@ -354,12 +393,13 @@ export declare class BoreholesService {
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        teamId: string | null;
-        projectId: string;
+        assignedWorkerId: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
+        projectId: string;
         siteId: string | null;
         boreholeCode: string;
+        teamId: string | null;
         latitude: import("@prisma/client/runtime/library").Decimal | null;
         longitude: import("@prisma/client/runtime/library").Decimal | null;
         groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
@@ -367,7 +407,6 @@ export declare class BoreholesService {
         finalDepth: import("@prisma/client/runtime/library").Decimal | null;
         startedAt: Date | null;
         completedAt: Date | null;
-        assignedWorkerId: string | null;
         actualLat: import("@prisma/client/runtime/library").Decimal | null;
         actualLng: import("@prisma/client/runtime/library").Decimal | null;
         actualAccuracyM: import("@prisma/client/runtime/library").Decimal | null;
@@ -377,6 +416,12 @@ export declare class BoreholesService {
         structureType: string | null;
         chainage: string | null;
         span: string | null;
+        diameter: number | null;
+        drillingFluid: string | null;
+        hammerType: string | null;
+        drillerId: string | null;
+        weather: string | null;
+        terminationReason: string | null;
     }>;
     getReportData(boreholeId: string, user: any): Promise<({
         team: {
@@ -487,12 +532,13 @@ export declare class BoreholesService {
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        teamId: string | null;
-        projectId: string;
+        assignedWorkerId: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
+        projectId: string;
         siteId: string | null;
         boreholeCode: string;
+        teamId: string | null;
         latitude: import("@prisma/client/runtime/library").Decimal | null;
         longitude: import("@prisma/client/runtime/library").Decimal | null;
         groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
@@ -500,7 +546,6 @@ export declare class BoreholesService {
         finalDepth: import("@prisma/client/runtime/library").Decimal | null;
         startedAt: Date | null;
         completedAt: Date | null;
-        assignedWorkerId: string | null;
         actualLat: import("@prisma/client/runtime/library").Decimal | null;
         actualLng: import("@prisma/client/runtime/library").Decimal | null;
         actualAccuracyM: import("@prisma/client/runtime/library").Decimal | null;
@@ -510,6 +555,12 @@ export declare class BoreholesService {
         structureType: string | null;
         chainage: string | null;
         span: string | null;
+        diameter: number | null;
+        drillingFluid: string | null;
+        hammerType: string | null;
+        drillerId: string | null;
+        weather: string | null;
+        terminationReason: string | null;
     }) | null>;
     getProjectReportData(projectId: string, user: any): Promise<({
         team: {
@@ -563,7 +614,6 @@ export declare class BoreholesService {
                     id: string;
                     createdAt: Date;
                     sha256Hash: string | null;
-                    sampleId: string;
                     nablLabId: string;
                     testType: string;
                     testValues: import("@prisma/client/runtime/library").JsonValue;
@@ -571,6 +621,7 @@ export declare class BoreholesService {
                     reportNumber: string;
                     reportPdfUrl: string;
                     testedOn: Date;
+                    sampleId: string;
                 } | null;
             } & {
                 id: string;
@@ -634,12 +685,13 @@ export declare class BoreholesService {
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
-        teamId: string | null;
-        projectId: string;
+        assignedWorkerId: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
+        projectId: string;
         siteId: string | null;
         boreholeCode: string;
+        teamId: string | null;
         latitude: import("@prisma/client/runtime/library").Decimal | null;
         longitude: import("@prisma/client/runtime/library").Decimal | null;
         groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
@@ -647,7 +699,6 @@ export declare class BoreholesService {
         finalDepth: import("@prisma/client/runtime/library").Decimal | null;
         startedAt: Date | null;
         completedAt: Date | null;
-        assignedWorkerId: string | null;
         actualLat: import("@prisma/client/runtime/library").Decimal | null;
         actualLng: import("@prisma/client/runtime/library").Decimal | null;
         actualAccuracyM: import("@prisma/client/runtime/library").Decimal | null;
@@ -657,6 +708,12 @@ export declare class BoreholesService {
         structureType: string | null;
         chainage: string | null;
         span: string | null;
+        diameter: number | null;
+        drillingFluid: string | null;
+        hammerType: string | null;
+        drillerId: string | null;
+        weather: string | null;
+        terminationReason: string | null;
     })[]>;
     createWaterTableObservation(boreholeId: string, dto: CreateWaterTableDto, user: any): Promise<{
         id: string;
@@ -810,12 +867,13 @@ export declare class BoreholesService {
                 status: import("@prisma/client").$Enums.BoreholeStatus;
                 createdAt: Date;
                 updatedAt: Date;
-                teamId: string | null;
-                projectId: string;
+                assignedWorkerId: string | null;
                 createdByUserId: string;
                 lockedAt: Date | null;
+                projectId: string;
                 siteId: string | null;
                 boreholeCode: string;
+                teamId: string | null;
                 latitude: import("@prisma/client/runtime/library").Decimal | null;
                 longitude: import("@prisma/client/runtime/library").Decimal | null;
                 groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
@@ -823,7 +881,6 @@ export declare class BoreholesService {
                 finalDepth: import("@prisma/client/runtime/library").Decimal | null;
                 startedAt: Date | null;
                 completedAt: Date | null;
-                assignedWorkerId: string | null;
                 actualLat: import("@prisma/client/runtime/library").Decimal | null;
                 actualLng: import("@prisma/client/runtime/library").Decimal | null;
                 actualAccuracyM: import("@prisma/client/runtime/library").Decimal | null;
@@ -833,6 +890,12 @@ export declare class BoreholesService {
                 structureType: string | null;
                 chainage: string | null;
                 span: string | null;
+                diameter: number | null;
+                drillingFluid: string | null;
+                hammerType: string | null;
+                drillerId: string | null;
+                weather: string | null;
+                terminationReason: string | null;
             }) | null;
             integrity: {
                 valid: boolean;
@@ -919,12 +982,13 @@ export declare class BoreholesService {
                 status: import("@prisma/client").$Enums.BoreholeStatus;
                 createdAt: Date;
                 updatedAt: Date;
-                teamId: string | null;
-                projectId: string;
+                assignedWorkerId: string | null;
                 createdByUserId: string;
                 lockedAt: Date | null;
+                projectId: string;
                 siteId: string | null;
                 boreholeCode: string;
+                teamId: string | null;
                 latitude: import("@prisma/client/runtime/library").Decimal | null;
                 longitude: import("@prisma/client/runtime/library").Decimal | null;
                 groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
@@ -932,7 +996,6 @@ export declare class BoreholesService {
                 finalDepth: import("@prisma/client/runtime/library").Decimal | null;
                 startedAt: Date | null;
                 completedAt: Date | null;
-                assignedWorkerId: string | null;
                 actualLat: import("@prisma/client/runtime/library").Decimal | null;
                 actualLng: import("@prisma/client/runtime/library").Decimal | null;
                 actualAccuracyM: import("@prisma/client/runtime/library").Decimal | null;
@@ -942,6 +1005,12 @@ export declare class BoreholesService {
                 structureType: string | null;
                 chainage: string | null;
                 span: string | null;
+                diameter: number | null;
+                drillingFluid: string | null;
+                hammerType: string | null;
+                drillerId: string | null;
+                weather: string | null;
+                terminationReason: string | null;
             })[];
             sites: {
                 name: string;

@@ -75,6 +75,27 @@ export async function createBulkBoreholeReview(
 }
 
 /**
+ * Deletes every PLANNED (not-started) borehole in the project — used by the
+ * Excel "replace" import so the new file becomes the single source of truth.
+ * Borings with field data are never touched.
+ */
+export async function deletePlannedBoreholesAction(
+  projectId: string
+): Promise<PortalActionResult<{ deletedCount: number }>> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const res = await apiDelete<{ deletedCount: number }>(
+      `/projects/${projectId}/boreholes/planned`,
+      token
+    );
+    return { success: true, data: res };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to remove previous boring locations.") };
+  }
+}
+
+/**
  * Assigns a team to many boreholes in one call — replaces looping
  * assignBoreholeTeamAction once per borehole (sequential, one at a time).
  */

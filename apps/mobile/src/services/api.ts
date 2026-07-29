@@ -2,12 +2,17 @@ import axios from 'axios';
 import { storage } from './storage';
 import { API_BASE_URL } from '../config';
 
+// 60s, not 10s: the production API sleeps when idle (Render free tier) and
+// a cold start takes 30-60s. A 10s timeout made every first request "fail",
+// so the app wrongly showed offline mode on a working connection. A truly
+// offline device still errors instantly — the timeout only matters while a
+// slow server is waking up.
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000,
+  timeout: 60000,
 });
 
 // Request interceptor to inject JWT access token
@@ -37,7 +42,7 @@ async function refreshAccessToken(): Promise<string> {
   const response = await axios.post(
     `${API_BASE_URL}/auth/refresh`,
     { refreshToken },
-    { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+    { headers: { 'Content-Type': 'application/json' }, timeout: 60000 }
   );
   const accessToken = response.data?.accessToken;
   const newRefreshToken = response.data?.refreshToken;

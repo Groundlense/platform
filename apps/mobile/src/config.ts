@@ -17,10 +17,20 @@
  * so this is the only place that needs editing.
  */
 /**
- * __DEV__ is true in Metro/debug builds and false in release bundles, so
- * development talks to the local API via the emulator loopback while store
- * builds talk to the production API on Render.
+ * USE_LOCAL_API — flip to true ONLY when the API is running on this
+ * computer (docker-compose, port 8000) AND the app runs in the Android
+ * EMULATOR. 10.0.2.2 is the emulator's alias for the host machine; on a
+ * physical phone it points at nothing, so every request fails with
+ * "Network Error" and the app behaves as if it were offline.
+ *
+ * Default false: debug builds talk to the same production API as release
+ * builds — works on any device with no local setup.
+ * (Physical-device alternative for local dev: `adb reverse tcp:8000
+ * tcp:8000` and use http://localhost:8000/api/v1.)
  */
-export const API_BASE_URL = __DEV__
-  ? 'http://10.0.2.2:8000/api/v1'
-  : 'https://platform-1bi0.onrender.com/api/v1';
+const USE_LOCAL_API = false;
+
+export const API_BASE_URL =
+  __DEV__ && USE_LOCAL_API
+    ? 'http://10.0.2.2:8000/api/v1'
+    : 'https://platform-1bi0.onrender.com/api/v1';

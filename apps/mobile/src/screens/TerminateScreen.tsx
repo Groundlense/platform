@@ -89,9 +89,19 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
           { status: 'TERMINATED', finalDepth: safeDepth, terminationReason: reason },
           activeSessionId
         );
+      } else {
+        // Permanent stop: no COMPLETED queued here — BoringClosure owns that
+        // transition once the worker locks and submits the closure. But the
+        // reason and depth recorded now must still reach the server; they
+        // used to be discarded if the closure form was never finished.
+        await syncManager.queueOperation(
+          'BORING',
+          borehole.id,
+          'UPDATE',
+          { finalDepth: safeDepth, terminationReason: reason },
+          activeSessionId
+        );
       }
-      // Permanent stop: no COMPLETED queued here — BoringClosure queues
-      // { status: 'COMPLETED' } once the worker locks and submits the closure.
 
       // Push everything recorded so far (intervals, samples, session end,
       // queued photos) right now if there's network — a stopped boring must
