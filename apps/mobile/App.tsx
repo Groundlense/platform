@@ -25,6 +25,7 @@ import EngineerQueryScreen from './src/screens/EngineerQueryScreen';
 import { syncManager } from './src/services/sync';
 import { storage } from './src/services/storage';
 import { media } from './src/services/media';
+import { API_BASE_URL } from './src/config';
 import { LanguageProvider } from './src/utils/LanguageContext';
 import BrandHeader from './src/components/BrandHeader';
 
@@ -46,6 +47,15 @@ function App() {
         console.log('[Cache] Stale local cache cleared; will resync from server.');
       }
     });
+  }, []);
+
+  // Wake the API the moment the app opens: the production server sleeps
+  // when idle and takes 30-60s to cold-start, so pinging now means it's
+  // usually warm by the time the worker finishes typing their PIN.
+  // Fire-and-forget — a failure here means nothing (a truly offline
+  // device works from cache as designed).
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/`).catch(() => {});
   }, []);
 
   useEffect(() => {

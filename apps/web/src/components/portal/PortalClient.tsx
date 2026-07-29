@@ -35,6 +35,7 @@ import {
   deleteTeamAction,
   updateUserProfileAction,
   deleteTeamMemberAction,
+  deletePlannedBoreholesAction,
   type BoreholeIntegrity,
 } from "@/app/actions/portal";
 import { createCrewMemberAction, findUserByMobileAction } from "@/app/actions/crew";
@@ -1428,6 +1429,23 @@ export default function PortalClient({
       return;
     }
 
+    // Re-import = replace: the file becomes the single source of truth.
+    // Confirm before touching anything — this deletes the previous import.
+    const isReplacing = (localBoreholes || []).length > 0;
+    if (isReplacing) {
+      const startedCount = (localBoreholes || []).filter((bh: any) => bh.status !== "PLANNED").length;
+      const ok = window.confirm(
+        `Replace the currently uploaded boring locations?\n\n` +
+          `• All not-started (PLANNED) borings will be DELETED and re-imported from this file.\n` +
+          (startedCount > 0
+            ? `• ${startedCount} boring(s) already started in the field are kept unchanged.\n`
+            : ``) +
+          `• Team assignments of deleted borings are cleared — fill the "Team" column in the file (team code or name) to re-assign automatically.\n\n` +
+          `Press OK to replace, or Cancel to keep everything as it is.`
+      );
+      if (!ok) return;
+    }
+
     const loadXLSX = (): Promise<any> => {
       return new Promise((resolve, reject) => {
         if ((window as any).XLSX) {
@@ -1469,10 +1487,23 @@ export default function PortalClient({
         const structureTypeIdx = headers.findIndex((h: string) => ["structure_type", "structure type", "structuretype"].includes(h));
         const chainageIdx = headers.findIndex((h: string) => ["chainage", "chainage_m"].includes(h));
         const spanIdx = headers.findIndex((h: string) => ["span"].includes(h));
+        const teamIdx = headers.findIndex((h: string) => ["team", "crew"].includes(h));
 
         if (bhNoIdx === -1) {
           alert("Missing BH_No/Borehole column in file.");
           return;
+        }
+
+        // Replace confirmed above: clear the previous import before writing
+        // the new one, so removed rows don't linger as orphan borings.
+        let replacedCount = 0;
+        if (isReplacing) {
+          const del = await deletePlannedBoreholesAction(proj.id);
+          if (!del.success) {
+            alert(`Could not remove the previous boring locations: ${del.error}\n\nNothing was imported.`);
+            return;
+          }
+          replacedCount = del.data?.deletedCount ?? 0;
         }
 
         // UTM zone/hemisphere is the user's explicit, stated declaration for
@@ -1488,6 +1519,8 @@ export default function PortalClient({
         let errorCount = 0;
         const lockedRows: string[] = [];
         const coordFailures: string[] = [];
+        // Rows with a "Team" value — assigned in bulk after the import.
+        const teamRows: { boreholeId: string; teamLabel: string }[] = [];
 
         for (let i = 1; i < rows.length; i++) {
           const cells = rows[i];
@@ -1504,6 +1537,7 @@ export default function PortalClient({
           const structTypeVal = structureTypeIdx !== -1 ? String(cells[structureTypeIdx] || "").trim() : "";
           const chainageVal = chainageIdx !== -1 ? String(cells[chainageIdx] || "").trim() : "";
           const spanVal = spanIdx !== -1 ? String(cells[spanIdx] || "").trim() : "";
+          const teamVal = teamIdx !== -1 ? String(cells[teamIdx] || "").trim() : "";
 
           // Coordinate handling: "decimal" passes the uploaded values through
           // completely unchanged. "utm" converts deterministically using the
@@ -1551,6 +1585,9 @@ export default function PortalClient({
           const res = await createBoreholeAction(formData);
           if (res.success) {
             createdCount++;
+            if (teamVal && res.borehole?.id) {
+              teamRows.push({ boreholeId: res.borehole.id, teamLabel: teamVal });
+            }
           } else if (/locked/i.test(String(res.error || ""))) {
             // Boring already started in the field — its row is intentionally
             // untouched, not an import failure.
@@ -1561,7 +1598,43 @@ export default function PortalClient({
           }
         }
 
+        // Assign teams from the "Team" column — matched to existing teams by
+        // code or name (case-insensitive). Unknown names are reported, never
+        // silently dropped or auto-created.
+        let teamsAssigned = 0;
+        const unknownTeams = new Set<string>();
+        if (teamRows.length > 0) {
+          const byTeamId = new Map<string, string[]>();
+          for (const row of teamRows) {
+            const match = (localTeams || []).find((tm: any) =>
+              [tm.code, tm.name].some(
+                (v: any) => v && String(v).trim().toLowerCase() === row.teamLabel.toLowerCase()
+              )
+            );
+            if (match?.id) {
+              const ids = byTeamId.get(match.id) ?? [];
+              ids.push(row.boreholeId);
+              byTeamId.set(match.id, ids);
+            } else {
+              unknownTeams.add(row.teamLabel);
+            }
+          }
+          for (const [teamId, ids] of byTeamId) {
+            const assignRes = await bulkAssignTeamAction(proj.id, ids, teamId);
+            if (assignRes.success) teamsAssigned += ids.length;
+          }
+        }
+
         let summary = `Successfully processed file. Imported/updated ${createdCount} boreholes.`;
+        if (replacedCount > 0) {
+          summary += `\nReplaced ${replacedCount} previously imported boring(s).`;
+        }
+        if (teamsAssigned > 0) {
+          summary += `\nAssigned ${teamsAssigned} boring(s) to teams from the "Team" column.`;
+        }
+        if (unknownTeams.size > 0) {
+          summary += `\nNo team found matching: ${[...unknownTeams].join(", ")} — create these teams first (Crew tab), then re-upload or assign manually.`;
+        }
         if (lockedRows.length > 0) {
           summary += `\nSkipped ${lockedRows.length} locked boring(s) already started in the field: ${lockedRows.join(", ")}.`;
         }

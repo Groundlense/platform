@@ -54,11 +54,16 @@ let BoreholesService = class BoreholesService {
         return this.db.borehole.findMany({
             where: {
                 ...(projectId ? { projectId } : {}),
-                team: {
-                    members: {
-                        some: { userId: user.id },
+                OR: [
+                    {
+                        team: {
+                            members: {
+                                some: { userId: user.id },
+                            },
+                        },
                     },
-                },
+                    { assignedWorkerId: user.id },
+                ],
             },
             include: {
                 team: { select: { id: true, code: true, name: true } },
@@ -239,6 +244,14 @@ let BoreholesService = class BoreholesService {
         });
         await this.activityLogsService.log(user.id, 'BOREHOLE_LOCATION_UPDATED', 'BOREHOLE', borehole.id, { latitude: dto.latitude, longitude: dto.longitude });
         return borehole;
+    }
+    async deletePlanned(projectId, user) {
+        await this.access.assertProjectAccess(user, projectId);
+        const result = await this.db.borehole.deleteMany({
+            where: { projectId, status: 'PLANNED' },
+        });
+        await this.activityLogsService.log(user.id, 'BOREHOLE_DELETED', 'PROJECT', projectId, { deletedCount: result.count, reason: 'excel-replace-import' });
+        return { deletedCount: result.count };
     }
     async bulkAssignTeam(projectId, user, dto) {
         await this.access.assertProjectAccess(user, projectId);

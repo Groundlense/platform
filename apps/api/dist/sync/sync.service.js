@@ -102,19 +102,33 @@ let SyncService = SyncService_1 = class SyncService {
                 error = err?.message ?? 'Unknown error';
                 this.logger.warn(`Sync operation ${op.operationId} (${op.entityType}/${op.operationType}) failed: ${error}`);
             }
-            await this.db.syncOperation.create({
-                data: {
-                    deviceId: device.id,
-                    operationId: op.operationId,
-                    entityType: op.entityType,
-                    entityId: op.entityId,
-                    operationType: op.operationType,
-                    payloadJson: op.payloadJson,
-                    boringSessionId: op.boringSessionId || null,
-                    status,
-                    syncedAt: status === client_1.SyncStatus.SYNCED ? new Date() : null,
-                },
-            });
+            let boringSessionId = op.boringSessionId || null;
+            if (boringSessionId) {
+                const sessionExists = await this.db.boringSession.findUnique({
+                    where: { id: boringSessionId },
+                    select: { id: true },
+                });
+                if (!sessionExists)
+                    boringSessionId = null;
+            }
+            try {
+                await this.db.syncOperation.create({
+                    data: {
+                        deviceId: device.id,
+                        operationId: op.operationId,
+                        entityType: op.entityType,
+                        entityId: op.entityId,
+                        operationType: op.operationType,
+                        payloadJson: op.payloadJson,
+                        boringSessionId,
+                        status,
+                        syncedAt: status === client_1.SyncStatus.SYNCED ? new Date() : null,
+                    },
+                });
+            }
+            catch (auditErr) {
+                this.logger.warn(`Sync audit row failed for ${op.operationId}: ${auditErr?.message}`);
+            }
             results.push({
                 operationId: op.operationId,
                 status,
@@ -206,6 +220,21 @@ let SyncService = SyncService_1 = class SyncService {
             if (Number.isFinite(Number(payload.actualAccuracyM))) {
                 data.actualAccuracyM = Number(payload.actualAccuracyM);
             }
+        }
+        const intDiameter = parseInt(payload.diameter, 10);
+        if (Number.isInteger(intDiameter) && intDiameter > 0) {
+            data.diameter = intDiameter;
+        }
+        if (payload.drillingFluid)
+            data.drillingFluid = String(payload.drillingFluid);
+        if (payload.hammerType)
+            data.hammerType = String(payload.hammerType);
+        if (payload.drillerId)
+            data.drillerId = String(payload.drillerId);
+        if (payload.weather)
+            data.weather = String(payload.weather);
+        if (payload.terminationReason) {
+            data.terminationReason = String(payload.terminationReason);
         }
         if (Object.keys(data).length === 0) {
             return;

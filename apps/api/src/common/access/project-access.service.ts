@@ -70,6 +70,14 @@ export class ProjectAccessService {
             },
           },
         },
+        // Access as a borehole's named worker — same standing as team
+        // membership. Without this clause a worker assigned only by name
+        // could push field data but never read the project back.
+        {
+          boreholes: {
+            some: { assignedWorkerId: user.id },
+          },
+        },
       ],
     };
   }

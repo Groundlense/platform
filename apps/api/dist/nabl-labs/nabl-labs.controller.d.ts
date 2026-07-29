@@ -51,7 +51,6 @@ export declare class NablLabsController {
         id: string;
         createdAt: Date;
         sha256Hash: string | null;
-        sampleId: string;
         nablLabId: string;
         testType: string;
         testValues: import("@prisma/client/runtime/library").JsonValue;
@@ -59,6 +58,7 @@ export declare class NablLabsController {
         reportNumber: string;
         reportPdfUrl: string;
         testedOn: Date;
+        sampleId: string;
     }>;
     dispatchSample(sampleId: string, dto: DispatchSampleDto, user: any): Promise<{
         id: string;
@@ -115,7 +115,6 @@ export declare class NablLabsController {
         id: string;
         createdAt: Date;
         sha256Hash: string | null;
-        sampleId: string;
         nablLabId: string;
         testType: string;
         testValues: import("@prisma/client/runtime/library").JsonValue;
@@ -123,5 +122,6 @@ export declare class NablLabsController {
         reportNumber: string;
         reportPdfUrl: string;
         testedOn: Date;
+        sampleId: string;
     }>;
 }

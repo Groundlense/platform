@@ -584,6 +584,17 @@ model Borehole {
   chainage         String?
   span             String?
 
+  // Rig setup + field context captured on the mobile app — persisted
+  // verbatim so nothing the worker enters is discarded. drillerId is the
+  // worker-typed driller reference (employee code or name), deliberately
+  // not an FK: offline crews can name drillers who have no account.
+  diameter          Int?
+  drillingFluid     String?
+  hammerType        String?
+  drillerId         String?
+  weather           String?
+  terminationReason String?
+
   project        Project      @relation(fields: [projectId], references: [id])
   createdBy      User         @relation("BoreholeCreator", fields: [createdByUserId], references: [id])
   assignedWorker User?        @relation("BoreholeAssignedWorker", fields: [assignedWorkerId], references: [id])

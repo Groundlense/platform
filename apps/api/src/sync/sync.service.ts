@@ -87,19 +87,41 @@ export class SyncService {
         );
       }
 
-      await this.db.syncOperation.create({
-        data: {
-          deviceId: device.id,
-          operationId: op.operationId,
-          entityType: op.entityType,
-          entityId: op.entityId,
-          operationType: op.operationType,
-          payloadJson: op.payloadJson,
-          boringSessionId: op.boringSessionId || null,
-          status,
-          syncedAt: status === SyncStatus.SYNCED ? new Date() : null,
-        },
-      });
+      // Offline devices attach locally generated session ids (`sess-…`)
+      // that don't exist server-side. Writing one into the FK column blows
+      // up the whole batch with a 500 — and because the audit row was never
+      // created, the mobile retries the same poisoned op forever (a
+      // permanent sync deadlock). Store only session ids that exist.
+      let boringSessionId: string | null = op.boringSessionId || null;
+      if (boringSessionId) {
+        const sessionExists = await this.db.boringSession.findUnique({
+          where: { id: boringSessionId },
+          select: { id: true },
+        });
+        if (!sessionExists) boringSessionId = null;
+      }
+
+      try {
+        await this.db.syncOperation.create({
+          data: {
+            deviceId: device.id,
+            operationId: op.operationId,
+            entityType: op.entityType,
+            entityId: op.entityId,
+            operationType: op.operationType,
+            payloadJson: op.payloadJson,
+            boringSessionId,
+            status,
+            syncedAt: status === SyncStatus.SYNCED ? new Date() : null,
+          },
+        });
+      } catch (auditErr: any) {
+        // The audit row must never take down the batch — the domain write
+        // above already happened (or was recorded FAILED honestly).
+        this.logger.warn(
+          `Sync audit row failed for ${op.operationId}: ${auditErr?.message}`,
+        );
+      }
 
       results.push({
         operationId: op.operationId,
@@ -217,6 +239,21 @@ export class SyncService {
       if (Number.isFinite(Number(payload.actualAccuracyM))) {
         data.actualAccuracyM = Number(payload.actualAccuracyM);
       }
+    }
+
+    // Rig setup + field context — every field the worker entered is
+    // persisted; these used to be silently dropped while the operation
+    // still reported SYNCED.
+    const intDiameter = parseInt(payload.diameter, 10);
+    if (Number.isInteger(intDiameter) && intDiameter > 0) {
+      data.diameter = intDiameter;
+    }
+    if (payload.drillingFluid) data.drillingFluid = String(payload.drillingFluid);
+    if (payload.hammerType) data.hammerType = String(payload.hammerType);
+    if (payload.drillerId) data.drillerId = String(payload.drillerId);
+    if (payload.weather) data.weather = String(payload.weather);
+    if (payload.terminationReason) {
+      data.terminationReason = String(payload.terminationReason);
     }
 
     if (Object.keys(data).length === 0) {

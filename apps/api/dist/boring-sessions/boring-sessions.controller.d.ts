@@ -10,9 +10,9 @@ export declare class BoringSessionsController {
         createdAt: Date;
         startedAt: Date;
         startDepth: import("@prisma/client/runtime/library").Decimal;
+        terminationReason: string | null;
         boreholeId: string;
         endDepth: import("@prisma/client/runtime/library").Decimal;
-        terminationReason: string | null;
         endedAt: Date | null;
         workerId: string;
     }>;
@@ -22,9 +22,9 @@ export declare class BoringSessionsController {
         createdAt: Date;
         startedAt: Date;
         startDepth: import("@prisma/client/runtime/library").Decimal;
+        terminationReason: string | null;
         boreholeId: string;
         endDepth: import("@prisma/client/runtime/library").Decimal;
-        terminationReason: string | null;
         endedAt: Date | null;
         workerId: string;
     }>;
@@ -41,9 +41,9 @@ export declare class BoringSessionsController {
         createdAt: Date;
         startedAt: Date;
         startDepth: import("@prisma/client/runtime/library").Decimal;
+        terminationReason: string | null;
         boreholeId: string;
         endDepth: import("@prisma/client/runtime/library").Decimal;
-        terminationReason: string | null;
         endedAt: Date | null;
         workerId: string;
     })[]>;

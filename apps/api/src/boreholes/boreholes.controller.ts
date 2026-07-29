@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -219,6 +220,19 @@ export class BoreholesController {
   // used to be one PATCH request per borehole (sequential, in-order) for
   // bulk team assignment.
   @Permissions('WORKER_ASSIGN')
+  // Excel "replace" import: clears every not-yet-started boring so the new
+  // file becomes the single source of truth. Started borings are untouched.
+  @Delete('projects/:projectId/boreholes/planned')
+  deletePlanned(
+    @Param('projectId')
+    projectId: string,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    return this.boreholesService.deletePlanned(projectId, user);
+  }
+
   @Patch('projects/:projectId/boreholes/bulk-assign-team')
   bulkAssignTeam(
     @Param('projectId')
