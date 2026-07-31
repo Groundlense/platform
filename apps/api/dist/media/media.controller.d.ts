@@ -28,6 +28,11 @@ export declare class MediaController {
         accuracyM: import("@prisma/client/runtime/library").Decimal | null;
         takenAt: Date | null;
     }>;
+    uploadSampleReport(sampleId: string, file: Express.Multer.File, user: any): Promise<{
+        id: string;
+        url: string | null;
+        fileName: string;
+    }>;
     getMedia(intervalId: string, user: any): Promise<{
         id: string;
         createdAt: Date;

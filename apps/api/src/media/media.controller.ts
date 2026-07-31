@@ -125,6 +125,54 @@ export class MediaController {
     return this.mediaService.create(intervalId, file, user, body);
   }
 
+  // NABL lab-report certificate PDF for a sample. Stored like all media
+  // (Cloudinary when configured, else ./uploads) and linked to the sample
+  // via entityType/entityId; the returned url/id goes into
+  // LabResult.reportPdfUrl by the Lab form.
+  @Post('samples/:sampleId/report-pdf')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads',
+        filename: (req, file, cb) => {
+          cb(
+            null,
+            `${Date.now()}-${randomBytes(6).toString('hex')}${extname(
+              file.originalname,
+            )}`,
+          );
+        },
+      }),
+      limits: {
+        fileSize: IMAGE_MAX_BYTES,
+      },
+      fileFilter: (req, file, cb) => {
+        if (file.mimetype !== 'application/pdf') {
+          return cb(
+            new BadRequestException('Lab report must be a PDF file'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  uploadSampleReport(
+    @Param('sampleId')
+    sampleId: string,
+
+    @UploadedFile()
+    file: Express.Multer.File,
+
+    @CurrentUser()
+    user: any,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file received (field name: file)');
+    }
+    return this.mediaService.createSampleReport(sampleId, file, user);
+  }
+
   @Get('intervals/:intervalId/media')
   getMedia(
     @Param('intervalId')

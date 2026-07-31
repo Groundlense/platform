@@ -26,6 +26,7 @@ import {
   fetchBoreholeIntegrity,
   submitSampleLabResult,
   registerNablLabAction,
+  uploadSampleReportPdfAction,
   getUserActivityLogs,
   createTeamAction,
   addTeamMemberAction,
@@ -1062,6 +1063,10 @@ export default function PortalClient({
   const [labBusy, setLabBusy] = useState(false);
   const [labError, setLabError] = useState<string | null>(null);
   const [labSuccess, setLabSuccess] = useState<string | null>(null);
+  // Device-local draft + real PDF upload state
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const [pdfUploading, setPdfUploading] = useState(false);
+  const [pdfUploadedName, setPdfUploadedName] = useState<string | null>(null);
 
   const resetLabForm = () => {
     [
@@ -1074,6 +1079,71 @@ export default function PortalClient({
     ].forEach((set) => set(""));
     setLabError(null);
     setLabSuccess(null);
+    setDraftNotice(null);
+    setPdfUploadedName(null);
+  };
+
+  // ── Device-local lab drafts: "Save Draft" persists the in-progress form
+  // to this browser (per sample) and restores it on return/refresh. Cleared
+  // when the results are locked & saved for real. ──
+  const labDraftFields: Record<string, [string, (v: string) => void]> = {
+    gSiltClay: [gSiltClay, setGSiltClay], gFineSand: [gFineSand, setGFineSand],
+    gMedSand: [gMedSand, setGMedSand], gCoarseSand: [gCoarseSand, setGCoarseSand],
+    gGravel: [gGravel, setGGravel], liquidLimit: [liquidLimit, setLiquidLimit],
+    plasticLimit: [plasticLimit, setPlasticLimit], shrinkageLimit: [shrinkageLimit, setShrinkageLimit],
+    nr: [nr, setNr], bulkDensity: [bulkDensity, setBulkDensity],
+    moistureContent: [moistureContent, setMoistureContent], specificGravity: [specificGravity, setSpecificGravity],
+    uuC: [uuC, setUuC], uuPhi: [uuPhi, setUuPhi], cuC: [cuC, setCuC], cuPhi: [cuPhi, setCuPhi],
+    cdC: [cdC, setCdC], cdPhi: [cdPhi, setCdPhi], cc: [cc, setCc], cv: [cv, setCv],
+    mv: [mv, setMv], pc: [pc, setPc], ucs: [ucs, setUcs], pointLoad: [pointLoad, setPointLoad],
+    rockClass: [rockClass, setRockClass], ph: [ph, setPh], sulphates: [sulphates, setSulphates],
+    chlorides: [chlorides, setChlorides], organic: [organic, setOrganic],
+    reportNumber: [reportNumber, setReportNumber], reportPdfUrl: [reportPdfUrl, setReportPdfUrl],
+  };
+
+  const labDraftKey = (sampleId: string) => `gl-lab-draft-${sampleId}`;
+
+  const handleSaveDraft = () => {
+    if (!selectedSample) return;
+    const data: Record<string, string> = {};
+    for (const [k, [v]] of Object.entries(labDraftFields)) data[k] = v;
+    try {
+      localStorage.setItem(
+        labDraftKey(selectedSample.id),
+        JSON.stringify({ savedAt: new Date().toISOString(), labId: selectedLabId, data }),
+      );
+      setDraftNotice(
+        `✓ Draft saved on this device (${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}) — it restores when you return to this sample.`,
+      );
+    } catch {
+      setDraftNotice("✗ Could not save the draft in this browser.");
+    }
+  };
+
+  const restoreLabDraft = (sampleId: string): boolean => {
+    try {
+      const raw = localStorage.getItem(labDraftKey(sampleId));
+      if (!raw) return false;
+      const draft = JSON.parse(raw);
+      for (const [k, v] of Object.entries(draft?.data ?? {})) {
+        const entry = labDraftFields[k];
+        if (entry && typeof v === "string") entry[1](v);
+      }
+      if (typeof draft?.labId === "string" && draft.labId) setSelectedLabId(draft.labId);
+      const when = draft?.savedAt
+        ? new Date(draft.savedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+        : "";
+      setDraftNotice(`↩ Restored your draft from this device${when ? ` (saved ${when})` : ""}.`);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const clearLabDraft = (sampleId: string) => {
+    try {
+      localStorage.removeItem(labDraftKey(sampleId));
+    } catch {}
   };
 
   const selectSample = (id: string) => {
@@ -1149,6 +1219,9 @@ export default function PortalClient({
       setReportPdfUrl(lr.reportPdfUrl ?? "");
     } else {
       resetLabForm();
+      // No persisted result — bring back the technician's device-local
+      // draft for this sample, if one was saved.
+      if (selectedSample?.id) restoreLabDraft(selectedSample.id);
     }
     // Keyed on stable primitives, not the whole `selectedSample` object —
     // the 30s background poll (and every router.refresh() elsewhere) hands
@@ -1255,6 +1328,8 @@ export default function PortalClient({
       setLabSavedIds((prev) => ({ ...prev, [selectedSample.id]: true }));
       setLabSuccess(`Results for sample ${selectedSample.sampleNumber || selectedSample.id} locked & saved.`);
       setTempUnlock(false);
+      clearLabDraft(selectedSample.id); // the real record supersedes the draft
+      setDraftNotice(null);
       router.refresh();
     } else {
       setLabError(res.error || "Failed to submit lab results.");
@@ -5339,37 +5414,55 @@ export default function PortalClient({
                     <div className="fl">Report PDF URL — Mandatory</div>
                     <div className="flex gap-2 items-center">
                       <input className="fi flex-1" value={reportPdfUrl} placeholder="Link to scanned machine output" onChange={(e) => setReportPdfUrl(e.target.value)} disabled={sampleLocked} />
-                      <button 
+                      <button
                         type="button"
-                        className="btn btn-w btn-sm h-8 shrink-0 py-1" 
-                        disabled={sampleLocked}
+                        className="btn btn-w btn-sm h-8 shrink-0 py-1"
+                        disabled={sampleLocked || pdfUploading || !selectedSample}
                         onClick={() => {
                           const input = document.createElement("input");
                           input.type = "file";
-                          input.accept = ".pdf";
-                          input.onchange = (e: any) => {
+                          input.accept = ".pdf,application/pdf";
+                          input.onchange = async (e: any) => {
                             const file = e.target.files?.[0];
-                            if (file) {
-                              setReportPdfUrl(`https://groundlense-reports-bucket.s3.amazonaws.com/${file.name}`);
-                              alert(`Uploaded "${file.name}" successfully to report server.`);
+                            if (!file || !selectedSample) return;
+                            setPdfUploading(true);
+                            setLabError(null);
+                            const fd = new FormData();
+                            fd.append("file", file);
+                            const res = await uploadSampleReportPdfAction(selectedSample.id, fd);
+                            setPdfUploading(false);
+                            if (res.success && res.data) {
+                              // Permanent URL when cloud storage holds it,
+                              // else the authenticated media proxy path.
+                              setReportPdfUrl(res.data.url || `/api/media/${res.data.id}`);
+                              setPdfUploadedName(res.data.fileName || file.name);
+                            } else {
+                              setLabError(res.error || "Failed to upload report PDF.");
                             }
                           };
                           input.click();
                         }}
                       >
-                        Upload PDF
+                        {pdfUploading ? "Uploading…" : "Upload PDF"}
                       </button>
                     </div>
+                    {pdfUploadedName && (
+                      <div className="text-[10px] text-green-600 mt-1">✓ {pdfUploadedName} uploaded and linked</div>
+                    )}
                   </div>
                 </div>
                 </fieldset>
 
                 {/* Save buttons */}
-                <div className="btn-row justify-end mt-4">
-                  <button 
-                    className="btn btn-w" 
-                    disabled={!canEditProject || sampleLocked}
-                    onClick={() => alert("Draft saved successfully!")}
+                {draftNotice && (
+                  <div className="text-[10px] text-text-sec mt-3 text-right">{draftNotice}</div>
+                )}
+                <div className="btn-row justify-end mt-2">
+                  <button
+                    className="btn btn-w"
+                    disabled={!canEditProject || sampleLocked || !selectedSample}
+                    onClick={handleSaveDraft}
+                    title="Saves the in-progress form in this browser; it restores when you come back to this sample. Lock & Save writes the permanent record."
                   >
                     Save Draft
                   </button>
