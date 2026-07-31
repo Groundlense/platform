@@ -213,6 +213,30 @@ export async function getUserActivityLogs(userId: string): Promise<any[]> {
 }
 
 /**
+ * Register a NABL lab for the organization. Labs are created unverified;
+ * a GroundLense admin approves them (isVerified) per the RBAC spec, but
+ * result submission only requires the lab to exist.
+ */
+export async function registerNablLabAction(payload: {
+  companyId: string;
+  labName: string;
+  nablCertNumber: string;
+  accreditedTests: Record<string, unknown>;
+  certValidFrom: string;
+  certValidUntil: string;
+  verificationDocUrl?: string;
+}): Promise<PortalActionResult> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const result = await apiPost<any>(`/nabl-labs`, payload, token);
+    return { success: true, data: result };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to register NABL lab.") };
+  }
+}
+
+/**
  * Lab result for a sample — null when none exists (API returns 404) or on failure.
  */
 export async function fetchSampleLabResult(sampleId: string): Promise<any | null> {
