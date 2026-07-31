@@ -48,6 +48,12 @@ let MediaController = class MediaController {
         }
         return this.mediaService.create(intervalId, file, user, body);
     }
+    uploadSampleReport(sampleId, file, user) {
+        if (!file) {
+            throw new common_1.BadRequestException('No file received (field name: file)');
+        }
+        return this.mediaService.createSampleReport(sampleId, file, user);
+    }
     getMedia(intervalId, user) {
         return this.mediaService.getByInterval(intervalId, user);
     }
@@ -88,6 +94,32 @@ __decorate([
     __metadata("design:paramtypes", [String, Object, Object, Object]),
     __metadata("design:returntype", Promise)
 ], MediaController.prototype, "upload", null);
+__decorate([
+    (0, common_1.Post)('samples/:sampleId/report-pdf'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', {
+        storage: (0, multer_1.diskStorage)({
+            destination: './uploads',
+            filename: (req, file, cb) => {
+                cb(null, `${Date.now()}-${(0, crypto_1.randomBytes)(6).toString('hex')}${(0, path_1.extname)(file.originalname)}`);
+            },
+        }),
+        limits: {
+            fileSize: IMAGE_MAX_BYTES,
+        },
+        fileFilter: (req, file, cb) => {
+            if (file.mimetype !== 'application/pdf') {
+                return cb(new common_1.BadRequestException('Lab report must be a PDF file'), false);
+            }
+            cb(null, true);
+        },
+    })),
+    __param(0, (0, common_1.Param)('sampleId')),
+    __param(1, (0, common_1.UploadedFile)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", void 0)
+], MediaController.prototype, "uploadSampleReport", null);
 __decorate([
     (0, common_1.Get)('intervals/:intervalId/media'),
     __param(0, (0, common_1.Param)('intervalId')),

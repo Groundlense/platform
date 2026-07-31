@@ -153,6 +153,69 @@ export class MediaService {
     return media;
   }
 
+  /**
+   * NABL lab-report PDF for a sample — a DOCUMENT media row tagged
+   * entityType SAMPLE. Returns { id, url }: url is the permanent https URL
+   * when Cloudinary stored it, else null and the file is served through
+   * the authenticated GET /media/:id/file route.
+   */
+  async createSampleReport(
+    sampleId: string,
+    file: Express.Multer.File,
+    user: any,
+  ) {
+    const sample = await this.db.sample.findUnique({
+      where: { id: sampleId },
+      select: { id: true, intervalId: true },
+    });
+    if (!sample) {
+      throw new NotFoundException('Sample not found');
+    }
+    await this.access.assertIntervalAccess(user, sample.intervalId);
+
+    let filePath = file.filename;
+    if (isCloudinaryConfigured()) {
+      try {
+        const localPath = join(process.cwd(), 'uploads', file.filename);
+        filePath = await uploadToCloudinary(localPath, {
+          folder: 'groundlense/lab-reports',
+          fileName: file.originalname,
+          mimeType: file.mimetype,
+        });
+        await unlink(localPath).catch(() => undefined);
+      } catch (err) {
+        this.logger.warn(
+          `Cloudinary upload failed for ${file.filename} — keeping local copy`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+
+    const media = await this.db.media.create({
+      data: {
+        intervalId: sample.intervalId,
+        fileName: file.originalname,
+        filePath,
+        mimeType: file.mimetype,
+        mediaType: 'DOCUMENT',
+        entityType: 'SAMPLE',
+        entityId: sampleId,
+        uploadedByUserId: user.id,
+      },
+    });
+    await this.activityLogsService.log(
+      user.id,
+      'MEDIA_UPLOADED',
+      'MEDIA',
+      media.id,
+    );
+    return {
+      id: media.id,
+      url: isRemoteFilePath(filePath) ? filePath : null,
+      fileName: file.originalname,
+    };
+  }
+
   async getByInterval(intervalId: string, user: any) {
     await this.access.assertIntervalAccess(user, intervalId);
 

@@ -32,6 +32,11 @@ export declare class MediaService {
         accuracyM: import("@prisma/client/runtime/library").Decimal | null;
         takenAt: Date | null;
     }>;
+    createSampleReport(sampleId: string, file: Express.Multer.File, user: any): Promise<{
+        id: string;
+        url: string | null;
+        fileName: string;
+    }>;
     getByInterval(intervalId: string, user: any): Promise<{
         id: string;
         createdAt: Date;

@@ -237,6 +237,40 @@ export async function registerNablLabAction(payload: {
 }
 
 /**
+ * Upload a NABL lab-report certificate PDF for a sample (multipart).
+ * Returns { id, url }: url is the permanent https URL when cloud storage is
+ * configured, else null — callers then reference the authenticated proxy
+ * path /api/media/<id> instead.
+ */
+export async function uploadSampleReportPdfAction(
+  sampleId: string,
+  formData: FormData
+): Promise<PortalActionResult<{ id: string; url: string | null; fileName: string }>> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const API_BASE = (process.env.API_URL || "http://localhost:3000/api/v1").replace(/\/+$/, "");
+    const res = await fetch(`${API_BASE}/samples/${sampleId}/report-pdf`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      let msg = `Upload failed (${res.status})`;
+      try {
+        const j = await res.json();
+        msg = Array.isArray(j?.message) ? j.message.join(", ") : j?.message || msg;
+      } catch {}
+      return { success: false, error: msg };
+    }
+    return { success: true, data: await res.json() };
+  } catch {
+    return { success: false, error: "Failed to upload report PDF — check your connection." };
+  }
+}
+
+/**
  * Lab result for a sample — null when none exists (API returns 404) or on failure.
  */
 export async function fetchSampleLabResult(sampleId: string): Promise<any | null> {

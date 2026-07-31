@@ -115,6 +115,49 @@ let MediaService = MediaService_1 = class MediaService {
         await this.activityLogsService.log(user.id, 'MEDIA_UPLOADED', 'MEDIA', media.id);
         return media;
     }
+    async createSampleReport(sampleId, file, user) {
+        const sample = await this.db.sample.findUnique({
+            where: { id: sampleId },
+            select: { id: true, intervalId: true },
+        });
+        if (!sample) {
+            throw new common_1.NotFoundException('Sample not found');
+        }
+        await this.access.assertIntervalAccess(user, sample.intervalId);
+        let filePath = file.filename;
+        if ((0, cloudinary_1.isCloudinaryConfigured)()) {
+            try {
+                const localPath = (0, path_1.join)(process.cwd(), 'uploads', file.filename);
+                filePath = await (0, cloudinary_1.uploadToCloudinary)(localPath, {
+                    folder: 'groundlense/lab-reports',
+                    fileName: file.originalname,
+                    mimeType: file.mimetype,
+                });
+                await (0, promises_1.unlink)(localPath).catch(() => undefined);
+            }
+            catch (err) {
+                this.logger.warn(`Cloudinary upload failed for ${file.filename} — keeping local copy`, err instanceof Error ? err.message : String(err));
+            }
+        }
+        const media = await this.db.media.create({
+            data: {
+                intervalId: sample.intervalId,
+                fileName: file.originalname,
+                filePath,
+                mimeType: file.mimetype,
+                mediaType: 'DOCUMENT',
+                entityType: 'SAMPLE',
+                entityId: sampleId,
+                uploadedByUserId: user.id,
+            },
+        });
+        await this.activityLogsService.log(user.id, 'MEDIA_UPLOADED', 'MEDIA', media.id);
+        return {
+            id: media.id,
+            url: (0, cloudinary_1.isRemoteFilePath)(filePath) ? filePath : null,
+            fileName: file.originalname,
+        };
+    }
     async getByInterval(intervalId, user) {
         await this.access.assertIntervalAccess(user, intervalId);
         return this.db.media.findMany({
