@@ -25,6 +25,7 @@ import {
   fetchBoreholeReviews,
   fetchBoreholeIntegrity,
   submitSampleLabResult,
+  registerNablLabAction,
   getUserActivityLogs,
   createTeamAction,
   addTeamMemberAction,
@@ -456,6 +457,45 @@ export default function PortalClient({
     : "Engineer";
 
   const activeNablLab = nablLabs.length > 0 ? nablLabs[0] : null;
+
+  // ── Inline NABL lab registration (shown until a lab exists — without a
+  // registered lab the result form has no lab to attribute tests to, and
+  // saving is disabled for every role) ──
+  const [labRegName, setLabRegName] = useState("");
+  const [labRegCert, setLabRegCert] = useState("");
+  const [labRegFrom, setLabRegFrom] = useState("");
+  const [labRegUntil, setLabRegUntil] = useState("");
+  const [labRegTests, setLabRegTests] = useState("");
+  const [labRegBusy, setLabRegBusy] = useState(false);
+  const [labRegError, setLabRegError] = useState<string | null>(null);
+
+  const handleRegisterLab = async () => {
+    if (!u?.organizationId) {
+      setLabRegError("Your account has no organization — log in again.");
+      return;
+    }
+    if (!labRegName.trim() || !labRegCert.trim() || !labRegFrom || !labRegUntil) {
+      setLabRegError("Lab name, NABL certificate number and both validity dates are required.");
+      return;
+    }
+    setLabRegBusy(true);
+    setLabRegError(null);
+    const tests = labRegTests.split(",").map((t) => t.trim()).filter(Boolean);
+    const res = await registerNablLabAction({
+      companyId: u.organizationId as string,
+      labName: labRegName.trim(),
+      nablCertNumber: labRegCert.trim(),
+      accreditedTests: { tests },
+      certValidFrom: new Date(labRegFrom).toISOString(),
+      certValidUntil: new Date(labRegUntil).toISOString(),
+    });
+    setLabRegBusy(false);
+    if (res.success) {
+      router.refresh(); // nablLabs prop repopulates; form disappears
+    } else {
+      setLabRegError(res.error ?? "Failed to register lab.");
+    }
+  };
 
   // ── Real boreholes only — no mock dataset, no fabricated merge ──
   const mappedBoreholes = useMemo(() => {
@@ -1284,8 +1324,18 @@ export default function PortalClient({
       const activeCoarseSand = num(gCoarseSand);
       const activeGravel = num(gGravel);
 
-      const datasets: { color: string; isDashed: boolean; pts: { x: number; y: number }[] }[] = [];
+      const datasets: { color: string; dash: number[]; width: number; pts: { x: number; y: number }[] }[] = [];
       const refColors = ['#5DCAA5', '#D85A30', '#FAC775', '#A389F4', '#3EADFF'];
+      // Every curve gets its own line STYLE as well as color, so multiple
+      // samples stay tellable-apart even where curves overlap (and when
+      // printed/greyscaled): long dash, dotted, dash-dot, short dash, …
+      const refDashes: number[][] = [
+        [8, 4],
+        [2, 3],
+        [10, 3, 2, 3],
+        [4, 4],
+        [14, 4, 4, 4],
+      ];
 
       siblingSamples.forEach((sib: any, idx: number) => {
         const gs = sib.labResult?.testValues?.grainSize;
@@ -1298,7 +1348,8 @@ export default function PortalClient({
 
         datasets.push({
           color: refColors[idx % refColors.length],
-          isDashed: true,
+          dash: refDashes[idx % refDashes.length],
+          width: 1.4,
           pts: [
             { x: 0.01, y: 0 },
             { x: 0.075, y: siltClayPct },
@@ -1314,7 +1365,8 @@ export default function PortalClient({
       if (hasActiveValues) {
         datasets.push({
           color: '#378ADD',
-          isDashed: false,
+          dash: [], // the sample being edited: solid and thicker
+          width: 2.2,
           pts: [
             { x: 0.01, y: 0 },
             { x: 0.075, y: activeSiltClay },
@@ -1334,6 +1386,28 @@ export default function PortalClient({
 
       const xm = (x: number) => pad.l + ((Math.log10(x) - lMin) / (lMax - lMin)) * pw;
       const ym = (y: number) => pad.t + ph - (y / 100) * ph;
+
+      // Soil-fraction zones drawn visually distinct: clay/silt (warm red
+      // tint) vs sands (amber) vs gravel (gray), separated by colored
+      // boundary lines at 0.075mm and 4.75mm (IS particle-size limits).
+      const ZONES = [
+        { from: 0.01, to: 0.075, tint: 'rgba(240,153,123,0.08)', line: 'rgba(240,153,123,0.6)' },
+        { from: 0.075, to: 4.75, tint: 'rgba(250,199,117,0.05)', line: 'rgba(250,199,117,0.6)' },
+        { from: 4.75, to: 20.0, tint: 'rgba(180,178,169,0.06)', line: 'rgba(180,178,169,0.6)' },
+      ];
+      ZONES.forEach((z) => {
+        ctx.fillStyle = z.tint;
+        ctx.fillRect(xm(z.from), pad.t, xm(z.to) - xm(z.from), ph);
+      });
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+      [ZONES[1], ZONES[2]].forEach((z) => {
+        ctx.strokeStyle = z.line;
+        ctx.beginPath();
+        ctx.moveTo(xm(z.from), pad.t);
+        ctx.lineTo(xm(z.from), pad.t + ph);
+        ctx.stroke();
+      });
 
       ctx.strokeStyle = 'rgba(255,255,255,0.07)';
       ctx.lineWidth = 0.5;
@@ -1362,12 +1436,8 @@ export default function PortalClient({
 
       datasets.forEach((ds) => {
         ctx.strokeStyle = ds.color;
-        ctx.lineWidth = ds.isDashed ? 1.0 : 2.0;
-        if (ds.isDashed) {
-          ctx.setLineDash([3, 3]);
-        } else {
-          ctx.setLineDash([]);
-        }
+        ctx.lineWidth = ds.width;
+        ctx.setLineDash(ds.dash);
 
         ctx.beginPath();
         ds.pts.forEach((pt, i) => {
@@ -1382,11 +1452,20 @@ export default function PortalClient({
 
       ctx.setLineDash([]);
 
+      // Labels colored to match their zone tint, so clay vs sand vs gravel
+      // regions read apart at a glance.
       const labels = ['Clay/Silt', 'Fine Sand', 'Med Sand', 'Coarse', 'Gravel'];
+      const labelColors = [
+        'rgba(240,153,123,0.9)',
+        'rgba(250,199,117,0.85)',
+        'rgba(250,199,117,0.85)',
+        'rgba(250,199,117,0.85)',
+        'rgba(180,178,169,0.8)',
+      ];
       const xs = [0.01, 0.075, 0.425, 2.0, 4.75, 20.0];
       labels.forEach((lbl, i) => {
         const cx = xm(Math.sqrt(xs[i] * xs[i + 1]));
-        ctx.fillStyle = 'rgba(180,178,169,0.5)';
+        ctx.fillStyle = labelColors[i];
         ctx.font = '7px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(lbl, cx, pad.t + ph + 16);
@@ -4583,11 +4662,13 @@ export default function PortalClient({
                           <div className="flex justify-between items-center mb-2">
                             <span className="text-[10px] font-semibold text-text-ter uppercase">SPT Interval Readings</span>
                             <div className="flex gap-2">
+                              {/* A decision is final in the UI: once approved,
+                                  reject/modify are disabled — and vice-versa. */}
                               <button
                                 onClick={() => handleApproveBoring(bh)}
                                 className="btn btn-s btn-sm cursor-pointer"
-                                title="Records a persisted APPROVE review for every SPT interval of this boring"
-                                disabled={isAppr || approveBusyBhId === bh.id}
+                                title={isRejected ? "Already rejected — a rejected boring cannot be approved" : "Records a persisted APPROVE review for every SPT interval of this boring"}
+                                disabled={isAppr || isRejected || approveBusyBhId === bh.id}
                               >
                                 {isAppr ? "✓ Approved" : approveBusyBhId === bh.id ? "Approving…" : "✓ Approve Boring"}
                               </button>
@@ -4597,8 +4678,8 @@ export default function PortalClient({
                                   setShowRejectPanel(showRejectPanel === bh.id ? null : bh.id);
                                 }}
                                 className="btn btn-d btn-sm cursor-pointer"
-                                title="Records a persisted REJECT review for every SPT interval of this boring"
-                                disabled={isRejected || rejectBusyBhId === bh.id}
+                                title={isAppr ? "Already approved — an approved boring cannot be rejected" : "Records a persisted REJECT review for every SPT interval of this boring"}
+                                disabled={isRejected || isAppr || rejectBusyBhId === bh.id}
                               >
                                 {isRejected ? "✗ Rejected" : rejectBusyBhId === bh.id ? "Rejecting…" : "✗ Reject Boring"}
                               </button>
@@ -4691,7 +4772,12 @@ export default function PortalClient({
                                       </span>
                                     </td>
                                     <td>
-                                      <button className="btn btn-d btn-sm" onClick={(e) => { e.stopPropagation(); openModPanel(item); }}>
+                                      <button
+                                        className="btn btn-d btn-sm"
+                                        onClick={(e) => { e.stopPropagation(); openModPanel(item); }}
+                                        disabled={isAppr || isRejected}
+                                        title={isAppr ? "Boring is approved — modifications are locked" : isRejected ? "Boring is rejected — modifications are locked" : "Correct a field of this interval with an IS-clause reason"}
+                                      >
                                         ✏ Modify
                                       </button>
                                     </td>
@@ -4893,8 +4979,42 @@ export default function PortalClient({
                 {activeNablLab.isVerified ? " · Verified" : " · Verification pending"}
               </div>
             ) : (
-              <div className="ib ib-a shadow-sm">
-                ⚠ No NABL lab registered yet — lab result submission is disabled until a NABL-accredited lab is added to the organization.
+              <div className="card shadow-sm mb-3">
+                <div className="ib ib-a mb-2">
+                  ⚠ No NABL lab registered yet — lab result submission is disabled (for every role) until a NABL-accredited lab is added. Register yours below.
+                </div>
+                {canEditProject ? (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                      <div className="fg mb-0">
+                        <div className="fl">Lab name *</div>
+                        <input type="text" className="fi" value={labRegName} onChange={(e) => setLabRegName(e.target.value)} placeholder="e.g. Acme Geotech Testing Lab" />
+                      </div>
+                      <div className="fg mb-0">
+                        <div className="fl">NABL certificate number *</div>
+                        <input type="text" className="fi" value={labRegCert} onChange={(e) => setLabRegCert(e.target.value)} placeholder="e.g. TC-1234" />
+                      </div>
+                      <div className="fg mb-0">
+                        <div className="fl">Certificate valid from *</div>
+                        <input type="date" className="fi" value={labRegFrom} onChange={(e) => setLabRegFrom(e.target.value)} />
+                      </div>
+                      <div className="fg mb-0">
+                        <div className="fl">Certificate valid until *</div>
+                        <input type="date" className="fi" value={labRegUntil} onChange={(e) => setLabRegUntil(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="fg mb-2">
+                      <div className="fl">Accredited tests (comma-separated)</div>
+                      <input type="text" className="fi" value={labRegTests} onChange={(e) => setLabRegTests(e.target.value)} placeholder="e.g. Atterberg Limits, Grain Size, Triaxial UU" />
+                    </div>
+                    {labRegError && <div className="text-[10px] text-[#F09595] mb-2">✗ {labRegError}</div>}
+                    <button className="btn btn-p btn-sm cursor-pointer" onClick={handleRegisterLab} disabled={labRegBusy}>
+                      {labRegBusy ? "Registering…" : "Register NABL Lab"}
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-[10px] text-text-ter">Ask a project admin/manager to register the lab.</div>
+                )}
               </div>
             )}
 
