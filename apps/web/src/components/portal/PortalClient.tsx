@@ -1453,7 +1453,7 @@ export default function PortalClient({
         });
       }
 
-      const pad = { l: 36, r: 12, t: 15, b: 25 };
+      const pad = { l: 36, r: 12, t: 28, b: 32 };
       const pw = W - pad.l - pad.r;
       const ph = H - pad.t - pad.b;
       const lMin = Math.log10(0.01);
@@ -1461,6 +1461,21 @@ export default function PortalClient({
 
       const xm = (x: number) => pad.l + ((Math.log10(x) - lMin) / (lMax - lMin)) * pw;
       const ym = (y: number) => pad.t + ph - (y / 100) * ph;
+
+      // Top labels: Clay, Silt, Sand, Gravel
+      const topLabels = [
+        { text: 'Clay', x: [0.01, 0.075] },
+        { text: 'Silt', x: [0.075, 0.425] },
+        { text: 'Sand', x: [0.425, 4.75] },
+        { text: 'Gravel', x: [4.75, 20.0] }
+      ];
+      ctx.fillStyle = 'rgba(180,178,169,0.7)';
+      ctx.font = 'bold 7px monospace';
+      ctx.textAlign = 'center';
+      topLabels.forEach((lbl) => {
+        const cx = xm(Math.sqrt(lbl.x[0] * lbl.x[1]));
+        ctx.fillText(lbl.text, cx, pad.t - 12);
+      });
 
       // Soil-fraction zones drawn visually distinct: clay/silt (warm red
       // tint) vs sands (amber) vs gravel (gray), separated by colored
@@ -1476,7 +1491,7 @@ export default function PortalClient({
       });
       ctx.setLineDash([]);
       ctx.lineWidth = 1;
-      [ZONES[1], ZONES[2]].forEach((z) => {
+      [ZONES[0], ZONES[1], ZONES[2]].forEach((z) => {
         ctx.strokeStyle = z.line;
         ctx.beginPath();
         ctx.moveTo(xm(z.from), pad.t);
@@ -1488,7 +1503,7 @@ export default function PortalClient({
       ctx.lineWidth = 0.5;
       ctx.setLineDash([]);
 
-      [0.01, 0.075, 0.1, 0.425, 1, 2, 4.75, 10, 20].forEach((v) => {
+      [0.001, 0.01, 0.075, 0.1, 0.425, 1, 2, 4.75, 10, 20].forEach((v) => {
         const x = xm(v);
         ctx.beginPath();
         ctx.moveTo(x, pad.t);
@@ -1509,7 +1524,16 @@ export default function PortalClient({
         ctx.fillText(v + '%', pad.l - 4, y + 3);
       });
 
-      datasets.forEach((ds) => {
+      // X-axis labels
+      ctx.fillStyle = 'rgba(180,178,169,0.6)';
+      ctx.font = '7px monospace';
+      ctx.textAlign = 'center';
+      [0.001, 0.01, 0.1, 1, 10].forEach((v) => {
+        const x = xm(v);
+        ctx.fillText(v.toFixed(3).replace(/0+$/, '0'), x, pad.t + ph + 20);
+      });
+
+      datasets.forEach((ds, dsIdx) => {
         ctx.strokeStyle = ds.color;
         ctx.lineWidth = ds.width;
         ctx.setLineDash(ds.dash);
@@ -1523,28 +1547,24 @@ export default function PortalClient({
           }
         });
         ctx.stroke();
+
+        // Draw markers on data points (circles for referenced, squares for active)
+        const markerStyle = dsIdx === datasets.length - 1 && hasActiveValues ? 'square' : 'circle';
+        ds.pts.forEach((pt) => {
+          const mx = xm(pt.x);
+          const my = ym(pt.y);
+          ctx.fillStyle = ds.color;
+          if (markerStyle === 'circle') {
+            ctx.beginPath();
+            ctx.arc(mx, my, 2, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            ctx.fillRect(mx - 1.5, my - 1.5, 3, 3);
+          }
+        });
       });
 
       ctx.setLineDash([]);
-
-      // Labels colored to match their zone tint, so clay vs sand vs gravel
-      // regions read apart at a glance.
-      const labels = ['Clay/Silt', 'Fine Sand', 'Med Sand', 'Coarse', 'Gravel'];
-      const labelColors = [
-        'rgba(240,153,123,0.9)',
-        'rgba(250,199,117,0.85)',
-        'rgba(250,199,117,0.85)',
-        'rgba(250,199,117,0.85)',
-        'rgba(180,178,169,0.8)',
-      ];
-      const xs = [0.01, 0.075, 0.425, 2.0, 4.75, 20.0];
-      labels.forEach((lbl, i) => {
-        const cx = xm(Math.sqrt(xs[i] * xs[i + 1]));
-        ctx.fillStyle = labelColors[i];
-        ctx.font = '7px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(lbl, cx, pad.t + ph + 16);
-      });
     };
 
     resizeCanvas();
