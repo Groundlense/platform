@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/privacy"];
+const PUBLIC_PATHS = ["/login", "/privacy", "/contact"];
 
 export function proxy(request: NextRequest) {
   const token = request.cookies.get("gl_token")?.value;
   const { pathname } = request.nextUrl;
+
+  // Landing page is public; logged-in users go straight to the dashboard
+  if (pathname === "/") {
+    if (token) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+    return NextResponse.next();
+  }
 
   // Allow public paths
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
