@@ -338,7 +338,7 @@ export default function AuthModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-[420px] my-auto bg-[#222120] border border-white/10 rounded-2xl p-9 shadow-2xl animate-fade-up"
+        className="relative w-full max-w-[420px] my-auto bg-[#222120] border border-white/10 rounded-2xl p-6 sm:p-9 shadow-2xl animate-fade-up"
       >
         <button
           onClick={onClose}

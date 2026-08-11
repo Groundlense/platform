@@ -164,7 +164,7 @@ const headlineClass =
 const hlClass = 'text-[#D85A30] italic';
 const subClass = 'text-base md:text-lg text-[#B4B2A9] leading-relaxed max-w-[680px] font-light';
 const secNumClass =
-  'absolute top-10 right-[7vw] font-mono text-[11px] text-[#6B6966] tracking-[0.25em]';
+  'hidden sm:block absolute top-10 right-[7vw] font-mono text-[11px] text-[#6B6966] tracking-[0.25em]';
 const dashBarDots = (
   <>
     <div className="w-2 h-2 rounded-full bg-[#A32D2D]"></div>
@@ -211,10 +211,13 @@ export default function OverviewPage() {
         .ov-dot { width: 7px; height: 7px; border-radius: 50%; background: #3A3836; cursor: pointer; transition: all .35s; border: none; padding: 0; }
         .ov-dot-active { background: #D85A30; transform: scale(1.6); box-shadow: 0 0 12px rgba(216,90,48,.5); }
         .ov-section { min-height: 100vh; position: relative; display: flex; flex-direction: column; justify-content: center; padding: 100px 7vw 80px; overflow: hidden; }
+        @media (max-width: 640px) {
+          .ov-section { min-height: auto; padding: 84px 20px 56px; }
+        }
       `}</style>
 
       {/* NAV DOTS */}
-      <div className="fixed right-6 top-1/2 -translate-y-1/2 z-[999] flex flex-col gap-3">
+      <div className="fixed right-6 top-1/2 -translate-y-1/2 z-[999] hidden md:flex flex-col gap-3">
         {SECTIONS.map((s, i) => (
           <button
             key={s}
@@ -229,9 +232,9 @@ export default function OverviewPage() {
       {/* LOGO BAR */}
       <div className="fixed top-0 left-0 right-0 z-[998] px-[7vw] py-4 flex items-center justify-between bg-gradient-to-b from-[#1A1918f2] to-transparent">
         <Link href="/">
-          <img src="/groundlense-logo.png" alt="Groundlense" className="h-16 w-auto block" />
+          <img src="/groundlense-logo.png" alt="Groundlense" className="h-12 md:h-16 w-auto block" />
         </Link>
-        <div className="font-mono text-[10px] text-[#F0997B] tracking-[0.2em] uppercase">
+        <div className="hidden sm:block font-mono text-[10px] text-[#F0997B] tracking-[0.2em] uppercase">
           Geotech Intelligence Platform
         </div>
       </div>
@@ -727,7 +730,7 @@ export default function OverviewPage() {
           entire project duration.
         </p>
 
-        <div className="mt-10 rounded-2xl overflow-hidden bg-gradient-to-br from-[#993C1D] to-[#D85A30] relative px-10 py-12 text-center">
+        <div className="mt-10 rounded-2xl overflow-hidden bg-gradient-to-br from-[#993C1D] to-[#D85A30] relative px-5 py-10 md:px-10 md:py-12 text-center">
           <div
             aria-hidden
             className="absolute font-display italic font-bold text-[14vw] text-white/[.04] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap pointer-events-none tracking-tighter"

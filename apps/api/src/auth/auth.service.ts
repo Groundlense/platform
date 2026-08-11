@@ -509,6 +509,42 @@ export class AuthService {
     };
   }
 
+  async contactMessage(body: {
+    name?: string;
+    company?: string;
+    email?: string;
+    phone?: string;
+    message?: string;
+  }) {
+    const name = body.name?.trim();
+    const email = body.email?.trim();
+    const message = body.message?.trim();
+    if (!name || !email || !message) {
+      throw new BadRequestException('Name, email and message are required');
+    }
+
+    const lines = [
+      `Name: ${name}`,
+      body.company?.trim() ? `Company: ${body.company.trim()}` : null,
+      `Email: ${email}`,
+      body.phone?.trim() ? `Phone: ${body.phone.trim()}` : null,
+      '',
+      message,
+    ].filter((l): l is string => l !== null);
+
+    const esc = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    await sendEmail({
+      to: 'info@groundlense.com',
+      subject: `Contact form — ${name}${body.company?.trim() ? ` (${body.company.trim()})` : ''}`,
+      text: lines.join('\n'),
+      html: `<p>${lines.map(esc).join('<br>')}</p><p>Reply to: <a href="mailto:${esc(email)}">${esc(email)}</a></p>`,
+    });
+
+    return { success: true };
+  }
+
   async verifyGst(gstin: string) {
     const gstRegex =
       /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i;
