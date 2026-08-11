@@ -439,6 +439,83 @@ let AuthService = class AuthService {
             message: 'OTP verified successfully',
         };
     }
+    async contactMessage(body) {
+        const name = body.name?.trim();
+        const email = body.email?.trim();
+        const message = body.message?.trim();
+        if (!name || !email || !message) {
+            throw new common_1.BadRequestException('Name, email and message are required');
+        }
+        const lines = [
+            `Name: ${name}`,
+            body.company?.trim() ? `Company: ${body.company.trim()}` : null,
+            `Email: ${email}`,
+            body.phone?.trim() ? `Phone: ${body.phone.trim()}` : null,
+            '',
+            message,
+        ].filter((l) => l !== null);
+        const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        await (0, email_helper_1.sendEmail)({
+            to: 'info@groundlense.com',
+            subject: `Contact form — ${name}${body.company?.trim() ? ` (${body.company.trim()})` : ''}`,
+            text: lines.join('\n'),
+            html: `<p>${lines.map(esc).join('<br>')}</p><p>Reply to: <a href="mailto:${esc(email)}">${esc(email)}</a></p>`,
+        });
+        return { success: true };
+    }
+    async accountDeletionRequest(body) {
+        const name = body.name?.trim();
+        const email = body.email?.trim();
+        if (!name || !email) {
+            throw new common_1.BadRequestException('Name and account email are required');
+        }
+        const lines = [
+            `Name: ${name}`,
+            `Account email: ${email}`,
+            body.phone?.trim() ? `Registered mobile: ${body.phone.trim()}` : null,
+            body.organization?.trim()
+                ? `Organization: ${body.organization.trim()}`
+                : null,
+            body.reason?.trim() ? `Reason: ${body.reason.trim()}` : null,
+            '',
+            'Action required: verify the requester owns this account, then delete the',
+            'personal profile and unlink it from the organization within 30 days.',
+        ].filter((l) => l !== null);
+        const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        await (0, email_helper_1.sendEmail)({
+            to: 'info@groundlense.com',
+            subject: `Account deletion request — ${email}`,
+            text: lines.join('\n'),
+            html: `<p>${lines.map(esc).join('<br>')}</p><p>Reply to: <a href="mailto:${esc(email)}">${esc(email)}</a></p>`,
+        });
+        const ackLines = [
+            `Hello ${name},`,
+            '',
+            'We have received your request to delete your GroundLense account and the',
+            'personal data associated with it.',
+            '',
+            'What happens next:',
+            '1. We verify that the request comes from the account owner.',
+            '2. Your profile, login credentials, device location history and photo',
+            '   attributions are deleted.',
+            '3. Completion is confirmed by email within 30 days.',
+            '',
+            'Geotechnical borehole records that form part of a client project report are',
+            'retained by the organization that commissioned them, as required for',
+            'statutory audit — but they are no longer linked to your personal profile.',
+            '',
+            'If you did not make this request, reply to this email immediately.',
+            '',
+            'GroundLense Technologies Private Limited',
+        ];
+        await (0, email_helper_1.sendEmail)({
+            to: email,
+            subject: 'GroundLense — account deletion request received',
+            text: ackLines.join('\n'),
+            html: `<p>${ackLines.map(esc).join('<br>')}</p>`,
+        });
+        return { success: true };
+    }
     async verifyGst(gstin) {
         const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i;
         if (!gstRegex.test(gstin)) {

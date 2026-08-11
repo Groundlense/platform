@@ -57,6 +57,24 @@ export declare class AuthController {
         organizationId?: undefined;
         type?: undefined;
     }>;
+    contact(body: {
+        name?: string;
+        company?: string;
+        email?: string;
+        phone?: string;
+        message?: string;
+    }): Promise<{
+        success: boolean;
+    }>;
+    deleteAccountRequest(body: {
+        name?: string;
+        email?: string;
+        phone?: string;
+        organization?: string;
+        reason?: string;
+    }): Promise<{
+        success: boolean;
+    }>;
     uploadLogo(file: Express.Multer.File): Promise<{
         success: boolean;
         filename: string;

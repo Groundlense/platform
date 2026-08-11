@@ -104,6 +104,22 @@ export class AuthController {
     return this.authService.contactMessage(body);
   }
 
+  // Public account + data deletion request (linked from the Play Store listing,
+  // so it must work without a session — the user may have already lost access).
+  @Post('delete-account-request')
+  deleteAccountRequest(
+    @Body()
+    body: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      organization?: string;
+      reason?: string;
+    },
+  ) {
+    return this.authService.accountDeletionRequest(body);
+  }
+
   @Post('upload-logo')
   @UseInterceptors(
     FileInterceptor('file', {

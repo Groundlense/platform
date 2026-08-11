@@ -34,3 +34,13 @@ export const API_BASE_URL =
   __DEV__ && USE_LOCAL_API
     ? 'http://10.0.2.2:8000/api/v1'
     : 'https://platform-1bi0.onrender.com/api/v1';
+
+/** Public marketing/portal site (Vercel). */
+export const WEB_APP_URL = 'https://www.groundlense.com';
+
+/**
+ * Public account + data deletion request page. Google Play requires this URL in
+ * the Data safety form and requires an in-app route to it, so it must stay
+ * reachable without a session.
+ */
+export const ACCOUNT_DELETION_URL = `${WEB_APP_URL}/delete-account`;

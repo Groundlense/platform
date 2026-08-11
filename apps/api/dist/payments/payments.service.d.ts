@@ -10,8 +10,8 @@ export declare class PaymentsService {
         id: string;
         status: import("@prisma/client").$Enums.PaymentStatus;
         createdAt: Date;
-        initiatedByUserId: string;
         projectId: string;
+        initiatedByUserId: string;
         companyId: string;
         planType: string;
         boringsPurchased: number;
@@ -25,8 +25,8 @@ export declare class PaymentsService {
         id: string;
         status: import("@prisma/client").$Enums.PaymentStatus;
         createdAt: Date;
-        initiatedByUserId: string;
         projectId: string;
+        initiatedByUserId: string;
         companyId: string;
         planType: string;
         boringsPurchased: number;
@@ -46,8 +46,8 @@ export declare class PaymentsService {
         id: string;
         status: import("@prisma/client").$Enums.PaymentStatus;
         createdAt: Date;
-        initiatedByUserId: string;
         projectId: string;
+        initiatedByUserId: string;
         companyId: string;
         planType: string;
         boringsPurchased: number;
