@@ -11,23 +11,33 @@ export default function DeleteAccountForm() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [confirmed, setConfirmed] = useState(false);
+  const [gaveEmail, setGaveEmail] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setSending(true);
     const fd = new FormData(e.currentTarget);
+    const email = ((fd.get('email') as string) || '').trim();
+    const phone = ((fd.get('phone') as string) || '').trim();
+    if (!email && !phone) {
+      setError('Enter your account email or your registered mobile number.');
+      setSending(false);
+      return;
+    }
     try {
       const res = await deleteAccountRequestAction({
         name: (fd.get('name') as string) || '',
-        email: (fd.get('email') as string) || '',
-        phone: (fd.get('phone') as string) || undefined,
+        email: email || undefined,
+        phone: phone || undefined,
+        employeeCode: (fd.get('employeeCode') as string) || undefined,
         organization: (fd.get('organization') as string) || undefined,
         reason: (fd.get('reason') as string) || undefined,
       });
       if (res?.error) {
         setError(res.error);
       } else {
+        setGaveEmail(Boolean(email));
         setSubmitted(true);
       }
     } catch {
@@ -47,11 +57,17 @@ export default function DeleteAccountForm() {
           We&apos;ve logged your deletion request.
         </h2>
         <p className="text-sm text-[#B4B2A9] leading-relaxed">
-          A confirmation has been sent to the email address you entered. We will verify
-          that the request comes from the account owner and confirm deletion by email
-          within 30 days. If you don&apos;t hear from us, write to{' '}
+          {gaveEmail
+            ? 'A confirmation has been sent to the email address you entered. '
+            : 'We will contact you on the mobile number you entered. '}
+          We will verify that the request comes from the account owner and confirm
+          deletion within 30 days. If you don&apos;t hear from us, write to{' '}
           <a href="mailto:info@groundlense.com" className="text-[#97C459] hover:underline">
             info@groundlense.com
+          </a>{' '}
+          or call{' '}
+          <a href="tel:+919218107330" className="text-[#97C459] hover:underline">
+            +91 92181 07330
           </a>
           .
         </p>
@@ -74,14 +90,31 @@ export default function DeleteAccountForm() {
           <input name="organization" type="text" placeholder="Company name" className={inputClass} />
         </label>
       </div>
+
+      <div className="border-t border-white/10 pt-4.5">
+        <div className="text-xs text-[#B4B2A9] mb-3.5">
+          How do we find your account?{' '}
+          <span className="text-[#6B6966]">
+            Give us either one — app users often have no email, only a mobile number.
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label className="flex flex-col gap-1.5 text-xs text-[#B4B2A9]">
+            Account email
+            <input name="email" type="email" placeholder="you@company.com" className={inputClass} />
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs text-[#B4B2A9]">
+            Registered mobile number
+            <input name="phone" type="tel" placeholder="+91 00000 00000" className={inputClass} />
+          </label>
+        </div>
+      </div>
+
       <label className="flex flex-col gap-1.5 text-xs text-[#B4B2A9]">
-        Account email
-        <input name="email" type="email" required placeholder="you@company.com" className={inputClass} />
+        Employee code (optional — shown in the app under your name)
+        <input name="employeeCode" type="text" placeholder="GL-EMP-0000" className={inputClass} />
       </label>
-      <label className="flex flex-col gap-1.5 text-xs text-[#B4B2A9]">
-        Registered mobile number (optional — helps us find worker accounts)
-        <input name="phone" type="tel" placeholder="+91 00000 00000" className={inputClass} />
-      </label>
+
       <label className="flex flex-col gap-1.5 text-xs text-[#B4B2A9]">
         Reason (optional)
         <textarea
@@ -116,11 +149,16 @@ export default function DeleteAccountForm() {
       {error && <div className="text-sm text-[#F09595]">⚠ {error}</div>}
 
       <p className="text-xs text-[#6B6966] leading-relaxed">
-        Prefer email? Send your name and account email to{' '}
+        Can&apos;t use this form? Send your name and your account email or registered
+        mobile number to{' '}
         <a href="mailto:info@groundlense.com?subject=Account%20deletion%20request" className="text-[#B4B2A9] hover:text-[#97C459] transition">
           info@groundlense.com
-        </a>{' '}
-        with the subject &quot;Account deletion request&quot;.
+        </a>
+        , or call{' '}
+        <a href="tel:+919218107330" className="text-[#B4B2A9] hover:text-[#97C459] transition">
+          +91 92181 07330
+        </a>
+        .
       </p>
     </form>
   );

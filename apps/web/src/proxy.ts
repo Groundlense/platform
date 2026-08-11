@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/privacy", "/contact", "/overview"];
+// /delete-account must stay public: field workers only ever have mobile
+// accounts, and Play requires the deletion route to work without a session.
+const PUBLIC_PATHS = [
+  "/login",
+  "/privacy",
+  "/contact",
+  "/overview",
+  "/delete-account",
+];
 
 export function proxy(request: NextRequest) {
   const token = request.cookies.get("gl_token")?.value;

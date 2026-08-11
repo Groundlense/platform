@@ -61,8 +61,9 @@ export default function DeleteAccountPage() {
               This page lets you request permanent deletion of your account and the personal
               data associated with it — for both the GroundLense web platform and the
               GroundLense Worker Android app (<span className="font-mono text-sm">com.groundlense.worker</span>),
-              published by Groundlense Technologies Private Limited. You do not need to be
-              signed in to make the request.
+              published by Groundlense Technologies Private Limited. You do not need to sign
+              in, and you do not need a web account — field workers who only ever use the
+              app can request deletion here too.
             </p>
           </div>
 
