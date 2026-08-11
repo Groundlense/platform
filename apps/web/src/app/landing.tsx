@@ -1,11 +1,33 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import AuthModal from '@/components/landing/AuthModal';
 
-export default function LandingPage() {
+export default function LandingPage({
+  initialAuthOpen = false,
+  redirectTo,
+  initialEmail,
+  initialSignUp = false,
+}: {
+  initialAuthOpen?: boolean;
+  redirectTo?: string;
+  initialEmail?: string;
+  initialSignUp?: boolean;
+}) {
+  const [showAuth, setShowAuth] = useState(initialAuthOpen);
+
   return (
     <div className="bg-[#1A1918] min-h-screen">
+
+      {showAuth && (
+        <AuthModal
+          onClose={() => setShowAuth(false)}
+          redirectTo={redirectTo}
+          initialEmail={initialEmail}
+          initialSignUp={initialSignUp}
+        />
+      )}
 
       {/* ================= NAV ================= */}
       <nav className="sticky top-0 z-50 bg-[#1A1918]/80 backdrop-blur-lg border-b border-white/5">
@@ -30,12 +52,12 @@ export default function LandingPage() {
             >
               Contact us
             </Link>
-            <Link
-              href="/login"
-              className="relative font-sans text-xs font-semibold text-white bg-[#D85A30] hover:bg-[#993C1D] px-4.5 py-2.5 rounded-lg whitespace-nowrap transition transform hover:scale-105"
+            <button
+              onClick={() => setShowAuth(true)}
+              className="relative font-sans text-xs font-semibold text-white bg-[#D85A30] hover:bg-[#993C1D] px-4.5 py-2.5 rounded-lg whitespace-nowrap transition transform hover:scale-105 border-none cursor-pointer"
             >
               Sign in
-            </Link>
+            </button>
           </div>
         </div>
       </nav>

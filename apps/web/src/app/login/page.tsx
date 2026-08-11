@@ -1,5 +1,4 @@
-import LoginLeftPanel from "@/components/login/LoginLeftPanel";
-import LoginForm from "@/components/login/LoginForm";
+import LandingPage from "../landing";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -15,9 +14,11 @@ export default async function LoginPage({
   const { redirect, email, register } = await searchParams;
 
   return (
-    <div className="flex flex-row !min-h-screen">
-      <LoginLeftPanel />
-      <LoginForm redirectTo={redirect} initialEmail={email} initialRegister={register === "true"} />
-    </div>
+    <LandingPage
+      initialAuthOpen
+      redirectTo={redirect}
+      initialEmail={email}
+      initialSignUp={register === "true"}
+    />
   );
 }
