@@ -552,6 +552,25 @@ export default function LandingPage({
                   Gurugram, Haryana
                 </div>
               </div>
+              <div>
+                <div className="font-mono text-xs tracking-widest text-[#6B6966] uppercase mb-3.5">
+                  Legal
+                </div>
+                <div className="flex flex-col gap-2 text-sm">
+                  <Link
+                    href="/privacy"
+                    className="text-[#B4B2A9] hover:text-[#97C459] transition"
+                  >
+                    Privacy Policy
+                  </Link>
+                  <Link
+                    href="/delete-account"
+                    className="text-[#B4B2A9] hover:text-[#97C459] transition"
+                  >
+                    Delete my account
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
           <div className="pt-6 text-xs text-[#6B6966]">

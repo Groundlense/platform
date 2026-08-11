@@ -186,6 +186,20 @@ export default function ContactPage() {
                   We typically reply within <strong className="text-[#97C459]">24 hours</strong>, Monday to Saturday.
                 </div>
               </div>
+
+              <div className="bg-white/4 border border-white/10 rounded-2xl p-6">
+                <div className="font-mono text-[10.5px] tracking-widest uppercase text-[#6B6966] mb-2.5">
+                  Privacy &amp; data
+                </div>
+                <div className="flex flex-col gap-2 text-sm">
+                  <Link href="/privacy" className="text-[#B4B2A9] hover:text-[#97C459] transition">
+                    Privacy Policy
+                  </Link>
+                  <Link href="/delete-account" className="text-[#B4B2A9] hover:text-[#97C459] transition">
+                    Delete my account &amp; data
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         </div>

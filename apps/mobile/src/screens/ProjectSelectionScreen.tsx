@@ -8,7 +8,9 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
+import { ACCOUNT_DELETION_URL } from '../config';
 import { colors, typography } from '../utils/theme';
 import { t } from '../utils/translations';
 import { useLanguage } from '../utils/LanguageContext';
@@ -178,6 +180,32 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
     await storage.clearTokens();
     await storage.clearUser();
     navigation.replace('Login');
+  };
+
+  // Play Store policy: the app must offer an in-app route to account deletion.
+  // The request itself is handled on the web page so it also works for users
+  // who can no longer sign in.
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      lang === 'hi' ? 'खाता हटाएं' : 'Delete account',
+      lang === 'hi'
+        ? 'आपका खाता और निजी डेटा हटाने का अनुरोध हमारी वेबसाइट पर किया जाता है। ब्राउज़र खोलें?'
+        : 'Account and personal data deletion is requested on our website. Open it in your browser?',
+      [
+        { text: lang === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+        {
+          text: lang === 'hi' ? 'खोलें' : 'Open',
+          onPress: () => {
+            Linking.openURL(ACCOUNT_DELETION_URL).catch(() => {
+              Alert.alert(
+                lang === 'hi' ? 'नहीं खुल सका' : 'Could not open',
+                `${ACCOUNT_DELETION_URL}`,
+              );
+            });
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -394,6 +422,23 @@ export default function ProjectSelectionScreen({ navigation }: { navigation: any
                 ))}
               </>
             )}
+
+            {/* Account section — deletion route required by Play Store policy */}
+            <Text style={[styles.sectionTitle, styles.sectionTitleOld]}>
+              {lang === 'hi' ? 'खाता' : 'Account'}
+            </Text>
+            <TouchableOpacity style={styles.deleteAccountBtn} onPress={handleDeleteAccount}>
+              <Text style={styles.deleteAccountBtnText}>
+                {lang === 'hi'
+                  ? 'मेरा खाता और डेटा हटाएं'
+                  : 'Delete my account & data'}
+              </Text>
+              <Text style={styles.deleteAccountSub}>
+                {lang === 'hi'
+                  ? 'वेबसाइट पर अनुरोध करें — 30 दिनों में पूरा'
+                  : 'Request on our website — completed within 30 days'}
+              </Text>
+            </TouchableOpacity>
           </>
         }
       />
@@ -454,6 +499,24 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 16,
+  },
+  deleteAccountBtn: {
+    backgroundColor: colors.redLight,
+    borderWidth: 0.5,
+    borderColor: colors.redMid,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  deleteAccountBtnText: {
+    fontSize: typography.fontSizeBody,
+    fontWeight: '700',
+    color: colors.redMid,
+  },
+  deleteAccountSub: {
+    fontSize: typography.fontSizeMicro,
+    color: colors.grayMid,
+    marginTop: 4,
   },
   syncErrorBox: {
     backgroundColor: colors.amberLight,

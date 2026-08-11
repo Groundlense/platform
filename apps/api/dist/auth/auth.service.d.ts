@@ -44,6 +44,24 @@ export declare class AuthService {
         success: boolean;
         message: string;
     }>;
+    contactMessage(body: {
+        name?: string;
+        company?: string;
+        email?: string;
+        phone?: string;
+        message?: string;
+    }): Promise<{
+        success: boolean;
+    }>;
+    accountDeletionRequest(body: {
+        name?: string;
+        email?: string;
+        phone?: string;
+        organization?: string;
+        reason?: string;
+    }): Promise<{
+        success: boolean;
+    }>;
     verifyGst(gstin: string): Promise<{
         success: boolean;
         exists: boolean;

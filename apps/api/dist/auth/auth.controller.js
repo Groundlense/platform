@@ -64,6 +64,12 @@ let AuthController = class AuthController {
     verifyGst(gstin) {
         return this.authService.verifyGst(gstin);
     }
+    contact(body) {
+        return this.authService.contactMessage(body);
+    }
+    deleteAccountRequest(body) {
+        return this.authService.accountDeletionRequest(body);
+    }
     async uploadLogo(file) {
         if (!file) {
             throw new common_1.BadRequestException('File is required');
@@ -173,6 +179,20 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "verifyGst", null);
+__decorate([
+    (0, common_1.Post)('contact'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "contact", null);
+__decorate([
+    (0, common_1.Post)('delete-account-request'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "deleteAccountRequest", null);
 __decorate([
     (0, common_1.Post)('upload-logo'),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', {

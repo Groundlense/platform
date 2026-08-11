@@ -138,8 +138,21 @@ export default function PrivacyPage() {
                 5. User Rights &amp; Data Deletion
               </h2>
               <p>
-                As a user, you maintain full control over your telemetry profile. You have the right to request deletion of your account and associated geotechnical log data. 
-                For account deletion requests or policy inquiries, please email our support desk at{" "}
+                As a user, you maintain full control over your telemetry profile. You have the right to request deletion of your account and associated geotechnical log data.
+              </p>
+              <div className="bg-bg-card border border-border rounded-lg p-5 space-y-3">
+                <div className="text-[13px] text-text-sec leading-relaxed">
+                  To delete your account, use our account deletion page — it lists exactly what is erased, what is retained for statutory audit, and how long it takes. No sign-in required.
+                </div>
+                <Link
+                  href="/delete-account"
+                  className="inline-block text-rust-d hover:underline font-mono text-[13px]"
+                >
+                  → Request account &amp; data deletion
+                </Link>
+              </div>
+              <p>
+                For policy inquiries, email our support desk at{" "}
                 <a href="mailto:info@groundlense.com" className="text-rust-d hover:underline font-mono">
                   info@groundlense.com
                 </a>
@@ -156,6 +169,8 @@ export default function PrivacyPage() {
             <span>© {new Date().getFullYear()} Groundlense Technologies Pvt Ltd. All rights reserved.</span>
             <div className="flex gap-4">
               <Link href="/login" className="hover:text-text-sec transition-colors">Login</Link>
+              <span>·</span>
+              <Link href="/delete-account" className="hover:text-text-sec transition-colors">Delete Account</Link>
               <span>·</span>
               <a href="https://groundlense.com" className="hover:text-text-sec transition-colors">Website</a>
             </div>

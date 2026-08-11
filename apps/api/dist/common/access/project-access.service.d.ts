@@ -98,13 +98,13 @@ export declare class ProjectAccessService {
         status: import("@prisma/client").$Enums.BoreholeStatus;
         createdAt: Date;
         updatedAt: Date;
+        teamId: string | null;
+        projectId: string;
         assignedWorkerId: string | null;
         createdByUserId: string;
         lockedAt: Date | null;
-        projectId: string;
         siteId: string | null;
         boreholeCode: string;
-        teamId: string | null;
         latitude: import("@prisma/client/runtime/library").Decimal | null;
         longitude: import("@prisma/client/runtime/library").Decimal | null;
         groundLevelRL: import("@prisma/client/runtime/library").Decimal | null;
