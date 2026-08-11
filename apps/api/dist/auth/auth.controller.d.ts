@@ -70,6 +70,7 @@ export declare class AuthController {
         name?: string;
         email?: string;
         phone?: string;
+        employeeCode?: string;
         organization?: string;
         reason?: string;
     }): Promise<{

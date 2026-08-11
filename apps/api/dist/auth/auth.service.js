@@ -466,13 +466,17 @@ let AuthService = class AuthService {
     async accountDeletionRequest(body) {
         const name = body.name?.trim();
         const email = body.email?.trim();
-        if (!name || !email) {
-            throw new common_1.BadRequestException('Name and account email are required');
+        const phone = body.phone?.trim();
+        if (!name || (!email && !phone)) {
+            throw new common_1.BadRequestException('Name and either an account email or registered mobile number are required');
         }
         const lines = [
             `Name: ${name}`,
-            `Account email: ${email}`,
-            body.phone?.trim() ? `Registered mobile: ${body.phone.trim()}` : null,
+            email ? `Account email: ${email}` : null,
+            phone ? `Registered mobile: ${phone}` : null,
+            body.employeeCode?.trim()
+                ? `Employee code: ${body.employeeCode.trim()}`
+                : null,
             body.organization?.trim()
                 ? `Organization: ${body.organization.trim()}`
                 : null,
@@ -480,14 +484,22 @@ let AuthService = class AuthService {
             '',
             'Action required: verify the requester owns this account, then delete the',
             'personal profile and unlink it from the organization within 30 days.',
+            email
+                ? 'Confirm completion by email.'
+                : 'No email on the request — confirm completion on the mobile number above.',
         ].filter((l) => l !== null);
         const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         await (0, email_helper_1.sendEmail)({
             to: 'info@groundlense.com',
-            subject: `Account deletion request — ${email}`,
+            subject: `Account deletion request — ${email || phone}`,
             text: lines.join('\n'),
-            html: `<p>${lines.map(esc).join('<br>')}</p><p>Reply to: <a href="mailto:${esc(email)}">${esc(email)}</a></p>`,
+            html: `<p>${lines.map(esc).join('<br>')}</p>${email
+                ? `<p>Reply to: <a href="mailto:${esc(email)}">${esc(email)}</a></p>`
+                : ''}`,
         });
+        if (!email) {
+            return { success: true };
+        }
         const ackLines = [
             `Hello ${name},`,
             '',

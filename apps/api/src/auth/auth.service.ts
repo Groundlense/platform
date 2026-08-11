@@ -551,19 +551,28 @@ export class AuthService {
     name?: string;
     email?: string;
     phone?: string;
+    employeeCode?: string;
     organization?: string;
     reason?: string;
   }) {
     const name = body.name?.trim();
     const email = body.email?.trim();
-    if (!name || !email) {
-      throw new BadRequestException('Name and account email are required');
+    const phone = body.phone?.trim();
+    // Field workers sign in on mobile with a number or employee code and often
+    // have no email on their account, so either identifier is enough.
+    if (!name || (!email && !phone)) {
+      throw new BadRequestException(
+        'Name and either an account email or registered mobile number are required',
+      );
     }
 
     const lines = [
       `Name: ${name}`,
-      `Account email: ${email}`,
-      body.phone?.trim() ? `Registered mobile: ${body.phone.trim()}` : null,
+      email ? `Account email: ${email}` : null,
+      phone ? `Registered mobile: ${phone}` : null,
+      body.employeeCode?.trim()
+        ? `Employee code: ${body.employeeCode.trim()}`
+        : null,
       body.organization?.trim()
         ? `Organization: ${body.organization.trim()}`
         : null,
@@ -571,6 +580,9 @@ export class AuthService {
       '',
       'Action required: verify the requester owns this account, then delete the',
       'personal profile and unlink it from the organization within 30 days.',
+      email
+        ? 'Confirm completion by email.'
+        : 'No email on the request — confirm completion on the mobile number above.',
     ].filter((l): l is string => l !== null);
 
     const esc = (s: string) =>
@@ -578,10 +590,20 @@ export class AuthService {
 
     await sendEmail({
       to: 'info@groundlense.com',
-      subject: `Account deletion request — ${email}`,
+      subject: `Account deletion request — ${email || phone}`,
       text: lines.join('\n'),
-      html: `<p>${lines.map(esc).join('<br>')}</p><p>Reply to: <a href="mailto:${esc(email)}">${esc(email)}</a></p>`,
+      html: `<p>${lines.map(esc).join('<br>')}</p>${
+        email
+          ? `<p>Reply to: <a href="mailto:${esc(email)}">${esc(email)}</a></p>`
+          : ''
+      }`,
     });
+
+    // Nothing to acknowledge to when the requester gave only a mobile number —
+    // support confirms on that number instead.
+    if (!email) {
+      return { success: true };
+    }
 
     // Acknowledgement to the requester so they have a written record of the request.
     const ackLines = [

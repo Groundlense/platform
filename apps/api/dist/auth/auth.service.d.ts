@@ -57,6 +57,7 @@ export declare class AuthService {
         name?: string;
         email?: string;
         phone?: string;
+        employeeCode?: string;
         organization?: string;
         reason?: string;
     }): Promise<{

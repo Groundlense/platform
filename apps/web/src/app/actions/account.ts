@@ -4,8 +4,9 @@ import { apiPost, ApiError } from "@/lib/api";
 
 export async function deleteAccountRequestAction(data: {
   name: string;
-  email: string;
+  email?: string;
   phone?: string;
+  employeeCode?: string;
   organization?: string;
   reason?: string;
 }) {
