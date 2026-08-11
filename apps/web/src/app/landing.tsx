@@ -40,12 +40,12 @@ export default function LandingPage({
             />
           </div>
           <div className="flex items-center gap-7 flex-wrap justify-end">
-            <a
-              href="#overview"
+            <Link
+              href="/overview"
               className="font-sans text-sm font-medium text-[#B4B2A9] hover:text-[#97C459] transition whitespace-nowrap"
             >
               Overview
-            </a>
+            </Link>
             <Link
               href="/contact"
               className="font-sans text-sm font-medium text-[#B4B2A9] hover:text-[#97C459] transition whitespace-nowrap"

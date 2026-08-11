@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/privacy", "/contact"];
+const PUBLIC_PATHS = ["/login", "/privacy", "/contact", "/overview"];
 
 export function proxy(request: NextRequest) {
   const token = request.cookies.get("gl_token")?.value;
