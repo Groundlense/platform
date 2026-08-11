@@ -31,15 +31,15 @@ export default function LandingPage({
 
       {/* ================= NAV ================= */}
       <nav className="sticky top-0 z-50 bg-[#1A1918]/80 backdrop-blur-lg border-b border-white/5">
-        <div className="max-w-[1220px] mx-auto px-6 py-3 flex items-center justify-between gap-5">
+        <div className="max-w-[1220px] mx-auto px-4 sm:px-6 py-2 sm:py-3 flex items-center justify-between gap-3 sm:gap-5">
           <div className="flex items-center gap-3">
             <img
               src="/groundlense-logo.png"
               alt="Groundlense"
-              className="h-[64px] w-auto"
+              className="h-12 sm:h-16 w-auto"
             />
           </div>
-          <div className="flex items-center gap-7 flex-wrap justify-end">
+          <div className="flex items-center gap-4 sm:gap-7 flex-wrap justify-end">
             <Link
               href="/overview"
               className="font-sans text-sm font-medium text-[#B4B2A9] hover:text-[#97C459] transition whitespace-nowrap"
@@ -63,8 +63,8 @@ export default function LandingPage({
       </nav>
 
       {/* ================= HERO ================= */}
-      <section className="sticky top-[82px] z-10 overflow-hidden bg-gradient-to-br from-[#1A1918] via-[#222120] to-[#1A1918]">
-        <div className="max-w-[1220px] mx-auto px-6 py-20 flex flex-wrap gap-14 items-center">
+      <section className="relative lg:sticky lg:top-[82px] z-10 overflow-hidden bg-gradient-to-br from-[#1A1918] via-[#222120] to-[#1A1918]">
+        <div className="max-w-[1220px] mx-auto px-5 sm:px-6 py-12 md:py-20 flex flex-wrap gap-10 md:gap-14 items-center">
           <div className="flex-1 min-w-[300px]">
             <div className="inline-flex items-center gap-2.5 font-mono text-[11px] letter-spacing-wide text-[#97C459] mb-7">
               <span className="w-2 h-2 rounded-full bg-[#97C459] animate-pulse"></span>
@@ -85,7 +85,7 @@ export default function LandingPage({
         </div>
 
         {/* WORKFLOW PIPELINE */}
-        <div className="max-w-[1220px] mx-auto px-6 pb-20">
+        <div className="max-w-[1220px] mx-auto px-5 sm:px-6 pb-14 md:pb-20">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
             {[
               { icon: '◆', label: 'GT crew', title: 'Field capture' },
@@ -117,7 +117,7 @@ export default function LandingPage({
       </section>
 
       {/* ================= PROBLEM ================= */}
-      <section className="relative z-20 bg-[#222120] px-6 py-20 border-t border-white/5 rounded-t-7xl">
+      <section className="relative z-20 bg-[#222120] px-5 sm:px-6 py-14 md:py-20 border-t border-white/5 rounded-t-[28px]">
         <div className="max-w-[1200px] mx-auto">
           <div className="max-w-[840px] mx-auto mb-16 text-center">
             <div className="font-mono text-xs tracking-widest text-[#BA7517] mb-5 uppercase">
@@ -183,7 +183,7 @@ export default function LandingPage({
       </section>
 
       {/* ================= WHAT WE DO ================= */}
-      <section className="relative z-20 bg-[#1A1918] px-6 py-20">
+      <section className="relative z-20 bg-[#1A1918] px-5 sm:px-6 py-14 md:py-20">
         <div className="max-w-[1200px] mx-auto">
           <div className="max-w-[760px] mx-auto mb-16 text-center">
             <div className="font-mono text-xs tracking-widest text-[#97C459] mb-5 uppercase">
@@ -290,7 +290,7 @@ export default function LandingPage({
       </section>
 
       {/* ================= FEATURE GRID ================= */}
-      <section className="relative z-20 bg-[#1A1918] px-6 py-20">
+      <section className="relative z-20 bg-[#1A1918] px-5 sm:px-6 py-14 md:py-20">
         <div className="max-w-[1200px] mx-auto">
           <div className="max-w-[720px] mx-auto mb-16 text-center">
             <div className="font-mono text-xs tracking-widest text-[#97C459] mb-5 uppercase">
@@ -379,7 +379,7 @@ export default function LandingPage({
       </section>
 
       {/* ================= COMPARISON TABLE ================= */}
-      <section className="relative z-20 bg-[#222120] px-6 py-20 border-t border-white/5">
+      <section className="relative z-20 bg-[#222120] px-5 sm:px-6 py-14 md:py-20 border-t border-white/5">
         <div className="max-w-[1200px] mx-auto">
           <h2 className="font-display text-4xl md:text-5xl leading-tight font-semibold tracking-tight text-[#F5F3EE] mb-12">
             The same investigation.<br />

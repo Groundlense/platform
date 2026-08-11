@@ -89,6 +89,21 @@ export class AuthController {
     return this.authService.verifyGst(gstin);
   }
 
+  // Public contact-form submission from the marketing site.
+  @Post('contact')
+  contact(
+    @Body()
+    body: {
+      name?: string;
+      company?: string;
+      email?: string;
+      phone?: string;
+      message?: string;
+    },
+  ) {
+    return this.authService.contactMessage(body);
+  }
+
   @Post('upload-logo')
   @UseInterceptors(
     FileInterceptor('file', {

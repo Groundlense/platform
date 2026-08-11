@@ -2,23 +2,51 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { contactAction } from '@/app/actions/contact';
 
 const inputClass =
   'bg-white/5 border border-white/15 rounded-lg px-3.5 py-3 text-[#F5F3EE] text-sm font-sans placeholder:text-[#6B6966] focus:border-[#97C459] focus:outline-none transition';
 
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError('');
+    setSending(true);
+    const fd = new FormData(e.currentTarget);
+    try {
+      const res = await contactAction({
+        name: (fd.get('name') as string) || '',
+        company: (fd.get('company') as string) || undefined,
+        email: (fd.get('email') as string) || '',
+        phone: (fd.get('phone') as string) || undefined,
+        message: (fd.get('message') as string) || '',
+      });
+      if (res?.error) {
+        setError(res.error);
+      } else {
+        setSubmitted(true);
+      }
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <div className="bg-[#1A1918] min-h-screen">
       {/* ================= NAV ================= */}
       <nav className="sticky top-0 z-50 bg-[#1A1918]/90 backdrop-blur-lg border-b border-white/5">
-        <div className="max-w-[1220px] mx-auto px-6 py-3 flex items-center justify-between gap-5">
+        <div className="max-w-[1220px] mx-auto px-4 sm:px-6 py-2 sm:py-3 flex items-center justify-between gap-4">
           <Link href="/">
             <img
               src="/groundlense-logo.png"
               alt="Groundlense"
-              className="h-[64px] w-auto"
+              className="h-12 sm:h-16 w-auto"
             />
           </Link>
           <Link
@@ -31,7 +59,7 @@ export default function ContactPage() {
       </nav>
 
       {/* ================= CONTACT ================= */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-[#1A1918] via-[#222120] to-[#1A1918] px-6 py-20">
+      <section className="relative overflow-hidden bg-gradient-to-br from-[#1A1918] via-[#222120] to-[#1A1918] px-5 sm:px-6 py-12 md:py-20">
         <div className="max-w-[1160px] mx-auto">
           <div className="max-w-[640px] mb-14">
             <div className="font-mono text-xs tracking-widest text-[#97C459] mb-4 uppercase">
@@ -48,33 +76,31 @@ export default function ContactPage() {
           <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-10 items-start">
             {/* FORM */}
             <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setSubmitted(true);
-              }}
-              className="bg-white/4 border border-white/10 rounded-2xl p-8 flex flex-col gap-4.5"
+              onSubmit={handleSubmit}
+              className="bg-white/4 border border-white/10 rounded-2xl p-5 sm:p-8 flex flex-col gap-4.5"
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label className="flex flex-col gap-1.5 text-xs text-[#B4B2A9]">
                   Full name
-                  <input type="text" required placeholder="Your name" className={inputClass} />
+                  <input name="name" type="text" required placeholder="Your name" className={inputClass} />
                 </label>
                 <label className="flex flex-col gap-1.5 text-xs text-[#B4B2A9]">
                   Company
-                  <input type="text" placeholder="Company name" className={inputClass} />
+                  <input name="company" type="text" placeholder="Company name" className={inputClass} />
                 </label>
               </div>
               <label className="flex flex-col gap-1.5 text-xs text-[#B4B2A9]">
                 Email
-                <input type="email" required placeholder="you@company.com" className={inputClass} />
+                <input name="email" type="email" required placeholder="you@company.com" className={inputClass} />
               </label>
               <label className="flex flex-col gap-1.5 text-xs text-[#B4B2A9]">
                 Phone (optional)
-                <input type="tel" placeholder="+91 00000 00000" className={inputClass} />
+                <input name="phone" type="tel" placeholder="+91 00000 00000" className={inputClass} />
               </label>
               <label className="flex flex-col gap-1.5 text-xs text-[#B4B2A9]">
                 Message
                 <textarea
+                  name="message"
                   required
                   rows={4}
                   placeholder="Tell us about your project or question"
@@ -83,10 +109,14 @@ export default function ContactPage() {
               </label>
               <button
                 type="submit"
-                className="mt-1.5 font-sans text-sm font-semibold text-white bg-[#D85A30] hover:bg-[#993C1D] border-none px-4 py-3.5 rounded-lg cursor-pointer transition"
+                disabled={sending || submitted}
+                className="mt-1.5 font-sans text-sm font-semibold text-white bg-[#D85A30] hover:bg-[#993C1D] border-none px-4 py-3.5 rounded-lg cursor-pointer transition disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {submitted ? 'Sent' : 'Send message'}
+                {submitted ? 'Sent ✓' : sending ? 'Sending…' : 'Send message'}
               </button>
+              {error && (
+                <div className="text-sm text-[#F09595]">⚠ {error}</div>
+              )}
               {submitted && (
                 <div className="text-sm text-[#97C459] font-mono">
                   ✓ Thanks — we&apos;ll be in touch shortly.
