@@ -8,7 +8,7 @@ const SECTIONS = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8'];
 const CHAIN = [
   {
     step: 'FAILURE 01 · THE DELAY',
-    title: 'Photos sent on WhatsApp. The actual report — three weeks later.',
+    title: 'Photos sent on WhatsApp. The actual report — six to eight weeks later.',
     body: (
       <>
         The supervisor has photos with timestamps. He has SPT numbers on paper. But this raw data
