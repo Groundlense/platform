@@ -34,9 +34,9 @@ export default function LandingPage({
         <div className="max-w-[1220px] mx-auto px-4 sm:px-6 py-2 sm:py-3 flex items-center justify-between gap-3 sm:gap-5">
           <div className="flex items-center gap-3">
             <img
-              src="/groundlense-logo.png"
+              src="/groundlense-logo-wide.png"
               alt="Groundlense"
-              className="h-12 sm:h-16 w-auto"
+              className="h-9 sm:h-12 w-auto"
             />
           </div>
           <div className="flex items-center gap-4 sm:gap-7 flex-wrap justify-end">
@@ -506,9 +506,9 @@ export default function LandingPage({
           <div className="flex flex-wrap gap-10 justify-between items-start pb-10 border-b border-white/10">
             <div className="max-w-sm">
               <img
-                src="/groundlense-logo.png"
+                src="/groundlense-logo-wide.png"
                 alt="Groundlense"
-                className="h-24 w-auto mb-3"
+                className="h-14 w-auto mb-3"
               />
               <div className="font-mono text-xs tracking-widest text-[#BA7517] uppercase">
                 Proof, Not Promises.

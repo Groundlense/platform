@@ -50,6 +50,14 @@ export interface QueuedPhoto {
   accuracyM?: number;
 }
 
+// Registered by the sync manager (avoids a module-init import cycle):
+// queuing a photo kicks off its upload immediately instead of leaving it
+// to wait for the next 15s background tick.
+let onPhotoQueued: (() => void) | null = null;
+export function setOnPhotoQueued(cb: () => void): void {
+  onPhotoQueued = cb;
+}
+
 // Set once launchCamera reports there is no usable camera on this device.
 // Screens use this to avoid nagging the worker about photos that are
 // physically impossible to take.
@@ -260,6 +268,9 @@ export const media = {
     const queue = await this.getPhotoQueue();
     queue.push(entry);
     await this.savePhotoQueue(queue);
+    // Start the upload right away (no-op offline — the photo stays queued
+    // and the background sync retries it).
+    onPhotoQueued?.();
     return entry;
   },
 

@@ -20,6 +20,7 @@ export async function createProjectAction(formData: FormData) {
   const targetCompletionDate = formData.get("targetCompletionDate") as string | null;
   const tenderId = (formData.get("tenderId") as string | null)?.trim();
   const sptIntervalRaw = (formData.get("sptIntervalM") as string | null)?.trim();
+  const boringsPlannedRaw = (formData.get("totalBoringsPlanned") as string | null)?.trim();
 
   if (!name) {
     return { error: "Project name is required." };
@@ -51,6 +52,9 @@ export async function createProjectAction(formData: FormData) {
         targetCompletionDate: targetCompletionDate || undefined,
         tenderId: tenderId || undefined,
         sptIntervalM,
+        totalBoringsPlanned: boringsPlannedRaw
+          ? parseInt(boringsPlannedRaw, 10)
+          : undefined,
       },
       token
     );

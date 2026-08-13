@@ -9,6 +9,7 @@ import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { CreatePasswordDto } from './dto/create-password.dto';
+import { CompletePinResetDto, GeneratePinResetLinkDto, RequestPinResetDto } from './dto/pin-reset.dto';
 import type { Response } from 'express';
 export declare class AuthController {
     private readonly authService;
@@ -103,6 +104,21 @@ export declare class AuthController {
         isMock: boolean;
     }>;
     resetPassword(dto: ResetPasswordDto): Promise<{
+        success: boolean;
+        message: string;
+    }>;
+    requestPinReset(dto: RequestPinResetDto): Promise<{
+        success: boolean;
+        message: string;
+    }>;
+    generatePinResetLink(dto: GeneratePinResetLinkDto, user: any): Promise<{
+        success: boolean;
+        url: string;
+        mobile: string;
+        firstName: string;
+        expiresInHours: number;
+    }>;
+    completePinReset(dto: CompletePinResetDto): Promise<{
         success: boolean;
         message: string;
     }>;

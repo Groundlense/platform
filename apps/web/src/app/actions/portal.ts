@@ -34,6 +34,23 @@ export type EditableIntervalField =
  * remark original→corrected can be recovered from on every reload.
  * MODIFY_N is the legacy N-only shape, kept for compatibility.
  */
+/**
+ * Mints a single-use WhatsApp PIN-reset link for a crew member —
+ * POST /auth/pin-reset/link. The caller opens wa.me with the returned url.
+ */
+export async function generatePinResetLink(
+  userId: string
+): Promise<PortalActionResult<{ url: string; mobile: string; firstName?: string }>> {
+  const token = await getToken();
+  if (!token) return { success: false, error: "Not authenticated — please log in again." };
+  try {
+    const data = await apiPost<any>("/auth/pin-reset/link", { userId }, token);
+    return { success: true, data };
+  } catch (err) {
+    return { success: false, error: toErrorMessage(err, "Failed to generate the reset link.") };
+  }
+}
+
 export async function createIntervalReview(
   intervalId: string,
   payload: {

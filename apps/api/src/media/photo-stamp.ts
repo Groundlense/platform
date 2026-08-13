@@ -20,6 +20,12 @@ export interface StampInfo {
   gpsLng?: number | null;
   accuracyM?: number | null;
   takenAt?: string | null;
+  /** What the photo shows, e.g. "Rock Core Box", "SPT Sample". */
+  photoLabel?: string | null;
+  intervalNo?: number | null;
+  /** Interval depths in metres (Prisma Decimal arrives as string/number). */
+  fromDepth?: string | number | null;
+  toDepth?: string | number | null;
 }
 
 const STAMPABLE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -95,6 +101,17 @@ function formatIst(iso?: string | null): string {
   return `${date}, ${time} IST`;
 }
 
+/** "3.00 – 4.50 m" from Prisma Decimal values, or null when unknown. */
+function formatDepthRange(
+  from?: string | number | null,
+  to?: string | number | null,
+): string | null {
+  const f = from != null ? Number(from) : NaN;
+  const t = to != null ? Number(to) : NaN;
+  if (!Number.isFinite(f) || !Number.isFinite(t)) return null;
+  return `(${f.toFixed(2)} – ${t.toFixed(2)} m)`;
+}
+
 /** Builds the banner text lines from whatever real data exists. */
 function buildLines(info: StampInfo): string[] {
   const lines: string[] = [];
@@ -109,6 +126,21 @@ function buildLines(info: StampInfo): string[] {
   ].filter(Boolean);
   if (structParts.length) lines.push(structParts.join('   |   '));
 
+  // What was photographed (e.g. "Rock Core Box") and at which depth.
+  const depth = formatDepthRange(info.fromDepth, info.toDepth);
+  const photoParts = [
+    info.photoLabel ? `Photo: ${info.photoLabel}` : null,
+    info.intervalNo != null || depth
+      ? [
+          info.intervalNo != null ? `Interval #${info.intervalNo}` : null,
+          depth,
+        ]
+          .filter(Boolean)
+          .join(' ')
+      : null,
+  ].filter(Boolean);
+  if (photoParts.length) lines.push(photoParts.join('   |   '));
+
   if (info.gpsLat != null && info.gpsLng != null) {
     const acc =
       info.accuracyM != null ? `  (±${Math.round(info.accuracyM)} m)` : '';
@@ -117,7 +149,7 @@ function buildLines(info: StampInfo): string[] {
     lines.push('GPS: not captured');
   }
 
-  lines.push(formatIst(info.takenAt));
+  lines.push(`Taken: ${formatIst(info.takenAt)}`);
 
   return lines;
 }

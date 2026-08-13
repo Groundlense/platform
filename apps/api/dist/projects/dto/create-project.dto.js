@@ -25,6 +25,7 @@ class CreateProjectDto {
     epcOrganizationId;
     partnerSearchQuery;
     sptIntervalM;
+    totalBoringsPlanned;
 }
 exports.CreateProjectDto = CreateProjectDto;
 __decorate([
@@ -137,4 +138,15 @@ __decorate([
     (0, class_validator_1.Max)(10),
     __metadata("design:type", Number)
 ], CreateProjectDto.prototype, "sptIntervalM", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Number of borings planned for this project (drives pricing)',
+        example: 3,
+        minimum: 1,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Number)
+], CreateProjectDto.prototype, "totalBoringsPlanned", void 0);
 //# sourceMappingURL=create-project.dto.js.map

@@ -47,11 +47,25 @@ let MediaService = MediaService_1 = class MediaService {
         const photoType = meta?.purpose
             ? PHOTO_TYPE_BY_PURPOSE[meta.purpose] ?? null
             : null;
+        const PHOTO_LABEL_BY_PURPOSE = {
+            SPT: 'SPT Sample',
+            SAMPLE: 'Soil/Rock Sample',
+            CORE_BOX: 'Rock Core Box',
+            SITE_SETUP: 'Site / Rig Setup',
+            CLOSURE: 'Borehole Closure',
+            CLOSURE_VIDEO: 'Closure Video',
+        };
+        const photoLabel = meta?.purpose
+            ? PHOTO_LABEL_BY_PURPOSE[meta.purpose] ?? meta.purpose
+            : null;
         if ((0, photo_stamp_1.isStampable)(file.mimetype)) {
             try {
                 const interval = await this.db.boreholeInterval.findUnique({
                     where: { id: intervalId },
                     select: {
+                        intervalNo: true,
+                        fromDepth: true,
+                        toDepth: true,
                         borehole: {
                             select: {
                                 boreholeCode: true,
@@ -74,6 +88,10 @@ let MediaService = MediaService_1 = class MediaService {
                     gpsLng: num(meta?.gpsLng),
                     accuracyM: num(meta?.accuracyM),
                     takenAt: meta?.takenAt,
+                    photoLabel,
+                    intervalNo: interval?.intervalNo,
+                    fromDepth: interval?.fromDepth,
+                    toDepth: interval?.toDepth,
                 });
             }
             catch (err) {

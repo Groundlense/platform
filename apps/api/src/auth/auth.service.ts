@@ -1106,6 +1106,214 @@ export class AuthService {
     };
   }
 
+  // ==========================================
+  // WhatsApp PIN-reset link (no SMS gateway)
+  // ==========================================
+  //
+  // There is no paid SMS/WhatsApp integration, so the reset link rides the
+  // same channel as crew onboarding: an org admin opens WhatsApp (wa.me)
+  // with a prefilled message containing a unique single-use link. The link
+  // opens the web /reset-pin page, where the worker proves ownership by
+  // entering the account's mobile number and sets a new PIN.
+  //
+  // Tokens live in the existing Otp table (type RESET_LINK, target mobile)
+  // — single-use, 24h expiry, no schema change needed.
+
+  private static readonly RESET_LINK_OTP_TYPE = 'RESET_LINK';
+
+  private async mintPinResetToken(mobile: string): Promise<string> {
+    const token = crypto.randomBytes(24).toString('base64url');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await this.db.otp.upsert({
+      where: {
+        type_target: {
+          type: AuthService.RESET_LINK_OTP_TYPE,
+          target: mobile,
+        },
+      },
+      update: { code: token, verified: false, expiresAt },
+      create: {
+        type: AuthService.RESET_LINK_OTP_TYPE,
+        target: mobile,
+        code: token,
+        verified: false,
+        expiresAt,
+      },
+    });
+    return token;
+  }
+
+  private pinResetUrl(token: string): string {
+    const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+    return `${webUrl}/reset-pin?token=${token}`;
+  }
+
+  /**
+   * Worker-initiated (public, from the app's "Forgot PIN" screen): records
+   * the request and notifies the org's web users, who send the reset link
+   * to the worker on WhatsApp from the Crew tab.
+   */
+  async requestPinResetLink(mobile: string) {
+    const trimmed = mobile.trim();
+    const user = await this.db.user.findFirst({ where: { mobile: trimmed } });
+    if (!user) {
+      throw new NotFoundException('No account found with this mobile number');
+    }
+
+    await this.mintPinResetToken(trimmed);
+
+    // Tell the org's web users (anyone with an email login) so one of them
+    // can send the link. Field workers themselves have no email — excluded.
+    const admins = await this.db.user.findMany({
+      where: {
+        organizationId: user.organizationId,
+        id: { not: user.id },
+        status: 'ACTIVE',
+        email: { not: null },
+      },
+      select: { id: true },
+      take: 20,
+    });
+    const workerName =
+      `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || trimmed;
+    for (const admin of admins) {
+      await this.notificationsService
+        .create({
+          userId: admin.id,
+          title: 'PIN reset requested',
+          message: `${workerName} (${trimmed}) forgot their PIN. Open the Crew tab and use "PIN reset" to send them a new-PIN link on WhatsApp.`,
+          type: 'PIN_RESET_REQUEST',
+        })
+        .catch(() => undefined);
+    }
+
+    await this.activityLogsService.log(
+      user.id,
+      'PIN_RESET_REQUESTED',
+      'USER',
+      user.id,
+    );
+
+    return {
+      success: true,
+      message:
+        'Reset request sent. Your supervisor will send you a reset link on WhatsApp.',
+    };
+  }
+
+  /**
+   * Admin-side (JWT): mints the unique link for a worker so the admin can
+   * share it on WhatsApp (wa.me). Same-organization only.
+   */
+  async generatePinResetLink(targetUserId: string, actor: any) {
+    const user = await this.db.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        mobile: true,
+        organizationId: true,
+      },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (user.organizationId !== actor.organizationId) {
+      throw new UnauthorizedException(
+        'You can only reset PINs for your own organization',
+      );
+    }
+    if (!user.mobile) {
+      throw new BadRequestException(
+        'This user has no mobile number on record',
+      );
+    }
+
+    const token = await this.mintPinResetToken(user.mobile);
+
+    await this.activityLogsService.log(
+      actor.id,
+      'PIN_RESET_LINK_GENERATED',
+      'USER',
+      user.id,
+    );
+
+    return {
+      success: true,
+      url: this.pinResetUrl(token),
+      mobile: user.mobile,
+      firstName: user.firstName,
+      expiresInHours: 24,
+    };
+  }
+
+  /**
+   * Public (from the /reset-pin web page): the worker proves ownership by
+   * pairing the link token with the account's mobile number, then sets the
+   * new PIN. Token is single-use.
+   */
+  async completePinResetLink(input: {
+    token: string;
+    mobile: string;
+    newPassword: string;
+  }) {
+    const mobile = input.mobile.trim();
+    const record = await this.db.otp.findUnique({
+      where: {
+        type_target: {
+          type: AuthService.RESET_LINK_OTP_TYPE,
+          target: mobile,
+        },
+      },
+    });
+
+    if (
+      !record ||
+      record.code !== input.token ||
+      record.expiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'This reset link is invalid or has expired — ask your supervisor to send a new one, or the mobile number does not match the link.',
+      );
+    }
+
+    const user = await this.db.user.findFirst({ where: { mobile } });
+    if (!user) {
+      throw new NotFoundException('User account not found');
+    }
+
+    const hash = await bcrypt.hash(input.newPassword, 10);
+
+    // Set BOTH credentials: login accepts either, and after a "forgot PIN"
+    // the old PIN must stop working.
+    await this.db.user.update({
+      where: { id: user.id },
+      data: { passwordHash: hash, pinHash: hash },
+    });
+
+    await this.db.otp.delete({
+      where: {
+        type_target: {
+          type: AuthService.RESET_LINK_OTP_TYPE,
+          target: mobile,
+        },
+      },
+    });
+
+    await this.activityLogsService.log(
+      user.id,
+      'PASSWORD_RESET',
+      'USER',
+      user.id,
+    );
+
+    return {
+      success: true,
+      message: 'PIN reset successfully — log in to the app with your new PIN.',
+    };
+  }
+
   async createPassword(mobile: string, password: any) {
     const user = await this.db.user.findFirst({
       where: { mobile },

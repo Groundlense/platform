@@ -11,4 +11,5 @@ export declare class CreateProjectDto {
     epcOrganizationId?: string;
     partnerSearchQuery?: string;
     sptIntervalM?: number;
+    totalBoringsPlanned?: number;
 }

@@ -348,7 +348,7 @@ export default function AuthModal({
           ×
         </button>
 
-        <img src="/groundlense-logo.png" alt="Groundlense" className="h-11 w-auto block mb-3.5" />
+        <img src="/groundlense-logo-wide.png" alt="Groundlense" className="h-10 w-auto block mb-3.5" />
         <h2 className="font-display text-2xl font-semibold mb-6 text-center text-[#F5F3EE]">
           {titles[step]}
         </h2>

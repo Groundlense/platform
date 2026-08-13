@@ -13,6 +13,7 @@ import { API_BASE_URL } from '../config';
 import { api } from '../services/api';
 import { media } from '../services/media';
 import { storage } from '../services/storage';
+import { syncManager } from '../services/sync';
 import { colors, typography } from '../utils/theme';
 
 /**
@@ -126,6 +127,15 @@ export default function PhotoGallery({ borehole, lang }: { borehole: any; lang: 
 
   useEffect(() => {
     if (borehole?.id) load();
+  }, [borehole?.id, load]);
+
+  // Reload whenever a sync round or photo upload finishes, so a queued
+  // photo's ⏳ badge flips to synced without re-navigating the screen.
+  useEffect(() => {
+    if (!borehole?.id) return;
+    return syncManager.onSyncComplete(() => {
+      load();
+    });
   }, [borehole?.id, load]);
 
   if (loading) {

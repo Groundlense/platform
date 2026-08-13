@@ -232,7 +232,7 @@ export default function OverviewPage() {
       {/* LOGO BAR */}
       <div className="fixed top-0 left-0 right-0 z-[998] px-[7vw] py-4 flex items-center justify-between bg-gradient-to-b from-[#1A1918f2] to-transparent">
         <Link href="/">
-          <img src="/groundlense-logo.png" alt="Groundlense" className="h-12 md:h-16 w-auto block" />
+          <img src="/groundlense-logo-wide.png" alt="Groundlense" className="h-9 md:h-12 w-auto block" />
         </Link>
         <div className="hidden sm:block font-mono text-[10px] text-[#F0997B] tracking-[0.2em] uppercase">
           Geotech Intelligence Platform
