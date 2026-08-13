@@ -36,7 +36,7 @@ export default function DeleteAccountPage() {
         <div className="max-w-[1220px] mx-auto px-4 sm:px-6 py-2 sm:py-3 flex items-center justify-between gap-4">
           <Link href="/">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/groundlense-logo.png" alt="Groundlense" className="h-12 sm:h-16 w-auto" />
+            <img src="/groundlense-logo-wide.png" alt="Groundlense" className="h-9 sm:h-12 w-auto" />
           </Link>
           <Link
             href="/contact"

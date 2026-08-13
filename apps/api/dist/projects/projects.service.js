@@ -71,6 +71,9 @@ let ProjectsService = class ProjectsService {
                 epcOrganizationId: dto.epcOrganizationId || epcOrgId,
                 geotechOrganizationId: dto.geotechOrganizationId || geotechOrgId,
                 ...(dto.sptIntervalM != null ? { sptIntervalM: dto.sptIntervalM } : {}),
+                ...(dto.totalBoringsPlanned != null
+                    ? { totalBoringsPlanned: dto.totalBoringsPlanned }
+                    : {}),
             },
         });
         await this.db.projectMember.create({
@@ -308,23 +311,6 @@ let ProjectsService = class ProjectsService {
         });
     }
     async getMyProjects(userId) {
-        const actor = await this.db.user.findUnique({
-            where: { id: userId },
-            include: {
-                roles: {
-                    include: {
-                        role: true,
-                    },
-                },
-            },
-        });
-        if (!actor)
-            return [];
-        const actorFormatted = {
-            id: actor.id,
-            organizationId: actor.organizationId,
-            roles: actor.roles.map((ur) => ur.role.code),
-        };
         const directMemberships = await this.db.projectMember.findMany({
             where: {
                 userId,
@@ -338,15 +324,25 @@ let ProjectsService = class ProjectsService {
                 },
             },
         });
-        const allScopedProjects = await this.db.project.findMany({
-            where: this.access.projectScopeWhere(actorFormatted),
+        const directProjectIds = new Set(directMemberships.map(m => m.projectId));
+        const teamProjects = await this.db.project.findMany({
+            where: {
+                boreholes: {
+                    some: {
+                        team: {
+                            members: {
+                                some: { userId },
+                            },
+                        },
+                    },
+                },
+            },
             include: {
                 epcOrganization: true,
                 geotechOrganization: true,
             },
         });
-        const directProjectIds = new Set(directMemberships.map(m => m.projectId));
-        const extraMemberships = allScopedProjects
+        const extraMemberships = teamProjects
             .filter(p => !directProjectIds.has(p.id))
             .map(p => ({
             id: `virtual-${p.id}`,

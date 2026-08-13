@@ -65,6 +65,13 @@ function formatIst(iso) {
     });
     return `${date}, ${time} IST`;
 }
+function formatDepthRange(from, to) {
+    const f = from != null ? Number(from) : NaN;
+    const t = to != null ? Number(to) : NaN;
+    if (!Number.isFinite(f) || !Number.isFinite(t))
+        return null;
+    return `(${f.toFixed(2)} – ${t.toFixed(2)} m)`;
+}
 function buildLines(info) {
     const lines = [];
     const idParts = [info.boreholeCode, info.subStructure].filter(Boolean);
@@ -77,6 +84,20 @@ function buildLines(info) {
     ].filter(Boolean);
     if (structParts.length)
         lines.push(structParts.join('   |   '));
+    const depth = formatDepthRange(info.fromDepth, info.toDepth);
+    const photoParts = [
+        info.photoLabel ? `Photo: ${info.photoLabel}` : null,
+        info.intervalNo != null || depth
+            ? [
+                info.intervalNo != null ? `Interval #${info.intervalNo}` : null,
+                depth,
+            ]
+                .filter(Boolean)
+                .join(' ')
+            : null,
+    ].filter(Boolean);
+    if (photoParts.length)
+        lines.push(photoParts.join('   |   '));
     if (info.gpsLat != null && info.gpsLng != null) {
         const acc = info.accuracyM != null ? `  (±${Math.round(info.accuracyM)} m)` : '';
         lines.push(`GPS: ${formatCoord(info.gpsLat, info.gpsLng)}${acc}`);
@@ -84,7 +105,7 @@ function buildLines(info) {
     else {
         lines.push('GPS: not captured');
     }
-    lines.push(formatIst(info.takenAt));
+    lines.push(`Taken: ${formatIst(info.takenAt)}`);
     return lines;
 }
 async function stampGeoTag(filePath, info) {

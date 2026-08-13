@@ -120,6 +120,15 @@ export const api = {
     return response.data; // { success, message, isMock }
   },
 
+  /**
+   * Requests a PIN-reset link: the org's supervisors get notified on the
+   * web dashboard and send the worker a single-use link on WhatsApp.
+   */
+  async requestPinReset(mobile: string) {
+    const response = await apiClient.post('/auth/pin-reset/request', { mobile });
+    return response.data; // { success, message }
+  },
+
   /** Sets a new PIN/password after verifying the SMS OTP. */
   async resetPassword(mobile: string, code: string, newPassword: string) {
     const response = await apiClient.post('/auth/reset-password', {

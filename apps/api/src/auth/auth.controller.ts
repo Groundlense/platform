@@ -23,6 +23,11 @@ import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { CreatePasswordDto } from './dto/create-password.dto';
+import {
+  CompletePinResetDto,
+  GeneratePinResetLinkDto,
+  RequestPinResetDto,
+} from './dto/pin-reset.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -221,6 +226,26 @@ export class AuthController {
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  // WhatsApp PIN-reset link flow (no SMS gateway) — see AuthService.
+  @Post('pin-reset/request')
+  requestPinReset(@Body() dto: RequestPinResetDto) {
+    return this.authService.requestPinResetLink(dto.mobile);
+  }
+
+  @Post('pin-reset/link')
+  @UseGuards(JwtAuthGuard)
+  generatePinResetLink(
+    @Body() dto: GeneratePinResetLinkDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.authService.generatePinResetLink(dto.userId, user);
+  }
+
+  @Post('pin-reset/complete')
+  completePinReset(@Body() dto: CompletePinResetDto) {
+    return this.authService.completePinResetLink(dto);
   }
 
   @Post('create-password')

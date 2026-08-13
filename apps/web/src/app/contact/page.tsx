@@ -44,9 +44,9 @@ export default function ContactPage() {
         <div className="max-w-[1220px] mx-auto px-4 sm:px-6 py-2 sm:py-3 flex items-center justify-between gap-4">
           <Link href="/">
             <img
-              src="/groundlense-logo.png"
+              src="/groundlense-logo-wide.png"
               alt="Groundlense"
-              className="h-12 sm:h-16 w-auto"
+              className="h-9 sm:h-12 w-auto"
             />
           </Link>
           <Link

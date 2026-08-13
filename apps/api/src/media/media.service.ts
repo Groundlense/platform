@@ -56,6 +56,19 @@ export class MediaService {
       ? (PHOTO_TYPE_BY_PURPOSE[meta.purpose] as any) ?? null
       : null;
 
+    // Human-readable subject for the stamped banner ("Photo: Rock Core Box").
+    const PHOTO_LABEL_BY_PURPOSE: Record<string, string> = {
+      SPT: 'SPT Sample',
+      SAMPLE: 'Soil/Rock Sample',
+      CORE_BOX: 'Rock Core Box',
+      SITE_SETUP: 'Site / Rig Setup',
+      CLOSURE: 'Borehole Closure',
+      CLOSURE_VIDEO: 'Closure Video',
+    };
+    const photoLabel = meta?.purpose
+      ? PHOTO_LABEL_BY_PURPOSE[meta.purpose] ?? meta.purpose
+      : null;
+
     // Burn the geo-tag banner into the photo itself: borehole context from
     // the DB, coordinates + capture time from the device. A stamping failure
     // must never lose the upload — the photo is field evidence either way.
@@ -64,6 +77,9 @@ export class MediaService {
         const interval = await this.db.boreholeInterval.findUnique({
           where: { id: intervalId },
           select: {
+            intervalNo: true,
+            fromDepth: true,
+            toDepth: true,
             borehole: {
               select: {
                 boreholeCode: true,
@@ -86,6 +102,10 @@ export class MediaService {
           gpsLng: num(meta?.gpsLng),
           accuracyM: num(meta?.accuracyM),
           takenAt: meta?.takenAt,
+          photoLabel,
+          intervalNo: interval?.intervalNo,
+          fromDepth: interval?.fromDepth as any,
+          toDepth: interval?.toDepth as any,
         });
       } catch (err) {
         this.logger.warn(

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createPaymentAction } from "@/app/actions/projects";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, PRICE_PER_BORING } from "@/lib/utils";
 
 interface ProjectCardProps {
   project: any;
@@ -62,12 +62,21 @@ export default function ProjectCard({ project, orgType }: ProjectCardProps) {
   const overflow = dots.length - MAX_DOTS;
   const visibleDots = overflow > 0 ? dots.slice(0, MAX_DOTS) : dots;
 
-  // Amount only computable when the project declares its planned borings.
+  // Prefer the planned count captured at creation; fall back to boreholes actually
+  // created, so projects made before the count was persisted still show an amount.
   const boringsPlanned: number | null =
     typeof project.totalBoringsPlanned === "number" && project.totalBoringsPlanned > 0
       ? project.totalBoringsPlanned
-      : null;
-  const payAmount = boringsPlanned != null ? boringsPlanned * 5000 : null;
+      : totalBoreholes > 0
+        ? totalBoreholes
+        : null;
+  const payAmount = boringsPlanned != null ? boringsPlanned * PRICE_PER_BORING : null;
+
+  // Razorpay checkout is not wired up yet — this button is a placeholder.
+  const handlePayNowPlaceholder = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPayMessage("Payment gateway coming soon.");
+  };
 
   const handlePayNow = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -200,15 +209,38 @@ export default function ProjectCard({ project, orgType }: ProjectCardProps) {
       </div>
 
       {/* Footer — matches .pc-foot: padding 10px 14px, border-top, flex between */}
-      <div className="flex justify-between items-center" style={{ padding: "10px 14px", borderTop: "1px solid var(--color-border)" }}>
-        <span className="text-[9px] text-text-ter">
+      <div className="flex justify-between items-center gap-2" style={{ padding: "10px 14px", borderTop: "1px solid var(--color-border)" }}>
+        <span className="text-[9px] text-text-ter shrink-0">
           {new Date(project.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
         </span>
-        <span className="text-[10px] py-1 px-[10px] rounded-[5px] text-rust-d cursor-pointer transition-all opacity-0 group-hover:opacity-100"
-          style={{ background: "rgba(153,60,29,.12)", border: "1px solid rgba(153,60,29,.25)" }}>
-          Open →
-        </span>
+        <div className="flex items-center gap-[6px]">
+          {!isLocked && (
+            <button
+              onClick={handlePayNowPlaceholder}
+              title={
+                boringsPlanned != null
+                  ? `${boringsPlanned} borings × ${formatCurrency(PRICE_PER_BORING)}`
+                  : "Razorpay checkout coming soon"
+              }
+              className="text-[10px] py-1 px-[10px] rounded-[5px] text-amber-d cursor-pointer transition-all whitespace-nowrap"
+              style={{ background: "rgba(186,117,23,.12)", border: "1px solid rgba(186,117,23,.28)" }}
+            >
+              {payAmount != null ? `Pay now · ${formatCurrency(payAmount)}` : "Pay now"}
+            </button>
+          )}
+          <span className="text-[10px] py-1 px-[10px] rounded-[5px] text-rust-d cursor-pointer transition-all opacity-0 group-hover:opacity-100 whitespace-nowrap"
+            style={{ background: "rgba(153,60,29,.12)", border: "1px solid rgba(153,60,29,.25)" }}>
+            Open →
+          </span>
+        </div>
       </div>
+
+      {/* Placeholder feedback for the not-yet-wired payment gateway */}
+      {!isLocked && payMessage && (
+        <div className="text-[9px] text-amber-d text-center leading-relaxed" style={{ padding: "0 14px 10px" }}>
+          {payMessage}
+        </div>
+      )}
     </div>
   );
 }

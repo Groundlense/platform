@@ -133,25 +133,22 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
     }
   };
 
-  // Forgot-password inputs — OTP goes to the worker's mobile number
-  const [forgotStep, setForgotStep] = useState<'mobile' | 'reset'>('mobile');
+  // Forgot-PIN flow: no SMS gateway, so the reset link travels over
+  // WhatsApp — the worker requests it here, a supervisor gets notified on
+  // the web dashboard and sends the single-use link on WhatsApp. The link
+  // opens the /reset-pin web page where the worker sets the new PIN.
+  const [forgotStep, setForgotStep] = useState<'mobile' | 'sent'>('mobile');
   const [forgotMobile, setForgotMobile] = useState('');
-  const [forgotOtp, setForgotOtp] = useState('');
-  const [forgotPass, setForgotPass] = useState('');
-  const [forgotPass2, setForgotPass2] = useState('');
   const [forgotError, setForgotError] = useState('');
   const [forgotBusy, setForgotBusy] = useState(false);
 
   const openForgot = () => {
     setForgotStep('mobile');
-    setForgotOtp('');
-    setForgotPass('');
-    setForgotPass2('');
     setForgotError('');
     setActiveTab('forgot');
   };
 
-  const handleSendResetOtp = async () => {
+  const handleRequestResetLink = async () => {
     const mobile = forgotMobile.trim();
     if (!mobile) {
       setForgotError(lang === 'hi' ? 'मोबाइल नंबर दर्ज करें' : 'Enter your mobile number');
@@ -160,63 +157,16 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
     setForgotError('');
     setForgotBusy(true);
     try {
-      await api.forgotPassword(mobile);
-      setForgotStep('reset');
-      Alert.alert(
-        lang === 'hi' ? 'OTP भेजा गया' : 'OTP sent',
-        lang === 'hi'
-          ? 'आपके मोबाइल नंबर पर 6 अंकों का OTP भेजा गया है।'
-          : 'A 6-digit OTP was sent to your mobile number.'
-      );
+      await api.requestPinReset(mobile);
+      setForgotStep('sent');
     } catch (err: any) {
       const serverMsg = err?.response?.data?.message;
       setForgotError(
         serverMsg
           ? (Array.isArray(serverMsg) ? serverMsg.join(', ') : serverMsg)
           : lang === 'hi'
-            ? 'OTP भेज नहीं सके — नंबर जांचें या इंटरनेट से जुड़ें'
-            : 'Could not send OTP — check the number and your connection'
-      );
-    } finally {
-      setForgotBusy(false);
-    }
-  };
-
-  const handleResetPassword = async () => {
-    const mobile = forgotMobile.trim();
-    const code = forgotOtp.trim();
-    if (!code || !forgotPass || !forgotPass2) {
-      setForgotError(lang === 'hi' ? 'OTP और नया पिन दर्ज करें' : 'Enter the OTP and your new PIN');
-      return;
-    }
-    if (forgotPass.length < 4) {
-      setForgotError(lang === 'hi' ? 'पिन कम से कम 4 अक्षर का हो' : 'PIN must be at least 4 characters');
-      return;
-    }
-    if (forgotPass !== forgotPass2) {
-      setForgotError(lang === 'hi' ? 'पिन मेल नहीं खाते' : 'PINs do not match');
-      return;
-    }
-    setForgotError('');
-    setForgotBusy(true);
-    try {
-      await api.resetPassword(mobile, code, forgotPass);
-      Alert.alert(
-        lang === 'hi' ? 'पिन बदल गया' : 'PIN reset',
-        lang === 'hi'
-          ? 'नया पिन सेट हो गया — अब लॉगिन करें।'
-          : 'Your new PIN is set — log in now.'
-      );
-      setLoginId(mobile);
-      setActiveTab('login');
-    } catch (err: any) {
-      const serverMsg = err?.response?.data?.message;
-      setForgotError(
-        serverMsg
-          ? (Array.isArray(serverMsg) ? serverMsg.join(', ') : serverMsg)
-          : lang === 'hi'
-            ? 'रीसेट विफल — OTP जांचें'
-            : 'Reset failed — check the OTP'
+            ? 'अनुरोध नहीं भेज सके — नंबर जांचें या इंटरनेट से जुड़ें'
+            : 'Could not send the request — check the number and your connection'
       );
     } finally {
       setForgotBusy(false);
@@ -390,112 +340,74 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
             </View>
           </View>
         ) : activeTab === 'forgot' ? (
-          /* FORGOT PASSWORD VIEW — SMS OTP to the worker's mobile number */
+          /* FORGOT PIN VIEW — reset link arrives on WhatsApp (no SMS gateway) */
           <View style={styles.formCard}>
             <Text style={{ fontSize: 18, fontWeight: '700', color: colors.rust, marginBottom: 12, textAlign: 'center' }}>
               {lang === 'hi' ? 'पिन/पासवर्ड रीसेट करें' : 'Reset PIN / Password'}
             </Text>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{lang === 'hi' ? 'मोबाइल नंबर' : 'Mobile Number'}</Text>
-              <TextInput
-                style={styles.input}
-                value={forgotMobile}
-                onChangeText={(text) => {
-                  setForgotMobile(text);
-                  if (forgotError) setForgotError('');
-                }}
-                placeholder="e.g. 9876543210"
-                keyboardType="phone-pad"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={forgotStep === 'mobile'}
-                placeholderTextColor={colors.grayMid}
-              />
-            </View>
-
-            {forgotStep === 'reset' && (
+            {forgotStep === 'mobile' ? (
               <>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>{lang === 'hi' ? 'OTP (SMS से)' : 'OTP (from SMS)'}</Text>
+                  <Text style={styles.inputLabel}>{lang === 'hi' ? 'मोबाइल नंबर' : 'Mobile Number'}</Text>
                   <TextInput
                     style={styles.input}
-                    value={forgotOtp}
+                    value={forgotMobile}
                     onChangeText={(text) => {
-                      setForgotOtp(text.replace(/[^0-9]/g, ''));
+                      setForgotMobile(text);
                       if (forgotError) setForgotError('');
                     }}
-                    placeholder="6-digit code"
-                    keyboardType="number-pad"
-                    maxLength={6}
-                    placeholderTextColor={colors.grayMid}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>{lang === 'hi' ? 'नया पिन/पासवर्ड' : 'New PIN / Password'}</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={forgotPass}
-                    onChangeText={(text) => {
-                      setForgotPass(text);
-                      if (forgotError) setForgotError('');
-                    }}
-                    placeholder={lang === 'hi' ? 'नया पिन चुनें' : 'Choose a new PIN'}
-                    secureTextEntry
+                    placeholder="e.g. 9876543210"
+                    keyboardType="phone-pad"
                     autoCapitalize="none"
                     autoCorrect={false}
                     placeholderTextColor={colors.grayMid}
                   />
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>{lang === 'hi' ? 'नए पिन की पुष्टि करें' : 'Confirm New PIN'}</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={forgotPass2}
-                    onChangeText={(text) => {
-                      setForgotPass2(text);
-                      if (forgotError) setForgotError('');
-                    }}
-                    placeholder={lang === 'hi' ? 'दोबारा दर्ज करें' : 'Re-enter new PIN'}
-                    secureTextEntry
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    placeholderTextColor={colors.grayMid}
-                  />
+                <View style={styles.infoBoxBlue}>
+                  <Text style={styles.infoBoxBlueTitle}>
+                    {lang === 'hi' ? 'WhatsApp पर लिंक मिलेगा' : 'Link arrives on WhatsApp'}
+                  </Text>
+                  <Text style={styles.infoBoxBlueSub}>
+                    {lang === 'hi'
+                      ? 'अनुरोध भेजने पर आपके सुपरवाइज़र को सूचना जाएगी और वे WhatsApp पर रीसेट लिंक भेजेंगे। लिंक खोलकर नया पिन सेट करें।'
+                      : 'When you send the request, your supervisor is notified and sends you a reset link on WhatsApp. Open the link to set a new PIN.'}
+                  </Text>
                 </View>
+
+                {forgotError ? (
+                  <View style={styles.errorBox}>
+                    <Text style={styles.errorBoxText}>{forgotError}</Text>
+                  </View>
+                ) : null}
+
+                <TouchableOpacity
+                  style={[styles.primaryBtn, forgotBusy && styles.primaryBtnDisabled]}
+                  onPress={handleRequestResetLink}
+                  disabled={forgotBusy}
+                >
+                  {forgotBusy ? (
+                    <ActivityIndicator size="small" color={colors.white} />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>
+                      {lang === 'hi' ? 'रीसेट लिंक मांगें' : 'Request Reset Link'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
               </>
-            )}
-
-            {forgotError ? (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorBoxText}>{forgotError}</Text>
+            ) : (
+              /* Request sent — tell the worker what happens next */
+              <View style={styles.infoBoxBlue}>
+                <Text style={styles.infoBoxBlueTitle}>
+                  {lang === 'hi' ? '✓ अनुरोध भेज दिया गया' : '✓ Request sent'}
+                </Text>
+                <Text style={styles.infoBoxBlueSub}>
+                  {lang === 'hi'
+                    ? `आपके सुपरवाइज़र को सूचना मिल गई है। जल्द ही ${forgotMobile.trim()} पर WhatsApp से रीसेट लिंक आएगा — लिंक खोलें, मोबाइल नंबर डालें और नया पिन सेट करें। फिर यहां नए पिन से लॉगिन करें।`
+                    : `Your supervisor has been notified. A reset link will arrive on WhatsApp at ${forgotMobile.trim()} — open it, enter your mobile number and set a new PIN. Then log in here with the new PIN.`}
+                </Text>
               </View>
-            ) : null}
-
-            <TouchableOpacity
-              style={[styles.primaryBtn, forgotBusy && styles.primaryBtnDisabled]}
-              onPress={forgotStep === 'mobile' ? handleSendResetOtp : handleResetPassword}
-              disabled={forgotBusy}
-            >
-              {forgotBusy ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <Text style={styles.primaryBtnText}>
-                  {forgotStep === 'mobile'
-                    ? (lang === 'hi' ? 'OTP भेजें' : 'Send OTP')
-                    : (lang === 'hi' ? 'पिन रीसेट करें' : 'Reset PIN')}
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            {forgotStep === 'reset' && (
-              <TouchableOpacity onPress={handleSendResetOtp} disabled={forgotBusy}>
-                <Text style={styles.forgotLink}>
-                  {lang === 'hi' ? 'OTP दोबारा भेजें' : 'Resend OTP'}
-                </Text>
-              </TouchableOpacity>
             )}
 
             <TouchableOpacity style={styles.secondaryBtn} onPress={() => setActiveTab('login')}>

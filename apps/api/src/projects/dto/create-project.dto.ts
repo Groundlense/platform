@@ -111,4 +111,14 @@ export class CreateProjectDto {
   @Min(0.5)
   @Max(10)
   sptIntervalM?: number;
+
+  @ApiPropertyOptional({
+    description: 'Number of borings planned for this project (drives pricing)',
+    example: 3,
+    minimum: 1,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  totalBoringsPlanned?: number;
 }

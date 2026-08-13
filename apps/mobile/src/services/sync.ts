@@ -1,6 +1,6 @@
 import { api } from './api';
 import { storage, SyncOperation } from './storage';
-import { media, QueuedPhoto } from './media';
+import { media, QueuedPhoto, setOnPhotoQueued } from './media';
 import { API_BASE_URL } from '../config';
 
 export interface SyncResult {
@@ -117,6 +117,80 @@ function mergeServerWithLocal(
 // of racing each other's sockets and queue writes.
 let syncInFlight: Promise<SyncResult> | null = null;
 
+// Photo uploads have their own in-flight dedupe, separate from the full
+// round: a fresh capture triggers an immediate upload without waiting for
+// (or double-uploading against) a round that is mid-pull.
+let photoSyncInFlight: Promise<{ uploaded: number; pending: number }> | null =
+  null;
+
+// Fired after every sync round and photo upload batch so screens (e.g. the
+// photo gallery) can refresh without polling or re-navigation.
+const syncListeners = new Set<() => void>();
+function notifySyncListeners(): void {
+  syncListeners.forEach((cb) => {
+    try {
+      cb();
+    } catch {
+      // one bad listener must not break the others
+    }
+  });
+}
+
+/**
+ * Uploads every queued photo whose interval already has a SERVER id in the
+ * local cache. Photos whose interval hasn't reached the server yet simply
+ * stay queued — the full sync round retries them after its pull.
+ */
+async function uploadQueuedPhotos(): Promise<{
+  uploaded: number;
+  pending: number;
+}> {
+  if (photoSyncInFlight) return photoSyncInFlight;
+  const run = (async () => {
+    let uploaded = 0;
+    const photoQueue = await media.getPhotoQueue();
+    if (photoQueue.length > 0) {
+      const token = await storage.getToken();
+      if (token) {
+        for (const photo of photoQueue) {
+          try {
+            const intervals = await storage.getIntervals(photo.boreholeId);
+            const serverInterval = intervals.find(
+              (iv: any) =>
+                iv.intervalNo === photo.intervalNo &&
+                typeof iv.id === 'string' &&
+                iv.id.length > 0 &&
+                !iv.id.startsWith('interval-')
+            );
+            if (!serverInterval) continue; // not on server yet — keep queued
+            const ok = await uploadQueuedPhoto(photo, serverInterval.id, token);
+            if (ok) {
+              await media.removePhoto(photo.id);
+              uploaded++;
+            } else {
+              console.warn(
+                `[Sync] Photo upload rejected for ${photo.fileName}; kept in queue`
+              );
+            }
+          } catch (photoErr) {
+            // Network/IO failure — photo stays queued for the next sync
+            console.warn(
+              `[Sync] Photo upload failed for ${photo.fileName}:`,
+              photoErr
+            );
+          }
+        }
+      }
+    }
+    const pending = (await media.getPhotoQueue()).length;
+    return { uploaded, pending };
+  })().finally(() => {
+    photoSyncInFlight = null;
+  });
+  photoSyncInFlight = run;
+  return run;
+}
+
 export const syncManager = {
   /**
    * Main sync function: pushes local edits to server, and pulls down fresh data.
@@ -136,6 +210,11 @@ export const syncManager = {
   /** One full push+pull+photos round. Call syncWithServer(), which dedupes. */
   async runSyncRound(): Promise<SyncResult> {
     try {
+      // 0. Upload queued photos FIRST. The pull below can take a long time
+      // on field networks (one request per borehole), and photos captured on
+      // already-synced intervals — the common case — must not wait behind it.
+      let photosUploaded = (await uploadQueuedPhotos()).uploaded;
+
       // 1. Push the local queue
       const queue = await storage.getSyncQueue();
       let processedCount = 0;
@@ -199,78 +278,60 @@ export const syncManager = {
 
         await storage.saveProjects(projects);
 
-        for (const project of projects) {
-          try {
-            const serverBoreholes = await api.getProjectBoreholes(project.id);
-            if (Array.isArray(serverBoreholes)) {
-              const localBoreholes = await storage.getBoreholes(project.id);
-              const mergedBoreholes = mergeServerWithLocal(
-                serverBoreholes,
-                localBoreholes,
-                pendingQueue
-              );
-              await storage.saveBoreholes(project.id, mergedBoreholes);
-
-              // Refresh intervals for boreholes that exist on the server
-              for (const bh of serverBoreholes) {
-                try {
-                  const serverIntervals = await api.getBoreholeIntervals(bh.id);
-                  if (Array.isArray(serverIntervals)) {
-                    const localIntervals = await storage.getIntervals(bh.id);
-                    const mergedIntervals = mergeServerWithLocal(
-                      serverIntervals,
-                      localIntervals,
-                      pendingQueue,
-                      bh.id
-                    );
-                    await storage.saveIntervals(bh.id, mergedIntervals);
-                  }
-                } catch (bhErr) {
-                  console.warn(`Could not sync intervals for BH ${bh.id}:`, bhErr);
-                }
-              }
-            }
-          } catch (projErr) {
-            console.warn(`Could not sync boreholes for project ${project.id}:`, projErr);
-          }
-        }
-      }
-
-      // 3. Upload queued photos. This runs AFTER push+pull so that the
-      // interval cache now holds SERVER interval ids (UUIDs) for anything
-      // that was just upserted by (boreholeId, intervalNo). Photos whose
-      // interval has no server id yet simply stay queued for the next round.
-      let photosUploaded = 0;
-      const photoQueue = await media.getPhotoQueue();
-      if (photoQueue.length > 0) {
-        const token = await storage.getToken();
-        if (token) {
-          for (const photo of photoQueue) {
+        // Storage keys are per-project/per-borehole, so the whole pull can
+        // fan out in parallel — sequential awaits here used to take minutes
+        // on field networks and held up everything behind the sync.
+        await Promise.all(
+          projects.map(async (project) => {
             try {
-              const intervals = await storage.getIntervals(photo.boreholeId);
-              const serverInterval = intervals.find(
-                (iv: any) =>
-                  iv.intervalNo === photo.intervalNo &&
-                  typeof iv.id === 'string' &&
-                  iv.id.length > 0 &&
-                  !iv.id.startsWith('interval-')
-              );
-              if (!serverInterval) continue; // not on server yet — keep queued
-              const ok = await uploadQueuedPhoto(photo, serverInterval.id, token);
-              if (ok) {
-                await media.removePhoto(photo.id);
-                photosUploaded++;
-              } else {
-                console.warn(`[Sync] Photo upload rejected for ${photo.fileName}; kept in queue`);
+              const serverBoreholes = await api.getProjectBoreholes(project.id);
+              if (Array.isArray(serverBoreholes)) {
+                const localBoreholes = await storage.getBoreholes(project.id);
+                const mergedBoreholes = mergeServerWithLocal(
+                  serverBoreholes,
+                  localBoreholes,
+                  pendingQueue
+                );
+                await storage.saveBoreholes(project.id, mergedBoreholes);
+
+                // Refresh intervals for boreholes that exist on the server
+                await Promise.all(
+                  serverBoreholes.map(async (bh) => {
+                    try {
+                      const serverIntervals = await api.getBoreholeIntervals(bh.id);
+                      if (Array.isArray(serverIntervals)) {
+                        const localIntervals = await storage.getIntervals(bh.id);
+                        const mergedIntervals = mergeServerWithLocal(
+                          serverIntervals,
+                          localIntervals,
+                          pendingQueue,
+                          bh.id
+                        );
+                        await storage.saveIntervals(bh.id, mergedIntervals);
+                      }
+                    } catch (bhErr) {
+                      console.warn(`Could not sync intervals for BH ${bh.id}:`, bhErr);
+                    }
+                  })
+                );
               }
-            } catch (photoErr) {
-              // Network/IO failure — photo stays queued for the next sync
-              console.warn(`[Sync] Photo upload failed for ${photo.fileName}:`, photoErr);
+            } catch (projErr) {
+              console.warn(`Could not sync boreholes for project ${project.id}:`, projErr);
             }
-          }
-        }
+          })
+        );
       }
-      const photosPending = (await media.getPhotoQueue()).length;
+
+      // 3. Retry photos whose interval only just got its SERVER id (UUID)
+      // from the pull above — e.g. photos taken on an interval created
+      // offline in this same session. Everything else already uploaded in
+      // step 0.
+      let photosPending = (await media.getPhotoQueue()).length;
+      if (photosPending > 0) {
+        const retry = await uploadQueuedPhotos();
+        photosUploaded += retry.uploaded;
+        photosPending = retry.pending;
+      }
 
       return {
         success: failedCount === 0,
@@ -286,7 +347,30 @@ export const syncManager = {
         processedCount: 0,
         error: error.message || 'Network error during synchronization',
       };
+    } finally {
+      notifySyncListeners();
     }
+  },
+
+  /**
+   * Fast path: upload queued photos right now, without a full push+pull.
+   * Used when a photo is captured on an interval the server already knows.
+   */
+  async syncPhotos(): Promise<{ uploaded: number; pending: number }> {
+    const result = await uploadQueuedPhotos();
+    if (result.uploaded > 0) notifySyncListeners();
+    return result;
+  },
+
+  /**
+   * Subscribes to sync completion (full rounds and photo batches).
+   * Returns an unsubscribe function.
+   */
+  onSyncComplete(cb: () => void): () => void {
+    syncListeners.add(cb);
+    return () => {
+      syncListeners.delete(cb);
+    };
   },
 
   /**
@@ -319,3 +403,12 @@ export const syncManager = {
     });
   }
 };
+
+// A freshly captured photo starts uploading immediately (fast path — no
+// full push+pull). Registered via callback to avoid a media↔sync import
+// cycle at module init.
+setOnPhotoQueued(() => {
+  syncManager.syncPhotos().catch((err) => {
+    console.log('[Sync] Immediate photo upload failed/offline:', err);
+  });
+});

@@ -27,6 +27,7 @@ const accept_invite_dto_1 = require("./dto/accept-invite.dto");
 const forgot_password_dto_1 = require("./dto/forgot-password.dto");
 const reset_password_dto_1 = require("./dto/reset-password.dto");
 const create_password_dto_1 = require("./dto/create-password.dto");
+const pin_reset_dto_1 = require("./dto/pin-reset.dto");
 const platform_express_1 = require("@nestjs/platform-express");
 const multer_1 = require("multer");
 const path_1 = require("path");
@@ -116,6 +117,15 @@ let AuthController = class AuthController {
     }
     resetPassword(dto) {
         return this.authService.resetPassword(dto);
+    }
+    requestPinReset(dto) {
+        return this.authService.requestPinResetLink(dto.mobile);
+    }
+    generatePinResetLink(dto, user) {
+        return this.authService.generatePinResetLink(dto.userId, user);
+    }
+    completePinReset(dto) {
+        return this.authService.completePinResetLink(dto);
     }
     createPassword(dto) {
         return this.authService.createPassword(dto.mobile, dto.password);
@@ -270,6 +280,29 @@ __decorate([
     __metadata("design:paramtypes", [reset_password_dto_1.ResetPasswordDto]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "resetPassword", null);
+__decorate([
+    (0, common_1.Post)('pin-reset/request'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [pin_reset_dto_1.RequestPinResetDto]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "requestPinReset", null);
+__decorate([
+    (0, common_1.Post)('pin-reset/link'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [pin_reset_dto_1.GeneratePinResetLinkDto, Object]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "generatePinResetLink", null);
+__decorate([
+    (0, common_1.Post)('pin-reset/complete'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [pin_reset_dto_1.CompletePinResetDto]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "completePinReset", null);
 __decorate([
     (0, common_1.Post)('create-password'),
     __param(0, (0, common_1.Body)()),

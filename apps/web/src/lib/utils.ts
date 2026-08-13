@@ -8,6 +8,9 @@ export function formatCurrency(amount: number): string {
   return '₹' + amount.toLocaleString('en-IN');
 }
 
+/** Pre-launch rate charged per borehole. Used by project creation and the dashboard cards. */
+export const PRICE_PER_BORING = 10000;
+
 export function getInitials(firstName: string, lastName?: string): string {
   return `${firstName.charAt(0)}${lastName ? lastName.charAt(0) : ''}`.toUpperCase();
 }

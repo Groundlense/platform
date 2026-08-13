@@ -114,6 +114,28 @@ export declare class AuthService {
         success: boolean;
         message: string;
     }>;
+    private static readonly RESET_LINK_OTP_TYPE;
+    private mintPinResetToken;
+    private pinResetUrl;
+    requestPinResetLink(mobile: string): Promise<{
+        success: boolean;
+        message: string;
+    }>;
+    generatePinResetLink(targetUserId: string, actor: any): Promise<{
+        success: boolean;
+        url: string;
+        mobile: string;
+        firstName: string;
+        expiresInHours: number;
+    }>;
+    completePinResetLink(input: {
+        token: string;
+        mobile: string;
+        newPassword: string;
+    }): Promise<{
+        success: boolean;
+        message: string;
+    }>;
     createPassword(mobile: string, password: any): Promise<{
         success: boolean;
         message: string;

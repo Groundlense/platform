@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createProjectAction, createPaymentAction } from "@/app/actions/projects";
-import { formatCurrency, validateSptIntervalM } from "@/lib/utils";
+import { formatCurrency, validateSptIntervalM, PRICE_PER_BORING } from "@/lib/utils";
 
 interface GeotechOrg {
   id: string;
@@ -75,7 +75,7 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, epcOrgs, u
 
   if (!open) return null;
 
-  const total = bhCount * 5000;
+  const total = bhCount * PRICE_PER_BORING;
 
   const resetAndClose = () => {
     setStep(1);
@@ -165,6 +165,7 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, epcOrgs, u
     if (endDate) fd.set("targetCompletionDate", endDate);
     if (tenderId) fd.set("tenderId", tenderId.trim());
     fd.set("sptIntervalM", String(parseFloat(sptInterval)));
+    fd.set("totalBoringsPlanned", String(bhCount));
 
     startTransition(async () => {
       const res = await createProjectAction(fd);
@@ -422,7 +423,7 @@ function Step2({ bhCount, setBhCount, sptInterval, setSptInterval }: {
           <button onClick={() => setBhCount(Math.max(1, bhCount - 1))} className="w-8 h-8 rounded-[7px] bg-bg-raised border border-border text-text-pri text-[16px] cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all">−</button>
           <span className="font-display text-[28px] font-semibold text-text-pri min-w-[40px] text-center">{bhCount}</span>
           <button onClick={() => setBhCount(bhCount + 1)} className="w-8 h-8 rounded-[7px] bg-bg-raised border border-border text-text-pri text-[16px] cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all">+</button>
-          <span className="text-[11px] text-text-ter ml-2">@ {formatCurrency(5000)} each = <span className="text-amber-d font-medium">{formatCurrency(bhCount * 5000)}</span></span>
+          <span className="text-[11px] text-text-ter ml-2">@ {formatCurrency(PRICE_PER_BORING)} each = <span className="text-amber-d font-medium">{formatCurrency(bhCount * PRICE_PER_BORING)}</span></span>
         </div>
       </div>
 
@@ -608,7 +609,7 @@ function Step4({ bhCount, total, isPending, paymentRecorded, onPay, onPayLater }
         <div className="text-[10px] text-text-ter uppercase tracking-[0.5px] mb-[6px]">Total amount for this project</div>
         <div className="font-display text-[32px] text-rust-d">{formatCurrency(total)}</div>
         <div className="text-[10px] text-text-ter mt-[6px] leading-relaxed">
-          {bhCount} borings × {formatCurrency(5000)}
+          {bhCount} borings × {formatCurrency(PRICE_PER_BORING)}
         </div>
       </div>
 

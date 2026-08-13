@@ -41,6 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var AuthService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
@@ -53,6 +54,7 @@ const database_service_1 = require("../database/database.service");
 const activity_logs_service_1 = require("../activity-logs/activity-logs.service");
 const notifications_service_1 = require("../notifications/notifications.service");
 let AuthService = class AuthService {
+    static { AuthService_1 = this; }
     usersService;
     jwtService;
     db;
@@ -892,6 +894,134 @@ let AuthService = class AuthService {
             message: 'Password reset successfully.',
         };
     }
+    static RESET_LINK_OTP_TYPE = 'RESET_LINK';
+    async mintPinResetToken(mobile) {
+        const token = crypto.randomBytes(24).toString('base64url');
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await this.db.otp.upsert({
+            where: {
+                type_target: {
+                    type: AuthService_1.RESET_LINK_OTP_TYPE,
+                    target: mobile,
+                },
+            },
+            update: { code: token, verified: false, expiresAt },
+            create: {
+                type: AuthService_1.RESET_LINK_OTP_TYPE,
+                target: mobile,
+                code: token,
+                verified: false,
+                expiresAt,
+            },
+        });
+        return token;
+    }
+    pinResetUrl(token) {
+        const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+        return `${webUrl}/reset-pin?token=${token}`;
+    }
+    async requestPinResetLink(mobile) {
+        const trimmed = mobile.trim();
+        const user = await this.db.user.findFirst({ where: { mobile: trimmed } });
+        if (!user) {
+            throw new common_1.NotFoundException('No account found with this mobile number');
+        }
+        await this.mintPinResetToken(trimmed);
+        const admins = await this.db.user.findMany({
+            where: {
+                organizationId: user.organizationId,
+                id: { not: user.id },
+                status: 'ACTIVE',
+                email: { not: null },
+            },
+            select: { id: true },
+            take: 20,
+        });
+        const workerName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || trimmed;
+        for (const admin of admins) {
+            await this.notificationsService
+                .create({
+                userId: admin.id,
+                title: 'PIN reset requested',
+                message: `${workerName} (${trimmed}) forgot their PIN. Open the Crew tab and use "PIN reset" to send them a new-PIN link on WhatsApp.`,
+                type: 'PIN_RESET_REQUEST',
+            })
+                .catch(() => undefined);
+        }
+        await this.activityLogsService.log(user.id, 'PIN_RESET_REQUESTED', 'USER', user.id);
+        return {
+            success: true,
+            message: 'Reset request sent. Your supervisor will send you a reset link on WhatsApp.',
+        };
+    }
+    async generatePinResetLink(targetUserId, actor) {
+        const user = await this.db.user.findUnique({
+            where: { id: targetUserId },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                mobile: true,
+                organizationId: true,
+            },
+        });
+        if (!user) {
+            throw new common_1.NotFoundException('User not found');
+        }
+        if (user.organizationId !== actor.organizationId) {
+            throw new common_1.UnauthorizedException('You can only reset PINs for your own organization');
+        }
+        if (!user.mobile) {
+            throw new common_1.BadRequestException('This user has no mobile number on record');
+        }
+        const token = await this.mintPinResetToken(user.mobile);
+        await this.activityLogsService.log(actor.id, 'PIN_RESET_LINK_GENERATED', 'USER', user.id);
+        return {
+            success: true,
+            url: this.pinResetUrl(token),
+            mobile: user.mobile,
+            firstName: user.firstName,
+            expiresInHours: 24,
+        };
+    }
+    async completePinResetLink(input) {
+        const mobile = input.mobile.trim();
+        const record = await this.db.otp.findUnique({
+            where: {
+                type_target: {
+                    type: AuthService_1.RESET_LINK_OTP_TYPE,
+                    target: mobile,
+                },
+            },
+        });
+        if (!record ||
+            record.code !== input.token ||
+            record.expiresAt < new Date()) {
+            throw new common_1.BadRequestException('This reset link is invalid or has expired — ask your supervisor to send a new one, or the mobile number does not match the link.');
+        }
+        const user = await this.db.user.findFirst({ where: { mobile } });
+        if (!user) {
+            throw new common_1.NotFoundException('User account not found');
+        }
+        const hash = await bcrypt.hash(input.newPassword, 10);
+        await this.db.user.update({
+            where: { id: user.id },
+            data: { passwordHash: hash, pinHash: hash },
+        });
+        await this.db.otp.delete({
+            where: {
+                type_target: {
+                    type: AuthService_1.RESET_LINK_OTP_TYPE,
+                    target: mobile,
+                },
+            },
+        });
+        await this.activityLogsService.log(user.id, 'PASSWORD_RESET', 'USER', user.id);
+        return {
+            success: true,
+            message: 'PIN reset successfully — log in to the app with your new PIN.',
+        };
+    }
     async createPassword(mobile, password) {
         const user = await this.db.user.findFirst({
             where: { mobile },
@@ -918,7 +1048,7 @@ let AuthService = class AuthService {
     }
 };
 exports.AuthService = AuthService;
-exports.AuthService = AuthService = __decorate([
+exports.AuthService = AuthService = AuthService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [users_service_1.UsersService,
         jwt_1.JwtService,

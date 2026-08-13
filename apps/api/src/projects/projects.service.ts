@@ -73,6 +73,9 @@ export class ProjectsService {
         geotechOrganizationId: dto.geotechOrganizationId || geotechOrgId,
         // DB default (1.5 m) applies when the client doesn't send it.
         ...(dto.sptIntervalM != null ? { sptIntervalM: dto.sptIntervalM } : {}),
+        ...(dto.totalBoringsPlanned != null
+          ? { totalBoringsPlanned: dto.totalBoringsPlanned }
+          : {}),
       },
     });
 
@@ -380,26 +383,15 @@ export class ProjectsService {
     });
   }
 
+  /**
+   * Projects ASSIGNED to this user — the mobile worker's project list.
+   * Only real assignments count: a project_members row, or membership of
+   * a team that is assigned to one of the project's boreholes. Broad org
+   * visibility (projectScopeWhere) is deliberately NOT used here: it leaked
+   * every project of the worker's organization into the app even when the
+   * worker was never assigned to it.
+   */
   async getMyProjects(userId: string) {
-    const actor = await this.db.user.findUnique({
-      where: { id: userId },
-      include: {
-        roles: {
-          include: {
-            role: true,
-          },
-        },
-      },
-    });
-
-    if (!actor) return [];
-
-    const actorFormatted = {
-      id: actor.id,
-      organizationId: actor.organizationId,
-      roles: actor.roles.map((ur: any) => ur.role.code),
-    };
-
     const directMemberships = await this.db.projectMember.findMany({
       where: {
         userId,
@@ -414,17 +406,27 @@ export class ProjectsService {
       },
     });
 
-    const allScopedProjects = await this.db.project.findMany({
-      where: this.access.projectScopeWhere(actorFormatted),
+    const directProjectIds = new Set(directMemberships.map(m => m.projectId));
+
+    const teamProjects = await this.db.project.findMany({
+      where: {
+        boreholes: {
+          some: {
+            team: {
+              members: {
+                some: { userId },
+              },
+            },
+          },
+        },
+      },
       include: {
         epcOrganization: true,
         geotechOrganization: true,
       },
     });
 
-    const directProjectIds = new Set(directMemberships.map(m => m.projectId));
-
-    const extraMemberships = allScopedProjects
+    const extraMemberships = teamProjects
       .filter(p => !directProjectIds.has(p.id))
       .map(p => ({
         id: `virtual-${p.id}`,

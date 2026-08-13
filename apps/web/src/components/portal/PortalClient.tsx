@@ -22,6 +22,7 @@ import {
   createIntervalReview,
   createBulkBoreholeReview,
   bulkAssignTeamAction,
+  generatePinResetLink,
   fetchBoreholeReviews,
   fetchBoreholeIntegrity,
   submitSampleLabResult,
@@ -388,6 +389,10 @@ function buildCrewInviteMessage(
 
 function buildAssignmentMessage(boreholeCodes: string, projectCode: string): string {
   return `New borehole assigned / नई बोरिंग: ${boreholeCodes} in project ${projectCode}. Open the GroundLense app and tap Sync to see it.`;
+}
+
+function buildPinResetMessage(firstName: string, url: string): string {
+  return `Namaste${firstName ? ` ${firstName}` : ""}! Reset your GroundLense PIN here / अपना पिन यहाँ रीसेट करें: ${url} — Open the link, enter your mobile number and choose a new PIN. The link works once and expires in 24 hours.`;
 }
 
 const LIVE_FEED_DOT: Record<string, string> = {
@@ -1947,6 +1952,29 @@ export default function PortalClient({
   } | null>(null);
   const [inviteMsgCopied, setInviteMsgCopied] = useState(false);
   const [otpCopied, setOtpCopied] = useState(false);
+  // WhatsApp PIN-reset link — per-row busy/error state in the crew table
+  const [pinResetBusyId, setPinResetBusyId] = useState<string | null>(null);
+  const [pinResetError, setPinResetError] = useState("");
+
+  // Mints the single-use reset link for a crew member, then opens WhatsApp
+  // (wa.me) with the prefilled message — same channel as crew onboarding.
+  const handlePinResetShare = async (mUser: any) => {
+    setPinResetError("");
+    setPinResetBusyId(mUser.id);
+    const res = await generatePinResetLink(mUser.id);
+    setPinResetBusyId(null);
+    if (!res.success || !res.data?.url) {
+      setPinResetError(res.error || "Could not generate the reset link.");
+      return;
+    }
+    const msg = buildPinResetMessage(mUser.firstName || "", res.data.url);
+    const wa = waShareUrl(res.data.mobile, msg);
+    if (wa) {
+      window.open(wa, "_blank", "noopener,noreferrer");
+    } else {
+      setPinResetError("This user has no valid mobile number for WhatsApp.");
+    }
+  };
   // Post-assignment share panel — notify the assigned team's crew on WhatsApp
   const [assignShare, setAssignShare] = useState<{
     teamName: string;
@@ -6221,6 +6249,9 @@ export default function PortalClient({
             {/* Organization Crew List */}
             <div className="card shadow-sm">
               <div className="card-title">👥 Organization Crew Members ({orgUsers.length})</div>
+              {pinResetError && (
+                <div className="ib ib-r shadow-sm mb-2">❌ {pinResetError}</div>
+              )}
               <div className="overflow-x-auto">
                 <table className="dt w-full">
                   <thead>
@@ -6231,12 +6262,13 @@ export default function PortalClient({
                       <th>Email</th>
                       <th>Mobile</th>
                       <th>Status</th>
+                      <th className="text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {orgUsers.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center text-text-ter py-4">No crew members found.</td>
+                        <td colSpan={7} className="text-center text-text-ter py-4">No crew members found.</td>
                       </tr>
                     ) : (
                       orgUsers.map((mUser: any) => {
@@ -6261,6 +6293,22 @@ export default function PortalClient({
                               <span className={`pill ${st === "ACTIVE" ? "p-g" : "p-gray"}`}>
                                 {st}
                               </span>
+                            </td>
+                            <td className="text-right">
+                              {mUser.mobile ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-s btn-sm text-[9px] py-0.5 px-2 inline-flex items-center gap-1"
+                                  onClick={() => handlePinResetShare(mUser)}
+                                  disabled={pinResetBusyId === mUser.id}
+                                  title="Send a single-use PIN-reset link on WhatsApp"
+                                >
+                                  <RiWhatsappLine className="text-[11px]" />
+                                  {pinResetBusyId === mUser.id ? "…" : "PIN reset"}
+                                </button>
+                              ) : (
+                                <span className="text-text-ter text-[9px]">—</span>
+                              )}
                             </td>
                           </tr>
                         );
