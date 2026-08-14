@@ -12,7 +12,7 @@ export async function setSession(accessToken: string, refreshToken: string, user
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 60 * 60 * 24, // 24 hours
+    maxAge: 60 * 60 * 24 * 7, // 7 days — matches the JWT expiry (auth.module.ts)
     path: "/",
   });
   cookieStore.set(REFRESH_KEY, refreshToken, {
@@ -26,7 +26,7 @@ export async function setSession(accessToken: string, refreshToken: string, user
     httpOnly: false, // Readable by client for UI display
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 60 * 60 * 24,
+    maxAge: 60 * 60 * 24 * 7, // 7 days — matches the session token cookie
     path: "/",
   });
 }

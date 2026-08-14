@@ -127,6 +127,7 @@ enum SyncEntityType {
   SAMPLE
   PHOTO
   WATER_LEVEL
+  SESSION
 }
 
 enum OperationType {

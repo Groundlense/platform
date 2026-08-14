@@ -251,9 +251,10 @@ let AuthService = class AuthService {
         return this.issueTokens(user.id, user.organizationId);
     }
     async refresh(refreshToken) {
+        const tokenHash = this.hashToken(refreshToken);
         const matchedToken = await this.db.refreshToken.findFirst({
             where: {
-                tokenHash: this.hashToken(refreshToken),
+                tokenHash,
                 revokedAt: null,
                 expiresAt: {
                     gt: new Date(),
@@ -264,7 +265,21 @@ let AuthService = class AuthService {
             },
         });
         if (!matchedToken) {
-            throw new common_1.UnauthorizedException('Invalid refresh token');
+            const GRACE_MS = 2 * 60 * 1000;
+            const recentlyRotated = await this.db.refreshToken.findFirst({
+                where: {
+                    tokenHash,
+                    revokedAt: { gt: new Date(Date.now() - GRACE_MS) },
+                    expiresAt: { gt: new Date() },
+                },
+                include: {
+                    user: true,
+                },
+            });
+            if (!recentlyRotated) {
+                throw new common_1.UnauthorizedException('Invalid refresh token');
+            }
+            return this.issueTokens(recentlyRotated.user.id, recentlyRotated.user.organizationId);
         }
         await this.db.refreshToken.update({
             where: {

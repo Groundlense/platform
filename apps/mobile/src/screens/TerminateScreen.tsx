@@ -12,7 +12,6 @@ import { t } from '../utils/translations';
 import { useLanguage } from '../utils/LanguageContext';
 import { storage } from '../services/storage';
 import { syncManager } from '../services/sync';
-import { api } from '../services/api';
 
 export default function TerminateScreen({ route, navigation }: { route: any; navigation: any }) {
   const { borehole, projectId, currentDepth } = route.params || {};
@@ -23,6 +22,7 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
 
   const [reason, setReason] = useState('End of day');
   const [willResume, setWillResume] = useState<boolean>(true);
+  const [saving, setSaving] = useState(false);
 
   const reasons = [
     { code: 'End of day', hi: 'आज का काम खत्म', icon: '⏰' },
@@ -34,6 +34,8 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
   ];
 
   const handleConfirm = async () => {
+    if (saving) return; // double-tap ended the session twice
+    setSaving(true);
     try {
       const cachedBoreholes = await storage.getBoreholes(projectId);
 
@@ -57,7 +59,13 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
 
       await storage.saveBoreholes(projectId, updated);
 
-      // End the active session (when one exists) — locally and on the server
+      // End the active session (when one exists) — locally, then through
+      // the sync queue. The queue (not a direct API call) is what makes an
+      // offline termination survive: a direct call used to be swallowed on
+      // failure, and offline-created session ids (`sess-…`) 404'd even once
+      // the network was back. The server resolves the session by id, falls
+      // back to the borehole's open session, or recreates it from this
+      // payload — the record is never lost.
       const sessions = await storage.getBoringSessions(borehole.id);
       let activeSessionId: string | undefined;
       if (sessions.length > 0) {
@@ -69,15 +77,15 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
         await storage.saveBoringSessions(borehole.id, sessions);
         activeSessionId = active.id;
 
-        try {
-          await api.endBoringSession(active.id, {
-            endDepth: safeDepth,
-            status: sessionEndStatus,
-            terminationReason: reason,
-          });
-        } catch (apiErr) {
-          // Offline — the local session record above stands until sync
-        }
+        await syncManager.queueOperation('SESSION', active.id, 'UPDATE', {
+          boreholeId: borehole.id,
+          endDepth: safeDepth,
+          status: sessionEndStatus,
+          terminationReason: reason,
+          endedAt: active.endedAt,
+          startDepth: active.startDepth,
+          startedAt: active.startedAt,
+        });
       }
 
       if (willResume) {
@@ -132,6 +140,8 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
       );
     } catch (err) {
       Alert.alert('Error', 'Failed to terminate session');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -218,10 +228,15 @@ export default function TerminateScreen({ route, navigation }: { route: any; nav
               <Text style={styles.cancelBtnText}>{t('cancel', lang)}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.submitBtn}
+              style={[styles.submitBtn, saving && { opacity: 0.6 }]}
               onPress={handleConfirm}
+              disabled={saving}
             >
-              <Text style={styles.submitBtnText}>{lang === 'hi' ? 'पुष्टि करें' : 'Confirm'}</Text>
+              <Text style={styles.submitBtnText}>
+                {saving
+                  ? (lang === 'hi' ? 'सहेज रहे हैं…' : 'Saving…')
+                  : (lang === 'hi' ? 'पुष्टि करें' : 'Confirm')}
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

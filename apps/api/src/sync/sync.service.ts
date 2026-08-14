@@ -58,7 +58,11 @@ export class SyncService {
     for (const op of dto.operations) {
       const device = await this.resolveDevice(op.deviceId, user.id);
 
-      // Idempotency: an operation already recorded for this device is skipped.
+      // Idempotency: an operation already recorded for this device is skipped
+      // — but ONLY if it succeeded. A FAILED op must be re-applied on retry:
+      // transient failures (DB hiccup, out-of-order arrival, borehole not yet
+      // created) would otherwise poison the operation forever, with the
+      // mobile resending it every round and the field data never landing.
       const existing = await this.db.syncOperation.findFirst({
         where: {
           deviceId: device.id,
@@ -66,7 +70,7 @@ export class SyncService {
         },
       });
 
-      if (existing) {
+      if (existing && existing.status === SyncStatus.SYNCED) {
         results.push({
           operationId: op.operationId,
           status: existing.status,
@@ -85,6 +89,30 @@ export class SyncService {
         this.logger.warn(
           `Sync operation ${op.operationId} (${op.entityType}/${op.operationType}) failed: ${error}`,
         );
+      }
+
+      // Retry of a previously FAILED op: update the existing audit row
+      // instead of creating a duplicate.
+      if (existing) {
+        try {
+          await this.db.syncOperation.update({
+            where: { id: existing.id },
+            data: {
+              status,
+              syncedAt: status === SyncStatus.SYNCED ? new Date() : null,
+            },
+          });
+        } catch (auditErr: any) {
+          this.logger.warn(
+            `Sync audit update failed for ${op.operationId}: ${auditErr?.message}`,
+          );
+        }
+        results.push({
+          operationId: op.operationId,
+          status,
+          ...(error ? { error } : {}),
+        });
+        continue;
       }
 
       // Offline devices attach locally generated session ids (`sess-…`)
@@ -181,9 +209,90 @@ export class SyncService {
         return this.applyWaterLevelCreate(op, userId);
       case 'PHOTO':
         return this.applyPhotoCreate(op, userId);
+      case 'SESSION':
+        return this.applySessionEnd(op, userId);
       default:
         throw new Error(`Unsupported entity type ${op.entityType}`);
     }
+  }
+
+  /**
+   * Session end synced from the queue — the offline path of
+   * BoringSessionsService#end. Sessions started offline have local ids
+   * (`sess-…`) that don't exist server-side, so resolution falls back to
+   * the latest still-open session on the borehole; if none exists at all,
+   * the session is recreated from the payload so the record (start/end
+   * depth, timing, reason) is never lost.
+   */
+  private async applySessionEnd(op: SyncOperationItemDto, userId: string) {
+    const payload = op.payloadJson ?? {};
+    const boreholeId = payload.boreholeId;
+    if (!boreholeId) {
+      throw new Error('SESSION payload missing boreholeId');
+    }
+
+    const borehole = await this.db.borehole.findUnique({
+      where: { id: boreholeId },
+      select: { id: true },
+    });
+    if (!borehole) {
+      throw new NotFoundException(`Borehole ${boreholeId} not found`);
+    }
+
+    const endData = {
+      endDepth: payload.endDepth ?? 0,
+      status: payload.status ? String(payload.status) : 'TERMINATED',
+      terminationReason: payload.terminationReason
+        ? String(payload.terminationReason)
+        : null,
+      endedAt: payload.endedAt ? new Date(payload.endedAt) : new Date(),
+    };
+
+    // 1. Exact server id from an online-started session.
+    const byId =
+      op.entityId && !op.entityId.startsWith('sess-')
+        ? await this.db.boringSession.findUnique({
+            where: { id: op.entityId },
+            select: { id: true },
+          })
+        : null;
+    if (byId) {
+      await this.db.boringSession.update({
+        where: { id: byId.id },
+        data: endData,
+      });
+      return;
+    }
+
+    // 2. Latest still-open session on this borehole.
+    const open = await this.db.boringSession.findFirst({
+      where: { boreholeId, endedAt: null },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true },
+    });
+    if (open) {
+      await this.db.boringSession.update({
+        where: { id: open.id },
+        data: endData,
+      });
+      return;
+    }
+
+    // 3. Session never reached the server (started offline) — recreate it
+    // closed, preserving the worker's recorded timing and depths.
+    const startedAt = payload.startedAt ? new Date(payload.startedAt) : null;
+    await this.db.boringSession.create({
+      data: {
+        boreholeId,
+        workerId: userId,
+        startDepth: payload.startDepth ?? 0,
+        ...endData,
+        startedAt:
+          startedAt && !Number.isNaN(startedAt.getTime())
+            ? startedAt
+            : endData.endedAt,
+      },
+    });
   }
 
   private async applyBoringUpdate(op: SyncOperationItemDto) {

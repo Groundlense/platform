@@ -163,10 +163,13 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
         sampleRecord.storedUpright = uprightConfirmed;
       }
 
-      // Save to local storage
+      // Save to local storage — upsert by the deterministic interval id so
+      // re-submitting this interval (back-navigation) replaces the local
+      // row instead of duplicating it.
       const intervals = await storage.getIntervals(borehole.id);
-      intervals.push(intervalRecord);
-      await storage.saveIntervals(borehole.id, intervals);
+      const nextIntervals = intervals.filter((iv: any) => iv.id !== intervalRecord.id);
+      nextIntervals.push(intervalRecord);
+      await storage.saveIntervals(borehole.id, nextIntervals);
 
       const samples = await storage.getSamples(borehole.id);
       samples.push(sampleRecord);

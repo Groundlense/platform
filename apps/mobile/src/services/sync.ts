@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, refreshSessionToken } from './api';
 import { storage, SyncOperation } from './storage';
 import { media, QueuedPhoto, setOnPhotoQueued } from './media';
 import { API_BASE_URL } from '../config';
@@ -16,13 +16,14 @@ export interface SyncResult {
 /**
  * Uploads one queued photo to POST /intervals/:serverIntervalId/media.
  * Uses fetch (NOT the axios client) so React Native handles the multipart
- * body natively without transformRequest interference.
+ * body natively without transformRequest interference. Returns the HTTP
+ * status so the caller can refresh an expired token and retry.
  */
 async function uploadQueuedPhoto(
   photo: QueuedPhoto,
   serverIntervalId: string,
   token: string
-): Promise<boolean> {
+): Promise<number> {
   const form = new FormData();
   form.append('file', {
     uri: photo.uri,
@@ -39,14 +40,51 @@ async function uploadQueuedPhoto(
   form.append('purpose', photo.purpose);
   if (photo.takenAt) form.append('takenAt', photo.takenAt);
 
-  const response = await fetch(`${API_BASE_URL}/intervals/${serverIntervalId}/media`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: form,
-  });
-  return response.ok;
+  // RN fetch has NO default timeout — a stalled 2G socket used to hang this
+  // upload forever, and with it the whole sync pipeline (every trigger just
+  // joins the in-flight round). 3 minutes covers a 100 MB closure video on
+  // a slow connection; a genuinely dead socket gets cut and retried.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 180_000);
+  try {
+    const response = await fetch(`${API_BASE_URL}/intervals/${serverIntervalId}/media`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: form,
+      signal: controller.signal,
+    });
+    return response.status;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Runs `fn` over items with bounded concurrency. The pull used to fire one
+ * request per borehole all at once — on 2G they contend for the same
+ * bandwidth and most exceed the 60s timeout (thundering herd, worse after
+ * a Render cold start).
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (next < items.length) {
+        const i = next++;
+        results[i] = await fn(items[i]);
+      }
+    }
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 /**
@@ -74,18 +112,37 @@ function isLocallyPending(item: any, queue: SyncOperation[], boreholeId?: string
   });
 }
 
+// Device-side workflow fields the server doesn't return. A raw server-wins
+// overwrite used to wipe them once the queue drained — resetting the live
+// depth display and weather/start-date mid-boring (same list as
+// BoringListScreen's pull-merge).
+const BOREHOLE_LOCAL_ONLY_FIELDS = [
+  'currentDepth',
+  'rigSetupDone',
+  'rigType',
+  'diameter',
+  'drillingFluid',
+  'hammerType',
+  'drillerId',
+  'startDate',
+  'weather',
+];
+
 /**
  * Merge server data with the local cache:
  * - server wins for records that have no pending local edits;
  * - local wins for records that still have a queued (unsynced) operation;
  * - local-only records (e.g. created offline) are kept as long as they have
- *   a pending queue operation.
+ *   a pending queue operation;
+ * - fields in localOnlyFields are carried over from the cached copy when
+ *   the server row has nothing for them, even without pending edits.
  */
 function mergeServerWithLocal(
   serverItems: any[],
   localItems: any[],
   queue: SyncOperation[],
-  boreholeId?: string
+  boreholeId?: string,
+  localOnlyFields: string[] = []
 ): any[] {
   const serverIds = new Set(serverItems.map((s) => s.id).filter(Boolean));
   const serverIntervalNos = new Set(
@@ -97,6 +154,19 @@ function mergeServerWithLocal(
     if (local && isLocallyPending(local, queue, boreholeId)) {
       // Still-queued local changes win over the server copy
       return { ...serverItem, ...local };
+    }
+    if (local && localOnlyFields.length > 0) {
+      const keep: any = {};
+      for (const k of localOnlyFields) {
+        if (
+          (serverItem[k] === undefined || serverItem[k] === null) &&
+          local[k] !== undefined &&
+          local[k] !== null
+        ) {
+          keep[k] = local[k];
+        }
+      }
+      return { ...serverItem, ...keep };
     }
     return serverItem;
   });
@@ -140,17 +210,23 @@ function notifySyncListeners(): void {
  * Uploads every queued photo whose interval already has a SERVER id in the
  * local cache. Photos whose interval hasn't reached the server yet simply
  * stay queued — the full sync round retries them after its pull.
+ *
+ * networkProven: pass true when the caller has just completed successful
+ * API calls, so a THROWN upload (not an HTTP reject) can be attributed to
+ * the file rather than the network — e.g. Android purged the cached
+ * capture. Such hard failures count toward parking (see markPhotoFailure);
+ * plain offline failures never do.
  */
-async function uploadQueuedPhotos(): Promise<{
+async function uploadQueuedPhotos(networkProven = false): Promise<{
   uploaded: number;
   pending: number;
 }> {
   if (photoSyncInFlight) return photoSyncInFlight;
   const run = (async () => {
     let uploaded = 0;
-    const photoQueue = await media.getPhotoQueue();
+    const photoQueue = await media.getUploadablePhotos();
     if (photoQueue.length > 0) {
-      const token = await storage.getToken();
+      let token = await storage.getToken();
       if (token) {
         for (const photo of photoQueue) {
           try {
@@ -163,17 +239,41 @@ async function uploadQueuedPhotos(): Promise<{
                 !iv.id.startsWith('interval-')
             );
             if (!serverInterval) continue; // not on server yet — keep queued
-            const ok = await uploadQueuedPhoto(photo, serverInterval.id, token);
-            if (ok) {
+            let status = await uploadQueuedPhoto(photo, serverInterval.id, token);
+            // Access token expired — the raw fetch here bypasses the axios
+            // refresh interceptor, so refresh once and retry.
+            if (status === 401) {
+              const fresh = await refreshSessionToken();
+              if (!fresh) break; // session dead/offline — stop, keep queued
+              token = fresh;
+              status = await uploadQueuedPhoto(photo, serverInterval.id, token);
+            }
+            if (status >= 200 && status < 300) {
               await media.removePhoto(photo.id);
               uploaded++;
-            } else {
+            } else if (status >= 400 && status < 500) {
+              // Deterministic server reject (413 too large, 404 interval
+              // gone, 400 validation) — retrying identical bytes cannot
+              // succeed. Count it; parks after 3.
+              await media.markPhotoFailure(photo.id, `HTTP ${status}`);
               console.warn(
-                `[Sync] Photo upload rejected for ${photo.fileName}; kept in queue`
+                `[Sync] Photo upload rejected (HTTP ${status}) for ${photo.fileName}`
+              );
+            } else {
+              // 5xx — server-side hiccup, retry next round without penalty.
+              console.warn(
+                `[Sync] Photo upload failed (HTTP ${status}) for ${photo.fileName}; kept in queue`
               );
             }
           } catch (photoErr) {
-            // Network/IO failure — photo stays queued for the next sync
+            if (networkProven) {
+              // The network is demonstrably up (push/pull just succeeded),
+              // so a throw here points at the file itself.
+              await media.markPhotoFailure(
+                photo.id,
+                photoErr instanceof Error ? photoErr.message : 'Upload error'
+              );
+            }
             console.warn(
               `[Sync] Photo upload failed for ${photo.fileName}:`,
               photoErr
@@ -182,7 +282,7 @@ async function uploadQueuedPhotos(): Promise<{
         }
       }
     }
-    const pending = (await media.getPhotoQueue()).length;
+    const pending = (await media.getUploadablePhotos()).length;
     return { uploaded, pending };
   })().finally(() => {
     photoSyncInFlight = null;
@@ -242,8 +342,7 @@ export const syncManager = {
           );
           if (failedById.size > 0) {
             failedCount = failedById.size;
-            const remaining = await storage.getSyncQueue();
-            await storage.saveSyncQueue(
+            await storage.mutateSyncQueue((remaining) =>
               remaining.map((op) =>
                 failedById.has(op.operationId)
                   ? { ...op, status: 'FAILED' as const, lastError: failedById.get(op.operationId) }
@@ -253,9 +352,12 @@ export const syncManager = {
             pushError = `${failedCount} operation(s) failed to sync and were kept in the queue`;
           }
         } else if (result?.success) {
-          // Fallback for a response without per-op results
+          // Fallback for a response without per-op results. Remove ONLY the
+          // ops that were actually sent — clearing the whole queue here
+          // would also destroy operations queued while the push was in
+          // flight.
           processedCount = result.processedCount || queue.length;
-          await storage.clearSyncQueue();
+          await storage.removeSyncOperations(opsToSend.map((op) => op.operationId));
         } else {
           failedCount = queue.length;
           pushError = 'Failed to push sync queue';
@@ -278,57 +380,57 @@ export const syncManager = {
 
         await storage.saveProjects(projects);
 
-        // Storage keys are per-project/per-borehole, so the whole pull can
-        // fan out in parallel — sequential awaits here used to take minutes
-        // on field networks and held up everything behind the sync.
-        await Promise.all(
-          projects.map(async (project) => {
-            try {
-              const serverBoreholes = await api.getProjectBoreholes(project.id);
-              if (Array.isArray(serverBoreholes)) {
-                const localBoreholes = await storage.getBoreholes(project.id);
-                const mergedBoreholes = mergeServerWithLocal(
-                  serverBoreholes,
-                  localBoreholes,
-                  pendingQueue
-                );
-                await storage.saveBoreholes(project.id, mergedBoreholes);
+        // Storage keys are per-project/per-borehole, so the pull can fan
+        // out — but with BOUNDED concurrency: sequential awaits took
+        // minutes, while unbounded Promise.all starved every request past
+        // the 60s timeout on 2G (thundering herd).
+        await mapWithConcurrency(projects, 2, async (project) => {
+          try {
+            const serverBoreholes = await api.getProjectBoreholes(project.id);
+            if (Array.isArray(serverBoreholes)) {
+              const localBoreholes = await storage.getBoreholes(project.id);
+              const mergedBoreholes = mergeServerWithLocal(
+                serverBoreholes,
+                localBoreholes,
+                pendingQueue,
+                undefined,
+                BOREHOLE_LOCAL_ONLY_FIELDS
+              );
+              await storage.saveBoreholes(project.id, mergedBoreholes);
 
-                // Refresh intervals for boreholes that exist on the server
-                await Promise.all(
-                  serverBoreholes.map(async (bh) => {
-                    try {
-                      const serverIntervals = await api.getBoreholeIntervals(bh.id);
-                      if (Array.isArray(serverIntervals)) {
-                        const localIntervals = await storage.getIntervals(bh.id);
-                        const mergedIntervals = mergeServerWithLocal(
-                          serverIntervals,
-                          localIntervals,
-                          pendingQueue,
-                          bh.id
-                        );
-                        await storage.saveIntervals(bh.id, mergedIntervals);
-                      }
-                    } catch (bhErr) {
-                      console.warn(`Could not sync intervals for BH ${bh.id}:`, bhErr);
-                    }
-                  })
-                );
-              }
-            } catch (projErr) {
-              console.warn(`Could not sync boreholes for project ${project.id}:`, projErr);
+              // Refresh intervals for boreholes that exist on the server
+              await mapWithConcurrency(serverBoreholes, 3, async (bh) => {
+                try {
+                  const serverIntervals = await api.getBoreholeIntervals(bh.id);
+                  if (Array.isArray(serverIntervals)) {
+                    const localIntervals = await storage.getIntervals(bh.id);
+                    const mergedIntervals = mergeServerWithLocal(
+                      serverIntervals,
+                      localIntervals,
+                      pendingQueue,
+                      bh.id
+                    );
+                    await storage.saveIntervals(bh.id, mergedIntervals);
+                  }
+                } catch (bhErr) {
+                  console.warn(`Could not sync intervals for BH ${bh.id}:`, bhErr);
+                }
+              });
             }
-          })
-        );
+          } catch (projErr) {
+            console.warn(`Could not sync boreholes for project ${project.id}:`, projErr);
+          }
+        });
       }
 
       // 3. Retry photos whose interval only just got its SERVER id (UUID)
       // from the pull above — e.g. photos taken on an interval created
       // offline in this same session. Everything else already uploaded in
-      // step 0.
-      let photosPending = (await media.getPhotoQueue()).length;
+      // step 0. networkProven: the pull just succeeded, so a thrown upload
+      // now indicates a bad file, not a bad network.
+      let photosPending = (await media.getUploadablePhotos()).length;
       if (photosPending > 0) {
-        const retry = await uploadQueuedPhotos();
+        const retry = await uploadQueuedPhotos(true);
         photosUploaded += retry.uploaded;
         photosPending = retry.pending;
       }
@@ -342,10 +444,15 @@ export const syncManager = {
       };
     } catch (error: any) {
       console.error('Sync failed:', error);
+      // A 401 that survived the refresh interceptor means the session is
+      // truly gone — say so instead of the cryptic axios message.
+      const sessionDead = error?.response?.status === 401;
       return {
         success: false,
         processedCount: 0,
-        error: error.message || 'Network error during synchronization',
+        error: sessionDead
+          ? 'Session expired — please log out and log in again'
+          : error.message || 'Network error during synchronization',
       };
     } finally {
       notifySyncListeners();
@@ -377,7 +484,7 @@ export const syncManager = {
    * Appends an operation to the sync queue for future sync
    */
   async queueOperation(
-    entityType: 'BORING' | 'SPT_RECORD' | 'SAMPLE' | 'PHOTO' | 'WATER_LEVEL',
+    entityType: 'BORING' | 'SPT_RECORD' | 'SAMPLE' | 'PHOTO' | 'WATER_LEVEL' | 'SESSION',
     entityId: string,
     operationType: 'CREATE' | 'UPDATE' | 'DELETE',
     payload: any,

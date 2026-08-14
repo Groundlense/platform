@@ -2,6 +2,7 @@ import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { launchCamera } from 'react-native-image-picker';
 import { location } from './location';
+import { withStorageLock } from './storage';
 
 /**
  * Real device-camera capture + a persistent photo upload queue.
@@ -48,6 +49,17 @@ export interface QueuedPhoto {
   gpsLat?: number;
   gpsLng?: number;
   accuracyM?: number;
+  /** Hard upload failures (4xx reject, or errors while network was up). */
+  failCount?: number;
+  /** Last failure detail, for the gallery's error badge. */
+  lastFailure?: string;
+  /**
+   * Parked after repeated hard failures: no longer retried (so a 413-too-
+   * big video or a purged cache file stops dragging a full sync every 15s)
+   * but NEVER deleted — the entry stays visible with an error badge so the
+   * worker knows this evidence did not reach the server.
+   */
+  parked?: boolean;
 }
 
 // Registered by the sync manager (avoids a module-init import cycle):
@@ -246,14 +258,37 @@ export const media = {
   },
 
   // --- Persistent photo queue ---
+  // All mutations are serialized through withStorageLock — unserialized
+  // read-modify-write here could drop a queued photo or resurrect a
+  // removed one (duplicate upload).
 
   async getPhotoQueue(): Promise<QueuedPhoto[]> {
     const data = await AsyncStorage.getItem(PHOTO_QUEUE_KEY);
-    return data ? JSON.parse(data) : [];
+    if (!data) return [];
+    try {
+      return JSON.parse(data);
+    } catch {
+      console.warn('[Media] Corrupted photo queue ignored');
+      return [];
+    }
+  },
+
+  /** Atomic read-modify-write on the photo queue. */
+  async mutatePhotoQueue(
+    mutator: (queue: QueuedPhoto[]) => QueuedPhoto[],
+  ): Promise<QueuedPhoto[]> {
+    return withStorageLock(PHOTO_QUEUE_KEY, async () => {
+      const queue = await this.getPhotoQueue();
+      const next = mutator(queue);
+      await AsyncStorage.setItem(PHOTO_QUEUE_KEY, JSON.stringify(next));
+      return next;
+    });
   },
 
   async savePhotoQueue(queue: QueuedPhoto[]): Promise<void> {
-    await AsyncStorage.setItem(PHOTO_QUEUE_KEY, JSON.stringify(queue));
+    await withStorageLock(PHOTO_QUEUE_KEY, () =>
+      AsyncStorage.setItem(PHOTO_QUEUE_KEY, JSON.stringify(queue)),
+    );
   },
 
   /**
@@ -265,9 +300,7 @@ export const media = {
       id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       ...photo,
     };
-    const queue = await this.getPhotoQueue();
-    queue.push(entry);
-    await this.savePhotoQueue(queue);
+    await this.mutatePhotoQueue((queue) => [...queue, entry]);
     // Start the upload right away (no-op offline — the photo stays queued
     // and the background sync retries it).
     onPhotoQueued?.();
@@ -275,13 +308,38 @@ export const media = {
   },
 
   async removePhoto(id: string): Promise<void> {
+    await this.mutatePhotoQueue((queue) => queue.filter((p) => p.id !== id));
+  },
+
+  /**
+   * Records a hard upload failure (server 4xx reject, or an error while the
+   * network was provably up). After 3 hard failures the photo is parked —
+   * kept and visible, no longer auto-retried.
+   */
+  async markPhotoFailure(id: string, reason: string): Promise<void> {
+    await this.mutatePhotoQueue((queue) =>
+      queue.map((p) => {
+        if (p.id !== id) return p;
+        const failCount = (p.failCount ?? 0) + 1;
+        return {
+          ...p,
+          failCount,
+          lastFailure: reason,
+          parked: failCount >= 3 ? true : p.parked,
+        };
+      }),
+    );
+  },
+
+  /** Photos still eligible for upload (not parked). */
+  async getUploadablePhotos(): Promise<QueuedPhoto[]> {
     const queue = await this.getPhotoQueue();
-    await this.savePhotoQueue(queue.filter((p) => p.id !== id));
+    return queue.filter((p) => !p.parked);
   },
 
   /** Number of photos still waiting to upload for one borehole. */
   async pendingCountForBorehole(boreholeId: string): Promise<number> {
     const queue = await this.getPhotoQueue();
-    return queue.filter((p) => p.boreholeId === boreholeId).length;
+    return queue.filter((p) => p.boreholeId === boreholeId && !p.parked).length;
   },
 };

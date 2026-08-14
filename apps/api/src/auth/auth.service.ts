@@ -290,9 +290,11 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
+    const tokenHash = this.hashToken(refreshToken);
+
     const matchedToken = await this.db.refreshToken.findFirst({
       where: {
-        tokenHash: this.hashToken(refreshToken),
+        tokenHash,
         revokedAt: null,
         expiresAt: {
           gt: new Date(),
@@ -304,7 +306,32 @@ export class AuthService {
     });
 
     if (!matchedToken) {
-      throw new UnauthorizedException('Invalid refresh token');
+      // Rotation grace window: mobile clients refresh over flaky field
+      // connections, and a successful rotation whose RESPONSE was lost
+      // (timeout, cold start, network flap) leaves the device holding the
+      // just-revoked token. Rejecting it outright strands the device in a
+      // permanent 401 until re-login — so a token revoked moments ago is
+      // honoured once more and simply issues a fresh pair.
+      const GRACE_MS = 2 * 60 * 1000;
+      const recentlyRotated = await this.db.refreshToken.findFirst({
+        where: {
+          tokenHash,
+          revokedAt: { gt: new Date(Date.now() - GRACE_MS) },
+          expiresAt: { gt: new Date() },
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      if (!recentlyRotated) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      return this.issueTokens(
+        recentlyRotated.user.id,
+        recentlyRotated.user.organizationId,
+      );
     }
 
     await this.db.refreshToken.update({

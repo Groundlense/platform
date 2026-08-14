@@ -67,7 +67,9 @@ function App() {
 
       if (onlyWhenPending) {
         const queue = await storage.getSyncQueue();
-        const photos = await media.getPhotoQueue();
+        // Parked photos (repeated hard failures) must not drag a full sync
+        // round every 15s — they're excluded until the worker retakes them.
+        const photos = await media.getUploadablePhotos();
         if (queue.length === 0 && photos.length === 0) return;
         console.log(
           `[Auto-Sync:${reason}] ${queue.length} pending op(s), ${photos.length} queued photo(s) — syncing...`

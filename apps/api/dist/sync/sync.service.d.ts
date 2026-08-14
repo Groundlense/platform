@@ -18,6 +18,7 @@ export declare class SyncService {
     }>;
     private resolveDevice;
     private applyOperation;
+    private applySessionEnd;
     private applyBoringUpdate;
     private applyIntervalUpsert;
     private applySampleCreate;

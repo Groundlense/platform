@@ -54,9 +54,34 @@ async function refreshAccessToken(): Promise<string> {
   return accessToken;
 }
 
+/**
+ * Single-flight session refresh, shared by the axios interceptor and the
+ * fetch-based photo uploader. Returns the new access token, or null if the
+ * refresh failed. The stored session is cleared ONLY when the server
+ * explicitly rejects the refresh token (401/403) — a network error or a
+ * cold-start timeout on a field connection must NOT log the worker out,
+ * because the session is still valid and the next sync can retry.
+ */
+export async function refreshSessionToken(): Promise<string | null> {
+  try {
+    if (!refreshPromise) {
+      refreshPromise = refreshAccessToken().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    return await refreshPromise;
+  } catch (refreshError: any) {
+    const status = refreshError?.response?.status;
+    if (status === 401 || status === 403) {
+      // Server says this session is dead — only then drop it.
+      await storage.clearTokens();
+    }
+    return null;
+  }
+}
+
 // Response interceptor: on 401, try one token refresh, then retry the
-// original request once. On refresh failure, clear the stored session
-// and rethrow so the UI can return to Login.
+// original request once.
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -67,21 +92,13 @@ apiClient.interceptors.response.use(
 
     if (status === 401 && original && !original._retry && !isAuthEndpoint) {
       original._retry = true;
-      try {
-        if (!refreshPromise) {
-          refreshPromise = refreshAccessToken().finally(() => {
-            refreshPromise = null;
-          });
-        }
-        const newAccessToken = await refreshPromise;
-        original.headers = original.headers || {};
-        original.headers.Authorization = `Bearer ${newAccessToken}`;
-        return apiClient(original);
-      } catch (refreshError) {
-        // Refresh failed: session is no longer valid.
-        await storage.clearTokens();
+      const newAccessToken = await refreshSessionToken();
+      if (!newAccessToken) {
         return Promise.reject(error);
       }
+      original.headers = original.headers || {};
+      original.headers.Authorization = `Bearer ${newAccessToken}`;
+      return apiClient(original);
     }
     return Promise.reject(error);
   }
