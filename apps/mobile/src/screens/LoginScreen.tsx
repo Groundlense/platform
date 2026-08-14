@@ -99,13 +99,23 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
           )
         );
         const matchesStoredUser = knownIds.has(enteredId);
-        // Older installs have no stored PIN hash — fall back to id-only match.
-        const pinOk = offlineRecord?.pinHash
-          ? sha256Hex(loginPin) === offlineRecord.pinHash
-          : true;
+        // Offline entry REQUIRES the PIN hash cached by a previous online
+        // login. The old fallback ("no hash stored → let them in") meant
+        // anyone who knew the worker's ID could open the cached field data
+        // without any PIN on installs that predate the hash cache.
+        const hasStoredPin = Boolean(offlineRecord?.pinHash);
+        const pinOk = hasStoredPin && sha256Hex(loginPin) === offlineRecord!.pinHash;
 
         if (matchesStoredUser && pinOk) {
           navigation.replace('ProjectSelection');
+          return;
+        }
+        if (matchesStoredUser && !hasStoredPin) {
+          setLoginError(
+            lang === 'hi'
+              ? 'ऑफलाइन लॉगिन के लिए एक बार इंटरनेट से लॉगिन करें'
+              : 'Log in once with internet to enable offline login'
+          );
           return;
         }
         if (matchesStoredUser && !pinOk) {

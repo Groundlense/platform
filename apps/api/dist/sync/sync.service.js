@@ -85,7 +85,7 @@ let SyncService = SyncService_1 = class SyncService {
                     operationId: op.operationId,
                 },
             });
-            if (existing) {
+            if (existing && existing.status === client_1.SyncStatus.SYNCED) {
                 results.push({
                     operationId: op.operationId,
                     status: existing.status,
@@ -101,6 +101,26 @@ let SyncService = SyncService_1 = class SyncService {
                 status = client_1.SyncStatus.FAILED;
                 error = err?.message ?? 'Unknown error';
                 this.logger.warn(`Sync operation ${op.operationId} (${op.entityType}/${op.operationType}) failed: ${error}`);
+            }
+            if (existing) {
+                try {
+                    await this.db.syncOperation.update({
+                        where: { id: existing.id },
+                        data: {
+                            status,
+                            syncedAt: status === client_1.SyncStatus.SYNCED ? new Date() : null,
+                        },
+                    });
+                }
+                catch (auditErr) {
+                    this.logger.warn(`Sync audit update failed for ${op.operationId}: ${auditErr?.message}`);
+                }
+                results.push({
+                    operationId: op.operationId,
+                    status,
+                    ...(error ? { error } : {}),
+                });
+                continue;
             }
             let boringSessionId = op.boringSessionId || null;
             if (boringSessionId) {
@@ -177,9 +197,70 @@ let SyncService = SyncService_1 = class SyncService {
                 return this.applyWaterLevelCreate(op, userId);
             case 'PHOTO':
                 return this.applyPhotoCreate(op, userId);
+            case 'SESSION':
+                return this.applySessionEnd(op, userId);
             default:
                 throw new Error(`Unsupported entity type ${op.entityType}`);
         }
+    }
+    async applySessionEnd(op, userId) {
+        const payload = op.payloadJson ?? {};
+        const boreholeId = payload.boreholeId;
+        if (!boreholeId) {
+            throw new Error('SESSION payload missing boreholeId');
+        }
+        const borehole = await this.db.borehole.findUnique({
+            where: { id: boreholeId },
+            select: { id: true },
+        });
+        if (!borehole) {
+            throw new common_1.NotFoundException(`Borehole ${boreholeId} not found`);
+        }
+        const endData = {
+            endDepth: payload.endDepth ?? 0,
+            status: payload.status ? String(payload.status) : 'TERMINATED',
+            terminationReason: payload.terminationReason
+                ? String(payload.terminationReason)
+                : null,
+            endedAt: payload.endedAt ? new Date(payload.endedAt) : new Date(),
+        };
+        const byId = op.entityId && !op.entityId.startsWith('sess-')
+            ? await this.db.boringSession.findUnique({
+                where: { id: op.entityId },
+                select: { id: true },
+            })
+            : null;
+        if (byId) {
+            await this.db.boringSession.update({
+                where: { id: byId.id },
+                data: endData,
+            });
+            return;
+        }
+        const open = await this.db.boringSession.findFirst({
+            where: { boreholeId, endedAt: null },
+            orderBy: { startedAt: 'desc' },
+            select: { id: true },
+        });
+        if (open) {
+            await this.db.boringSession.update({
+                where: { id: open.id },
+                data: endData,
+            });
+            return;
+        }
+        const startedAt = payload.startedAt ? new Date(payload.startedAt) : null;
+        await this.db.boringSession.create({
+            data: {
+                boreholeId,
+                workerId: userId,
+                startDepth: payload.startDepth ?? 0,
+                ...endData,
+                startedAt: startedAt && !Number.isNaN(startedAt.getTime())
+                    ? startedAt
+                    : endData.endedAt,
+            },
+        });
     }
     async applyBoringUpdate(op) {
         if (op.operationType !== 'UPDATE') {

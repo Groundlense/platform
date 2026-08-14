@@ -43,6 +43,33 @@ export class MediaService {
       return v != null && Number.isFinite(n) ? n : null;
     };
 
+    // Idempotency on retry: the mobile queue re-sends a photo whenever the
+    // upload's RESPONSE was lost on a flaky connection, even though the
+    // server already stored it. The queue entry keeps the same fileName and
+    // takenAt across retries, so a row matching that natural key from the
+    // same uploader is the same photo — return it instead of duplicating
+    // field evidence.
+    const takenAtDate =
+      meta?.takenAt && !Number.isNaN(new Date(meta.takenAt).getTime())
+        ? new Date(meta.takenAt)
+        : null;
+    if (takenAtDate) {
+      const duplicate = await this.db.media.findFirst({
+        where: {
+          intervalId,
+          fileName: file.originalname,
+          uploadedByUserId: user.id,
+          takenAt: takenAtDate,
+        },
+      });
+      if (duplicate) {
+        await unlink(join(process.cwd(), 'uploads', file.filename)).catch(
+          () => undefined,
+        );
+        return duplicate;
+      }
+    }
+
     // Map the mobile capture purpose onto the ERD photo-type enum.
     const PHOTO_TYPE_BY_PURPOSE: Record<string, string> = {
       SPT: 'SOIL_SAMPLE',

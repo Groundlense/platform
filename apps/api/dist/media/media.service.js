@@ -36,6 +36,23 @@ let MediaService = MediaService_1 = class MediaService {
             const n = Number(v);
             return v != null && Number.isFinite(n) ? n : null;
         };
+        const takenAtDate = meta?.takenAt && !Number.isNaN(new Date(meta.takenAt).getTime())
+            ? new Date(meta.takenAt)
+            : null;
+        if (takenAtDate) {
+            const duplicate = await this.db.media.findFirst({
+                where: {
+                    intervalId,
+                    fileName: file.originalname,
+                    uploadedByUserId: user.id,
+                    takenAt: takenAtDate,
+                },
+            });
+            if (duplicate) {
+                await (0, promises_1.unlink)((0, path_1.join)(process.cwd(), 'uploads', file.filename)).catch(() => undefined);
+                return duplicate;
+            }
+        }
         const PHOTO_TYPE_BY_PURPOSE = {
             SPT: 'SOIL_SAMPLE',
             SAMPLE: 'SOIL_SAMPLE',

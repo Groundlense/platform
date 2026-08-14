@@ -48,7 +48,7 @@ function isDomainKey(key: string): boolean {
 export interface SyncOperation {
   deviceId: string;
   operationId: string;
-  entityType: 'BORING' | 'SPT_RECORD' | 'SAMPLE' | 'PHOTO' | 'WATER_LEVEL';
+  entityType: 'BORING' | 'SPT_RECORD' | 'SAMPLE' | 'PHOTO' | 'WATER_LEVEL' | 'SESSION';
   entityId: string;
   operationType: 'CREATE' | 'UPDATE' | 'DELETE';
   payloadJson: any;
@@ -57,6 +57,42 @@ export interface SyncOperation {
   status?: 'PENDING' | 'FAILED';
   lastError?: string;
 }
+
+/**
+ * One corrupted AsyncStorage value (torn write, storage-full partial save)
+ * must degrade to "cache miss", never to a permanently broken sync — a
+ * bare JSON.parse throw here used to take down every future round.
+ */
+function parseJson<T>(data: string | null, fallback: T): T {
+  if (!data) return fallback;
+  try {
+    return JSON.parse(data) as T;
+  } catch {
+    console.warn('[Storage] Corrupted cache entry ignored');
+    return fallback;
+  }
+}
+
+/**
+ * Per-key write lock. Queue mutations are read-modify-write over one
+ * AsyncStorage key; two unserialized writers (a screen queueing a sample
+ * while a sync round clears synced ops) interleave get/set and one write
+ * silently clobbers the other — losing field data. Every queue mutation
+ * must go through this lock.
+ */
+const keyLocks = new Map<string, Promise<unknown>>();
+export function withStorageLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = keyLocks.get(key) ?? Promise.resolve();
+  const run = prev.then(fn, fn);
+  keyLocks.set(
+    key,
+    run.catch(() => undefined),
+  );
+  return run;
+}
+
+/** The photo queue (media.ts) locks through the same mechanism. */
+export const PHOTO_QUEUE_LOCK_KEY = '@photo_queue';
 
 /**
  * Pure-JS UUID v4 (no native crypto dependency).
@@ -126,7 +162,7 @@ export const storage = {
 
   async getUser(): Promise<any | null> {
     const data = await AsyncStorage.getItem(KEYS.USER);
-    return data ? JSON.parse(data) : null;
+    return parseJson(data, null);
   },
 
   async clearUser(): Promise<void> {
@@ -154,7 +190,7 @@ export const storage = {
     pinHash: string;
   } | null> {
     const data = await AsyncStorage.getItem(KEYS.OFFLINE_LOGIN);
-    return data ? JSON.parse(data) : null;
+    return parseJson(data, null);
   },
 
   // --- Projects ---
@@ -164,7 +200,7 @@ export const storage = {
 
   async getProjects(): Promise<any[]> {
     const data = await AsyncStorage.getItem(KEYS.PROJECTS);
-    return data ? JSON.parse(data) : [];
+    return parseJson(data, []);
   },
 
   /**
@@ -203,7 +239,7 @@ export const storage = {
 
   async getBoreholes(projectId: string): Promise<any[]> {
     const data = await AsyncStorage.getItem(KEYS.BOREHOLES(projectId));
-    return data ? JSON.parse(data) : [];
+    return parseJson(data, []);
   },
 
   // --- Borehole Intervals ---
@@ -213,7 +249,7 @@ export const storage = {
 
   async getIntervals(boreholeId: string): Promise<any[]> {
     const data = await AsyncStorage.getItem(KEYS.INTERVALS(boreholeId));
-    return data ? JSON.parse(data) : [];
+    return parseJson(data, []);
   },
 
   // --- Samples ---
@@ -223,7 +259,7 @@ export const storage = {
 
   async getSamples(boreholeId: string): Promise<any[]> {
     const data = await AsyncStorage.getItem(KEYS.SAMPLES(boreholeId));
-    return data ? JSON.parse(data) : [];
+    return parseJson(data, []);
   },
 
   // --- Water Table ---
@@ -233,7 +269,7 @@ export const storage = {
 
   async getWaterTable(boreholeId: string): Promise<any[]> {
     const data = await AsyncStorage.getItem(KEYS.WATER_TABLE(boreholeId));
-    return data ? JSON.parse(data) : [];
+    return parseJson(data, []);
   },
 
   // --- Boring Sessions ---
@@ -243,34 +279,52 @@ export const storage = {
 
   async getBoringSessions(boreholeId: string): Promise<any[]> {
     const data = await AsyncStorage.getItem(KEYS.SESSIONS(boreholeId));
-    return data ? JSON.parse(data) : [];
+    return parseJson(data, []);
   },
 
   // --- Sync Queue ---
+  // All mutations are serialized through withStorageLock: see the lock's
+  // doc comment for why unserialized read-modify-write loses operations.
   async getSyncQueue(): Promise<SyncOperation[]> {
     const data = await AsyncStorage.getItem(KEYS.SYNC_QUEUE);
-    return data ? JSON.parse(data) : [];
+    return parseJson<SyncOperation[]>(data, []);
+  },
+
+  /**
+   * Atomic read-modify-write on the queue. Use this instead of
+   * getSyncQueue + saveSyncQueue pairs.
+   */
+  async mutateSyncQueue(
+    mutator: (queue: SyncOperation[]) => SyncOperation[],
+  ): Promise<SyncOperation[]> {
+    return withStorageLock(KEYS.SYNC_QUEUE, async () => {
+      const data = await AsyncStorage.getItem(KEYS.SYNC_QUEUE);
+      const queue = parseJson<SyncOperation[]>(data, []);
+      const next = mutator(queue);
+      await AsyncStorage.setItem(KEYS.SYNC_QUEUE, JSON.stringify(next));
+      return next;
+    });
   },
 
   async saveSyncQueue(queue: SyncOperation[]): Promise<void> {
-    await AsyncStorage.setItem(KEYS.SYNC_QUEUE, JSON.stringify(queue));
+    await withStorageLock(KEYS.SYNC_QUEUE, () =>
+      AsyncStorage.setItem(KEYS.SYNC_QUEUE, JSON.stringify(queue)),
+    );
   },
 
   async addToSyncQueue(op: SyncOperation): Promise<void> {
-    const queue = await this.getSyncQueue();
-    queue.push(op);
-    await this.saveSyncQueue(queue);
+    await this.mutateSyncQueue((queue) => [...queue, op]);
   },
 
   async clearSyncQueue(): Promise<void> {
-    await AsyncStorage.removeItem(KEYS.SYNC_QUEUE);
+    await this.mutateSyncQueue(() => []);
   },
 
   // --- Assigned-borehole notices ---
   /** Borehole ids the worker has already been notified about. */
   async getSeenAssignments(): Promise<string[]> {
     const data = await AsyncStorage.getItem(KEYS.SEEN_ASSIGNMENTS);
-    return data ? JSON.parse(data) : [];
+    return parseJson(data, []);
   },
 
   async addSeenAssignments(ids: string[]): Promise<void> {
@@ -327,7 +381,8 @@ export const storage = {
   async removeSyncOperations(operationIds: string[]): Promise<void> {
     if (operationIds.length === 0) return;
     const ids = new Set(operationIds);
-    const queue = await this.getSyncQueue();
-    await this.saveSyncQueue(queue.filter((op) => !ids.has(op.operationId)));
+    await this.mutateSyncQueue((queue) =>
+      queue.filter((op) => !ids.has(op.operationId)),
+    );
   },
 };

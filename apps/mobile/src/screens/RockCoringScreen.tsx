@@ -23,7 +23,7 @@ const WEATHERING_GRADES = [
 ] as const;
 
 export default function RockCoringScreen({ route, navigation }: { route: any; navigation: any }) {
-  const { borehole, projectId, sessionId, currentDepth, intervalNo } = route.params ?? {};
+  const { borehole, projectId, sessionId, currentDepth, intervalNo, sptData, soilData } = route.params ?? {};
 
   const { lang, setLang } = useLanguage();
 
@@ -177,15 +177,33 @@ export default function RockCoringScreen({ route, navigation }: { route: any; na
         intervalNo,
         fromDepth: currentDepth,
         toDepth: nextDepth,
-        soilDescription: `Rock coring run — ${grade?.en ?? weathering}. TCR: ${tcrPercentage}%, RQD: ${rqdPercentage}% (${getRqdRating(rqdPercentage, lang)})`,
+        soilDescription: `${soilData?.description ? `${soilData.description} ` : ''}Rock coring run — ${grade?.en ?? weathering}. TCR: ${tcrPercentage}%, RQD: ${rqdPercentage}% (${getRqdRating(rqdPercentage, lang)})`,
         isCompleted: true,
         remarks: `TCR=${tcr}cm, RQD=${rqdPieces}cm. Run=${runLength}cm. Weathering=${grade?.en ?? weathering}.`,
         observedAt: new Date().toISOString(),
+        // SPT blows typed for this interval BEFORE rock was encountered —
+        // the rock branch used to silently discard them. Same interval row
+        // server-side (upsert by boreholeId+intervalNo), so they merge in.
+        ...(sptData
+          ? {
+              nValue: sptData.correctedN ?? null,
+              blow1: sptData.blow1 ?? null,
+              blow2: sptData.blow2 ?? null,
+              blow3: sptData.blow3 ?? null,
+              nCorrected: sptData.correctedN ?? null,
+              isRefusal: sptData.isRefusal ?? false,
+              penetrationMm: sptData.penetrationMm ?? null,
+              dilatancyApplied: sptData.dilatancyApplied ?? false,
+            }
+          : {}),
       };
 
+      // Upsert by the deterministic interval id — re-submitting this run
+      // (back-navigation) must replace the local row, not duplicate it.
       const intervals = await storage.getIntervals(borehole.id);
-      intervals.push(rockRecord);
-      await storage.saveIntervals(borehole.id, intervals);
+      const nextIntervals = intervals.filter((iv: any) => iv.id !== rockRecord.id);
+      nextIntervals.push(rockRecord);
+      await storage.saveIntervals(borehole.id, nextIntervals);
 
       // Queue Sync Operation
       await syncManager.queueOperation(

@@ -29,6 +29,8 @@ interface GalleryPhoto {
   uri: string;
   headers?: Record<string, string>;
   pending: boolean;
+  /** Parked after repeated upload failures — needs the worker's attention. */
+  failed?: boolean;
   purpose: string | null;
   intervalNo: number | null;
   gpsLat: number | null;
@@ -59,8 +61,13 @@ export default function PhotoGallery({ borehole, lang }: { borehole: any; lang: 
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<GalleryPhoto | null>(null);
+  // Sync completes every 15s while anything is pending — never let a slow
+  // load overlap the next one (stacked fetches on 2G).
+  const loadInFlight = React.useRef(false);
 
   const load = useCallback(async () => {
+    if (loadInFlight.current) return;
+    loadInFlight.current = true;
     try {
       const result: GalleryPhoto[] = [];
 
@@ -74,7 +81,8 @@ export default function PhotoGallery({ borehole, lang }: { borehole: any; lang: 
         result.push({
           key: `local-${q.id}`,
           uri: q.uri,
-          pending: true,
+          pending: !q.parked,
+          failed: q.parked === true,
           purpose: q.purpose,
           intervalNo: q.intervalNo,
           gpsLat: num(q.gpsLat),
@@ -121,6 +129,7 @@ export default function PhotoGallery({ borehole, lang }: { borehole: any; lang: 
 
       setPhotos(result);
     } finally {
+      loadInFlight.current = false;
       setLoading(false);
     }
   }, [borehole?.id]);
@@ -157,7 +166,11 @@ export default function PhotoGallery({ borehole, lang }: { borehole: any; lang: 
         ['GPS (capture)', fmtGps(selected, lang)],
         ['Date / Time', fmtDateTime(selected.takenAt)],
         ['Type', `${selected.purpose ?? '—'}${selected.intervalNo != null ? ` · interval #${selected.intervalNo}` : ''}`],
-        ['Status', selected.pending ? (lang === 'hi' ? '⏳ सिंक बाकी' : '⏳ Waiting for sync') : (lang === 'hi' ? '✓ सिंक हो गया' : '✓ Synced')],
+        ['Status', selected.failed
+          ? (lang === 'hi' ? '❌ अपलोड विफल — फोटो दोबारा लें' : '❌ Upload failed — retake this photo')
+          : selected.pending
+            ? (lang === 'hi' ? '⏳ सिंक बाकी' : '⏳ Waiting for sync')
+            : (lang === 'hi' ? '✓ सिंक हो गया' : '✓ Synced')],
       ]
     : [];
 
@@ -174,7 +187,11 @@ export default function PhotoGallery({ borehole, lang }: { borehole: any; lang: 
               style={styles.thumb}
               resizeMode="cover"
             />
-            {p.pending && <Text style={styles.pendingBadge}>⏳</Text>}
+            {p.failed ? (
+              <Text style={styles.pendingBadge}>❌</Text>
+            ) : p.pending ? (
+              <Text style={styles.pendingBadge}>⏳</Text>
+            ) : null}
           </TouchableOpacity>
         ))}
       </ScrollView>
