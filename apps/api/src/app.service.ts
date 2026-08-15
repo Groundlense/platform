@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class AppService {
-  getHello(): string {
-    return 'Hello World!';
+  getStatus() {
+    return {
+      status: 'ok',
+      service: 'groundlense-api',
+      docs: '/api/docs',
+      uptimeSeconds: Math.floor(process.uptime()),
+    };
   }
 }

@@ -7,8 +7,15 @@ import { AppService } from './app.service';
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
+  // Served at the bare root (excluded from the api/v1 prefix in main.ts).
   @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  getRoot() {
+    return this.appService.getStatus();
+  }
+
+  // Uptime-check endpoint, also unprefixed.
+  @Get('health')
+  getHealth() {
+    return this.appService.getStatus();
   }
 }

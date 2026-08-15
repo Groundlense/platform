@@ -7,7 +7,7 @@ const swagger_1 = require("@nestjs/swagger");
 const swagger_2 = require("@nestjs/swagger");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
-    app.setGlobalPrefix('api/v1');
+    app.setGlobalPrefix('api/v1', { exclude: ['/', '/health'] });
     app.useGlobalPipes(new common_1.ValidationPipe({
         whitelist: true,
         transform: true,
