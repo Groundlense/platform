@@ -3190,8 +3190,8 @@ export default function PortalClient({
           { key: "review", label: "Review", icon: <RiCheckDoubleLine /> },
           { key: "lab", label: "Lab", icon: <RiFlaskLine /> },
           { key: "report", label: "Report", icon: <RiFileTextLine /> },
-          { key: "settings", label: "Settings", icon: <RiSettings4Line /> },
-          { key: "requests", label: "Requests", icon: <RiFileTextLine /> },
+          // Settings and Requests live in the left sidebar / topbar — keeping them
+          // out of this bar keeps the horizontal nav to the fieldwork stages.
         ].map((t) => (
           <button
             key={t.key}

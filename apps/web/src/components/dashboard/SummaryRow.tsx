@@ -1,4 +1,5 @@
-/* Summary row — matches .summary-row: grid 3cols, gap 10px, mb 20px */
+/* Summary stats — same three caller-scoped totals, restyled to match the
+   marketing pages: mono uppercase label, display-face number, accent hairline. */
 
 interface SummaryRowProps {
   summary: {
@@ -12,23 +13,48 @@ interface SummaryRowProps {
 
 export default function SummaryRow({ summary }: SummaryRowProps) {
   return (
-    <div className="grid grid-cols-3 gap-[10px] mb-5">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
       {/* /dashboard/summary returns caller-scoped totals only — no per-status
           breakdown or "reports generated" count exists, so none is shown. */}
-      <StatCard label="Projects" value={summary.projects} sub={`${summary.boreholes} total borings`} borderClass="border-t-rust" />
-      <StatCard label="Total borings" value={summary.boreholes} sub={`${summary.intervals} intervals logged`} borderClass="border-t-amber" />
-      <StatCard label="Samples collected" value={summary.samples} sub={`${summary.media} media files`} borderClass="border-t-green" />
+      <StatCard
+        label="Projects"
+        value={summary.projects}
+        sub={`${summary.boreholes} total borings`}
+        accent="var(--color-rust-mid)"
+      />
+      <StatCard
+        label="Total borings"
+        value={summary.boreholes}
+        sub={`${summary.intervals} intervals logged`}
+        accent="var(--color-amber)"
+      />
+      <StatCard
+        label="Samples collected"
+        value={summary.samples}
+        sub={`${summary.media} media files`}
+        accent="var(--color-g-mid)"
+      />
     </div>
   );
 }
 
-/* Matches .sum-card: bg-surface, border, rounded-lg, padding 14px 16px */
-function StatCard({ label, value, sub, borderClass }: { label: string; value: number; sub?: string; borderClass: string }) {
+function StatCard({ label, value, sub, accent }: {
+  label: string;
+  value: number;
+  sub?: string;
+  accent: string;
+}) {
   return (
-    <div className={`bg-bg-surface border border-border rounded-lg ${borderClass}`} style={{ padding: "14px 16px" }}>
-      <div className="font-display text-[26px] text-text-pri mb-[2px]">{value}</div>
-      <div className="text-[10px] text-text-ter uppercase tracking-wider">{label}</div>
-      {sub && <div className="text-[10px] text-text-sec mt-1">{sub}</div>}
+    <div className="relative overflow-hidden bg-bg-surface border border-border rounded-xl px-5 py-[18px] transition-colors hover:border-border-mid">
+      <div
+        className="absolute top-0 left-0 right-0 h-[2px]"
+        style={{ background: `linear-gradient(90deg, ${accent}, transparent)` }}
+      />
+      <div className="font-mono text-[9.5px] tracking-[0.18em] uppercase text-text-ter mb-[10px]">
+        {label}
+      </div>
+      <div className="font-display text-[32px] leading-none text-text-pri">{value}</div>
+      {sub && <div className="text-[11px] text-text-sec mt-[10px]">{sub}</div>}
     </div>
   );
 }

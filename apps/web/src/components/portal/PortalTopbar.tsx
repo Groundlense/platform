@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { RiLogoutBoxRLine } from "react-icons/ri";
+import { logoutAction } from "@/app/actions/auth";
 import { getInitials } from "@/lib/utils";
 import NotificationBell from "../notifications/NotificationBell";
-import { usePortalTab } from "./PortalContext";
 
 interface PortalTopbarProps {
   project: any;
@@ -13,7 +14,6 @@ interface PortalTopbarProps {
 /* Matches portal .topbar: height 50px, gap 14px */
 export default function PortalTopbar({ project, user }: PortalTopbarProps) {
   const router = useRouter();
-  const { activeTab, setActiveTab } = usePortalTab();
   const firstName = (user?.firstName as string) || "";
   const lastName = (user?.lastName as string) || "";
   const initials = getInitials(firstName, lastName);
@@ -22,6 +22,7 @@ export default function PortalTopbar({ project, user }: PortalTopbarProps) {
   const roleLabel = orgType === "EPC_CONTRACTOR" ? "CONTRACTOR"
     : orgType === "GEOTECH_CONTRACTOR" ? "GEOTECH"
     : orgType === "IE_FIRM" ? "ENGINEER"
+    : orgType === "NABL_LAB" ? "NABL LAB"
     : orgType || "USER";
 
   return (
@@ -56,18 +57,16 @@ export default function PortalTopbar({ project, user }: PortalTopbarProps) {
           ← Dashboard
         </button>
 
-        {/* Settings button */}
-        <button
-          onClick={() => setActiveTab("settings")}
-          className={`text-[10px] bg-transparent border rounded-[5px] cursor-pointer transition-all hover:border-rust-mid hover:text-rust-d
-            ${activeTab === "settings"
-              ? "border-rust-mid text-rust-d font-semibold bg-[rgba(153,60,29,.1)]"
-              : "border-border text-text-ter hover:text-text-sec"
-            }`}
-          style={{ padding: "4px 9px" }}
-        >
-          ⚙ Settings
-        </button>
+        {/* Sign out */}
+        <form action={logoutAction}>
+          <button
+            type="submit"
+            className="text-[10px] bg-transparent border border-border rounded-[5px] text-text-ter cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all flex items-center gap-1"
+            style={{ padding: "4px 9px" }}
+          >
+            <RiLogoutBoxRLine /> Sign out
+          </button>
+        </form>
       </div>
     </div>
   );

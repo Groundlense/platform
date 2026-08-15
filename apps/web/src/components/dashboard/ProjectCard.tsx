@@ -18,7 +18,7 @@ const STATUS_MAP: Record<string, { cls: string; text: string }> = {
   ARCHIVED: { cls: "st-locked", text: "⬤ Archived" },
 };
 
-export default function ProjectCard({ project, orgType }: ProjectCardProps) {
+export default function ProjectCard({ project }: ProjectCardProps) {
   const router = useRouter();
   const [isPaying, startPayment] = useTransition();
   const [payMessage, setPayMessage] = useState<string | null>(null);
@@ -29,9 +29,9 @@ export default function ProjectCard({ project, orgType }: ProjectCardProps) {
   const gtName = project.geotechOrganization?.name || "—";
   const isLocked = !!project.lockedAt;
 
-  // EPC contractors get the read-only contractor portal; geotech/engineers get the data portal.
-  const portalSegment = orgType === "EPC_CONTRACTOR" ? "contractor" : "portal";
-  const projectHref = `/projects/${project.id}/${portalSegment}`;
+  // The contractor view (project report) is open to every role — the engineer
+  // portal is reachable from its topbar.
+  const projectHref = `/projects/${project.id}/contractor`;
 
   const chainage = project.chainageFrom != null && project.chainageTo != null
     ? `Ch.${project.chainageFrom} – ${project.chainageTo}`
@@ -99,12 +99,16 @@ export default function ProjectCard({ project, orgType }: ProjectCardProps) {
 
   return (
     <div
-      className={`relative bg-bg-surface border border-border rounded-[10px] overflow-hidden transition-all duration-150 group ${isLocked ? "cursor-default" : "cursor-pointer hover:border-border-mid hover:-translate-y-[1px]"}`}
+      className={`relative flex flex-col bg-bg-surface border border-border rounded-xl overflow-hidden transition-all duration-150 group ${
+        isLocked
+          ? "cursor-default"
+          : "cursor-pointer hover:border-border-mid hover:-translate-y-[2px] hover:shadow-[0_12px_28px_-18px_rgba(0,0,0,0.9)]"
+      }`}
       onClick={() => { if (!isLocked) router.push(projectHref); }}
     >
-      {/* Locked overlay — matches .proj-locked-overlay */}
+      {/* Locked overlay */}
       {isLocked && (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[10px]"
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl"
           style={{ background: "rgba(26,25,24,0.8)", backdropFilter: "blur(5px)", padding: "12px" }}>
           <div className="text-[24px]">🔒</div>
           <div className="text-[11px] text-text-sec text-center leading-relaxed">
@@ -117,7 +121,7 @@ export default function ProjectCard({ project, orgType }: ProjectCardProps) {
             <button
               onClick={handlePayNow}
               disabled={isPaying}
-              className="text-[11px] bg-rust-mid border-none rounded-[6px] text-text-pri cursor-pointer hover:bg-rust transition-colors disabled:opacity-60 disabled:cursor-default"
+              className="text-[11px] bg-rust-mid border-none rounded-md text-text-pri cursor-pointer hover:bg-rust transition-colors disabled:opacity-60 disabled:cursor-default"
               style={{ padding: "7px 16px", marginTop: "4px" }}
             >
               {isPaying ? "Recording…" : `Pay now · ${formatCurrency(payAmount)}`}
@@ -129,88 +133,79 @@ export default function ProjectCard({ project, orgType }: ProjectCardProps) {
         </div>
       )}
 
-      {/* Header — matches .pc-hdr: padding 12px 14px, border-bottom, flex between */}
-      <div className="flex justify-between items-start" style={{ padding: "12px 14px", borderBottom: "1px solid var(--color-border)" }}>
-        <div>
-          <div className="font-mono text-[8px] text-amber-d mb-1 tracking-[0.5px]">{project.projectCode}</div>
-          <div className="text-[12px] font-medium text-text-pri mb-[2px] leading-snug">{project.name}</div>
-          {chainage && <div className="text-[10px] text-text-ter">{chainage}</div>}
+      {/* Header */}
+      <div className="flex justify-between items-start gap-3 px-[18px] pt-[16px] pb-[14px] border-b border-border">
+        <div className="min-w-0">
+          <div className="font-mono text-[9px] text-amber-d mb-[6px] tracking-[0.12em]">{project.projectCode}</div>
+          <div className="text-[13.5px] font-medium text-text-pri leading-snug mb-[3px] truncate">{project.name}</div>
+          {chainage && <div className="text-[10.5px] text-text-ter">{chainage}</div>}
         </div>
-        <span className={`text-[8px] py-[2px] px-[7px] rounded-full font-medium whitespace-nowrap shrink-0 ${status.cls}`}>{status.text}</span>
+        <span className={`text-[8.5px] py-[3px] px-[8px] rounded-full font-medium whitespace-nowrap shrink-0 ${status.cls}`}>
+          {status.text}
+        </span>
       </div>
 
-      {/* Body — matches .pc-body: padding 12px 14px */}
-      <div style={{ padding: "12px 14px" }}>
+      {/* Body */}
+      <div className="flex-1 px-[18px] py-[16px]">
         {project.description && (
-          <div className="text-[10px] text-text-sec mb-[10px] line-clamp-2 leading-relaxed">{project.description}</div>
+          <div className="text-[11px] text-text-sec mb-[14px] line-clamp-2 leading-relaxed">{project.description}</div>
         )}
 
-        {/* Stat row — real per-status borehole counts (boreholeStatusCounts from /projects) */}
         {totalBoreholes > 0 ? (
           <>
-            <div className="grid grid-cols-3 gap-[6px] mb-[10px]">
-              <div className="text-center rounded-[6px] bg-bg-card" style={{ padding: "7px 4px" }}>
-                <div className="font-mono text-[14px] font-medium text-green-d">{completedCount}</div>
-                <div className="text-[8px] text-text-ter mt-[2px]">Complete</div>
-              </div>
-              <div className="text-center rounded-[6px] bg-bg-card" style={{ padding: "7px 4px" }}>
-                <div className="font-mono text-[14px] font-medium text-amber-d">{activeCount}</div>
-                <div className="text-[8px] text-text-ter mt-[2px]">Active</div>
-              </div>
-              <div className="text-center rounded-[6px] bg-bg-card" style={{ padding: "7px 4px" }}>
-                <div className="font-mono text-[14px] font-medium text-text-ter">{pendingCount}</div>
-                <div className="text-[8px] text-text-ter mt-[2px]">Pending</div>
-              </div>
+            <div className="grid grid-cols-3 gap-2 mb-[14px]">
+              <MiniStat value={completedCount} label="Complete" className="text-green-d" />
+              <MiniStat value={activeCount} label="Active" className="text-amber-d" />
+              <MiniStat value={pendingCount} label="Pending" className="text-text-ter" />
             </div>
 
-            {/* Progress — matches .pc-prog-row: COMPLETED / total */}
             {progressPct != null && (
-              <div className="flex items-center gap-2 mb-[8px]">
-                <div className="flex-1 h-[3px] rounded-[2px] overflow-hidden" style={{ background: "var(--color-border)" }}>
-                  <div className="h-full rounded-[2px]" style={{ width: `${progressPct}%`, background: progressPct === 100 ? "var(--color-green-d)" : "var(--color-rust-mid)" }} />
+              <div className="flex items-center gap-[10px] mb-[12px]">
+                <div className="flex-1 h-[4px] rounded-full overflow-hidden" style={{ background: "var(--color-border)" }}>
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${progressPct}%`,
+                      background: progressPct === 100 ? "var(--color-green-d)" : "var(--color-rust-mid)",
+                    }}
+                  />
                 </div>
-                <div className="font-mono text-[9px] text-text-ter">{progressPct}%</div>
+                <div className="font-mono text-[9.5px] text-text-ter shrink-0">{progressPct}%</div>
               </div>
             )}
 
-            {/* Borehole status dot-strip — matches .bh-status-strip / .bh-dot */}
-            <div className="flex gap-[3px] flex-wrap items-center mb-[5px]">
+            {/* Borehole status dot-strip */}
+            <div className="flex gap-[4px] flex-wrap items-center mb-[10px]">
               {visibleDots.map((color, i) => (
                 <span key={i} className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
               ))}
               {overflow > 0 && (
-                <span className="font-mono text-[8px] text-text-ter">+{overflow}</span>
+                <span className="font-mono text-[8.5px] text-text-ter ml-[2px]">+{overflow}</span>
               )}
             </div>
-            <div className="flex gap-[10px] mb-[8px]">
-              <span className="flex items-center gap-1 text-[9px] text-text-ter"><span className="w-2 h-2 rounded-full" style={{ background: "var(--color-green-d)" }} />Done</span>
-              <span className="flex items-center gap-1 text-[9px] text-text-ter"><span className="w-2 h-2 rounded-full" style={{ background: "var(--color-amber-d)" }} />Active</span>
-              <span className="flex items-center gap-1 text-[9px] text-text-ter"><span className="w-2 h-2 rounded-full" style={{ background: "var(--color-border-mid)" }} />Pending</span>
-              {closedBadCount > 0 && (
-                <span className="flex items-center gap-1 text-[9px] text-text-ter"><span className="w-2 h-2 rounded-full" style={{ background: "var(--color-red-d)" }} />Closed</span>
-              )}
+            <div className="flex gap-[12px] flex-wrap mb-[14px]">
+              <Legend color="var(--color-green-d)" label="Done" />
+              <Legend color="var(--color-amber-d)" label="Active" />
+              <Legend color="var(--color-border-mid)" label="Pending" />
+              {closedBadCount > 0 && <Legend color="var(--color-red-d)" label="Closed" />}
             </div>
           </>
         ) : (
-          <div className="text-[10px] text-text-ter mb-[10px] rounded-[6px] bg-bg-card text-center leading-relaxed" style={{ padding: "7px 8px" }}>
+          <div className="text-[10.5px] text-text-ter mb-[14px] rounded-lg bg-bg-card text-center leading-relaxed px-3 py-[10px]">
             No boreholes created yet{boringsPlanned != null ? ` · ${boringsPlanned} planned` : ""} — add them from the project portal.
           </div>
         )}
 
-        {/* Linked parties — matches .linked-row */}
+        {/* Linked parties */}
         <div className="flex gap-[6px] flex-wrap">
-          <span className="text-[9px] py-[2px] px-2 rounded-full border-[0.5px] border-border bg-bg-card text-text-ter flex items-center gap-1">
-            <span className="w-1 h-1 rounded-full bg-rust-d" /> {epcName}
-          </span>
-          <span className="text-[9px] py-[2px] px-2 rounded-full border-[0.5px] border-border bg-bg-card text-text-ter flex items-center gap-1">
-            <span className="w-1 h-1 rounded-full bg-green-d" /> {gtName}
-          </span>
+          <PartyPill color="var(--color-rust-d)" name={epcName} />
+          <PartyPill color="var(--color-green-d)" name={gtName} />
         </div>
       </div>
 
-      {/* Footer — matches .pc-foot: padding 10px 14px, border-top, flex between */}
-      <div className="flex justify-between items-center gap-2" style={{ padding: "10px 14px", borderTop: "1px solid var(--color-border)" }}>
-        <span className="text-[9px] text-text-ter shrink-0">
+      {/* Footer */}
+      <div className="flex justify-between items-center gap-2 px-[18px] py-[12px] border-t border-border">
+        <span className="text-[9.5px] text-text-ter shrink-0">
           {new Date(project.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
         </span>
         <div className="flex items-center gap-[6px]">
@@ -222,13 +217,13 @@ export default function ProjectCard({ project, orgType }: ProjectCardProps) {
                   ? `${boringsPlanned} borings × ${formatCurrency(PRICE_PER_BORING)}`
                   : "Razorpay checkout coming soon"
               }
-              className="text-[10px] py-1 px-[10px] rounded-[5px] text-amber-d cursor-pointer transition-all whitespace-nowrap"
+              className="text-[10px] py-[5px] px-[11px] rounded-md text-amber-d cursor-pointer transition-all whitespace-nowrap hover:brightness-125"
               style={{ background: "rgba(186,117,23,.12)", border: "1px solid rgba(186,117,23,.28)" }}
             >
               {payAmount != null ? `Pay now · ${formatCurrency(payAmount)}` : "Pay now"}
             </button>
           )}
-          <span className="text-[10px] py-1 px-[10px] rounded-[5px] text-rust-d cursor-pointer transition-all opacity-0 group-hover:opacity-100 whitespace-nowrap"
+          <span className="text-[10px] py-[5px] px-[11px] rounded-md text-rust-d cursor-pointer transition-all opacity-0 group-hover:opacity-100 whitespace-nowrap"
             style={{ background: "rgba(153,60,29,.12)", border: "1px solid rgba(153,60,29,.25)" }}>
             Open →
           </span>
@@ -237,10 +232,37 @@ export default function ProjectCard({ project, orgType }: ProjectCardProps) {
 
       {/* Placeholder feedback for the not-yet-wired payment gateway */}
       {!isLocked && payMessage && (
-        <div className="text-[9px] text-amber-d text-center leading-relaxed" style={{ padding: "0 14px 10px" }}>
+        <div className="text-[9.5px] text-amber-d text-center leading-relaxed px-[18px] pb-[12px] -mt-[4px]">
           {payMessage}
         </div>
       )}
     </div>
+  );
+}
+
+function MiniStat({ value, label, className }: { value: number; label: string; className: string }) {
+  return (
+    <div className="text-center rounded-lg bg-bg-card py-[9px] px-1">
+      <div className={`font-mono text-[15px] font-medium ${className}`}>{value}</div>
+      <div className="text-[8.5px] text-text-ter mt-[3px] tracking-[0.06em]">{label}</div>
+    </div>
+  );
+}
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-[5px] text-[9px] text-text-ter">
+      <span className="w-2 h-2 rounded-full" style={{ background: color }} />
+      {label}
+    </span>
+  );
+}
+
+function PartyPill({ color, name }: { color: string; name: string }) {
+  return (
+    <span className="text-[9.5px] py-[3px] px-[9px] rounded-full border-[0.5px] border-border bg-bg-card text-text-ter flex items-center gap-[5px] max-w-full">
+      <span className="w-1 h-1 rounded-full shrink-0" style={{ background: color }} />
+      <span className="truncate">{name}</span>
+    </span>
   );
 }

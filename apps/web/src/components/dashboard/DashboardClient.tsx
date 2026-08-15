@@ -5,6 +5,7 @@ import DashboardTopbar from "./DashboardTopbar";
 import ProjectSearch from "./ProjectSearch";
 import SummaryRow from "./SummaryRow";
 import ProjectCard from "./ProjectCard";
+import ProjectRow from "./ProjectRow";
 import NewProjectCard from "./NewProjectCard";
 import NewProjectModal from "./NewProjectModal";
 import { getJoinRequestsAction, approveJoinRequestAction, rejectJoinRequestAction } from "@/app/actions/auth";
@@ -23,6 +24,8 @@ interface DashboardClientProps {
 
 export default function DashboardClient({ projects, summary, user, orgType, geotechOrgs, epcOrgs = [], orgUsers = [] }: DashboardClientProps) {
   const [modalOpen, setModalOpen] = useState(false);
+  // List scales to dozens of projects; grid stays available for a visual overview.
+  const [view, setView] = useState<"list" | "grid">("list");
   const [joinRequests, setJoinRequests] = useState<any[]>([]);
   const [projectRequests, setProjectRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
@@ -294,20 +297,20 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
   return (
     <div className="flex flex-col h-screen bg-bg-base">
       <style dangerouslySetInnerHTML={{ __html: `
-        .card { background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: 9px; padding: 14px; margin-bottom: 12px; }
-        .card-title { font-size: 10px; font-weight: 600; color: var(--color-text-ter); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; border-bottom: 1px solid var(--color-border); padding-bottom: 5px; display: flex; align-items: center; justify-content: space-between; }
-        .fg { display: flex; flex-direction: column; gap: 4px; }
-        .fl { font-size: 9px; font-weight: 600; color: var(--color-text-ter); }
-        .fi { font-size: 11px; padding: 6px 10px; border: 1.5px solid var(--color-border-mid); border-radius: 7px; background: var(--color-bg-card); color: var(--color-text-pri); outline: none; }
+        .card { background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 20px; margin-bottom: 0; }
+        .card-title { font-family: var(--font-mono); font-size: 10px; font-weight: 600; color: var(--color-text-ter); text-transform: uppercase; letter-spacing: 0.16em; margin-bottom: 16px; border-bottom: 1px solid var(--color-border); padding-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+        .fg { display: flex; flex-direction: column; gap: 6px; }
+        .fl { font-size: 9.5px; font-weight: 600; color: var(--color-text-ter); text-transform: uppercase; letter-spacing: 0.06em; }
+        .fi { font-size: 11.5px; padding: 9px 12px; border: 1px solid var(--color-border-mid); border-radius: 8px; background: var(--color-bg-card); color: var(--color-text-pri); outline: none; transition: border-color .15s; }
         .fi:focus { border-color: var(--color-rust-mid); }
-        .ib { border-radius: 7px; padding: 7px 11px; font-size: 10px; line-height: 1.5; margin-bottom: 12px; }
+        .ib { border-radius: 8px; padding: 10px 13px; font-size: 10.5px; line-height: 1.5; margin-bottom: 12px; }
         .ib-r { background: rgba(163,45,45,.08); border: 0.5px solid rgba(163,45,45,.25); color: #F09595; }
         .ib-g { background: rgba(59,109,17,.08); border: 0.5px solid rgba(59,109,17,.25); color: #97C459; }
-        .dr { display: flex; justify-content: space-between; padding: 4px 0; font-size: 10px; border-bottom: 0.5px solid var(--color-border); }
+        .dr { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; font-size: 11px; border-bottom: 0.5px solid var(--color-border); }
         .dr:last-child { border-bottom: none; }
         .dr-l { color: var(--color-text-ter); }
         .dr-v { color: var(--color-text-sec); font-weight: 500; }
-        .btn { font-size: 10px; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: 500; transition: all 0.1s; border: none; }
+        .btn { font-size: 10.5px; padding: 7px 12px; border-radius: 7px; cursor: pointer; font-weight: 500; transition: all 0.1s; border: none; }
         .btn:disabled { opacity: .45; cursor: not-allowed; }
         .btn-p { background: var(--color-rust-mid); color: #fff; }
         .btn-p:hover:not(:disabled) { background: var(--color-rust-d); }
@@ -327,7 +330,8 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
       <DashboardTopbar user={user} showSettings={showSettings} setShowSettings={setShowSettings} />
 
       {/* Dashboard body — matches .dash-body: padding 24px 28px */}
-      <div className="flex-1 overflow-y-auto" style={{ padding: "24px 28px" }}>
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1440px] px-6 sm:px-8 py-7 sm:py-9">
         {showSettings ? (
           <div className="animate-fade-in space-y-4">
             {settingsError && (
@@ -555,6 +559,25 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
           </div>
         ) : (
           <>
+            {/* Page header */}
+            <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+              <div>
+                <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-amber-d mb-[10px]">
+                  Dashboard
+                </div>
+                <h2 className="font-display text-[28px] sm:text-[32px] font-semibold tracking-tight leading-none mb-[10px]">
+                  {user ? `Welcome, ${(user as any).firstName || "User"}` : "Your projects"}
+                </h2>
+                <p className="text-[12.5px] text-text-sec">Monitor borings, track reports, manage teams</p>
+              </div>
+              <button
+                onClick={() => setModalOpen(true)}
+                className="flex items-center gap-[7px] py-[11px] px-5 bg-rust-mid border-none rounded-lg text-[12.5px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-colors shrink-0"
+              >
+                + New project
+              </button>
+            </div>
+
             <ProjectSearch projects={projects} orgType={orgType} />
 
             {/* Pending Requests section */}
@@ -639,40 +662,67 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
               </div>
             )}
 
-            {/* Welcome bar — matches .welcome-bar */}
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h2 className="font-display text-[22px] font-semibold mb-[2px]">
-                  {user ? `Welcome, ${(user as any).firstName || "User"}` : "Your projects"}
-                </h2>
-                <p className="text-[12px] text-text-sec">Monitor borings, track reports, manage teams</p>
-              </div>
-              <button
-                onClick={() => setModalOpen(true)}
-                className="flex items-center gap-[7px] py-[9px] px-4 bg-rust-mid border-none rounded-[7px] text-[12px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-colors"
-              >
-                + New project
-              </button>
-            </div>
-
             <SummaryRow summary={summary} />
 
-            {/* Project grid — matches .proj-grid: grid 3 cols, gap 10px */}
+            {/* Projects */}
             {projects.length > 0 ? (
-              <div className="grid grid-cols-3 gap-[10px] mb-5">
-                {projects.map((p: any) => (
-                  <ProjectCard key={p.id} project={p} orgType={orgType} />
-                ))}
-                <NewProjectCard onClick={() => setModalOpen(true)} />
-              </div>
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-text-ter">
+                    Your projects
+                  </span>
+                  <span className="font-mono text-[10px] text-text-ter">({projects.length})</span>
+                  <span className="flex-1 h-px bg-border" />
+                  <div className="flex items-center gap-[3px] bg-bg-card rounded-lg p-[3px] shrink-0"
+                    style={{ border: "0.5px solid var(--color-border)" }}>
+                    {(["list", "grid"] as const).map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => setView(v)}
+                        className={`text-[10px] border-none rounded-md cursor-pointer transition-all capitalize
+                          ${view === v
+                            ? "text-rust-d font-semibold bg-[rgba(153,60,29,.14)]"
+                            : "text-text-ter hover:text-text-sec bg-transparent"
+                          }`}
+                        style={{ padding: "4px 10px" }}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {view === "list" ? (
+                  <div className="bg-bg-surface border border-border rounded-xl overflow-hidden mb-6">
+                    {/* Column headers — desktop only */}
+                    <div className="hidden lg:grid grid-cols-[minmax(0,2.4fr)_minmax(0,1.5fr)_150px_auto] gap-4 border-b border-border bg-bg-card/40"
+                      style={{ padding: "9px 18px" }}>
+                      <span className="font-mono text-[8.5px] tracking-[0.16em] uppercase text-text-ter">Project</span>
+                      <span className="font-mono text-[8.5px] tracking-[0.16em] uppercase text-text-ter">Parties</span>
+                      <span className="font-mono text-[8.5px] tracking-[0.16em] uppercase text-text-ter">Borings</span>
+                      <span className="font-mono text-[8.5px] tracking-[0.16em] uppercase text-text-ter text-right">Actions</span>
+                    </div>
+                    {projects.map((p: any) => (
+                      <ProjectRow key={p.id} project={p} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+                    {projects.map((p: any) => (
+                      <ProjectCard key={p.id} project={p} orgType={orgType} />
+                    ))}
+                    <NewProjectCard onClick={() => setModalOpen(true)} />
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="text-center py-16">
+              <div className="text-center bg-bg-surface border border-dashed border-border-mid rounded-xl py-20 px-6">
                 <div className="text-[36px] mb-4">📋</div>
-                <div className="text-[16px] text-text-sec font-medium mb-1">No projects yet</div>
-                <div className="text-[12px] text-text-ter leading-relaxed max-w-[300px] mx-auto mb-5">Create your first project to start managing borings, teams, and IS 1892 reports.</div>
+                <div className="font-display text-[18px] text-text-pri font-medium mb-2">No projects yet</div>
+                <div className="text-[12px] text-text-ter leading-relaxed max-w-[320px] mx-auto mb-6">Create your first project to start managing borings, teams, and IS 1892 reports.</div>
                 <button
                   onClick={() => setModalOpen(true)}
-                  className="py-[9px] px-4 bg-rust-mid border-none rounded-[7px] text-[12px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-colors"
+                  className="py-[11px] px-5 bg-rust-mid border-none rounded-lg text-[12.5px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-colors"
                 >
                   + Create project
                 </button>
@@ -680,6 +730,7 @@ export default function DashboardClient({ projects, summary, user, orgType, geot
             )}
           </>
         )}
+        </div>
       </div>
 
       <NewProjectModal open={modalOpen} onClose={() => setModalOpen(false)} geotechOrgs={geotechOrgs} epcOrgs={epcOrgs} user={user} orgType={orgType} />

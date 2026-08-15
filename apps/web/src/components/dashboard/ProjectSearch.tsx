@@ -9,7 +9,7 @@ interface ProjectSearchProps {
   orgType: string | null;
 }
 
-export default function ProjectSearch({ projects, orgType }: ProjectSearchProps) {
+export default function ProjectSearch({ projects }: ProjectSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
@@ -17,7 +17,8 @@ export default function ProjectSearch({ projects, orgType }: ProjectSearchProps)
   const [requestError, setRequestError] = useState<string | null>(null);
   const [requestSuccess, setRequestSuccess] = useState<string | null>(null);
 
-  const portalSegment = orgType === "EPC_CONTRACTOR" ? "contractor" : "portal";
+  // The contractor view (project report) is open to every role.
+  const portalSegment = "contractor";
 
   const handleSearch = useCallback(async (q: string) => {
     setQuery(q);
@@ -77,23 +78,25 @@ export default function ProjectSearch({ projects, orgType }: ProjectSearchProps)
 
   return (
     <div className="relative mb-4">
-      {/* Search bar — matches .global-search */}
+      {/* Search bar */}
       <div
-        className="flex items-center bg-bg-card border border-border-mid rounded-lg cursor-text"
-        style={{ padding: "8px 14px", gap: "8px" }}
+        className="flex items-center bg-bg-card border border-border-mid rounded-xl cursor-text transition-colors focus-within:border-rust-mid"
+        style={{ padding: "11px 16px", gap: "10px" }}
         onClick={() => document.getElementById("gsInput")?.focus()}
       >
         <span className="text-[14px] text-text-ter">🔍</span>
         <input
           id="gsInput"
-          className="flex-1 bg-transparent border-none outline-none text-[12px] text-text-pri placeholder:text-text-ter"
+          className="flex-1 bg-transparent border-none outline-none text-[12.5px] text-text-pri placeholder:text-text-ter"
           placeholder="Search projects by name, code, state, or partner GSTIN..."
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
           onFocus={() => { if (query.length >= 2) setOpen(true); }}
           onBlur={() => setTimeout(() => setOpen(false), 250)}
         />
-        <span className="text-[10px] text-text-ter font-mono">Global Search</span>
+        <span className="hidden sm:block text-[9px] text-text-ter font-mono tracking-[0.14em] uppercase">
+          Global Search
+        </span>
       </div>
 
       {requestError && (

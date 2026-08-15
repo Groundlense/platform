@@ -12,7 +12,9 @@ async function bootstrap() {
   // Field photos are project-scoped evidence; they are served through the
   // authenticated GET media/:id/file route with project-access checks.
 
-  app.setGlobalPrefix('api/v1');
+  // Root and /health stay unprefixed so the bare production URL (and uptime
+  // checks) get a friendly response instead of a 404.
+  app.setGlobalPrefix('api/v1', { exclude: ['/', '/health'] });
 
   app.useGlobalPipes(
     new ValidationPipe({

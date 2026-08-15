@@ -28,73 +28,71 @@ export default function DashboardTopbar({ user, showSettings, setShowSettings }:
     : orgType || "USER";
 
   return (
-    <div className="bg-bg-surface border-b border-border flex items-center shrink-0" style={{ height: "48px", padding: "0 16px", gap: "12px" }}>
-      {/* Logo — matches .tb-logo */}
-      <span className="font-display text-[15px] text-rust-d tracking-[0.3px]">GroundLense</span>
+    <div className="bg-bg-surface border-b border-border flex items-center shrink-0 sticky top-0 z-40" style={{ height: "58px", padding: "0 22px", gap: "14px" }}>
+      {/* Logo */}
+      <span className="font-display text-[16px] text-rust-d tracking-[0.3px]">GroundLense</span>
 
-      {/* Badge — matches .tb-badge */}
-      <span className="text-[8px] font-mono tracking-[0.5px]" style={{ background: "rgba(153,60,29,.2)", color: "var(--color-rust-d)", padding: "2px 6px", borderRadius: "3px", border: "0.5px solid rgba(153,60,29,.3)" }}>{roleLabel}</span>
+      {/* Role badge */}
+      <span className="font-mono text-[8.5px] tracking-[0.14em]" style={{ background: "rgba(153,60,29,.2)", color: "var(--color-rust-d)", padding: "3px 8px", borderRadius: "4px", border: "0.5px solid rgba(153,60,29,.3)" }}>{roleLabel}</span>
 
-      {/* Separator — matches .tb-sep */}
-      <div style={{ width: "1px", height: "20px", background: "var(--color-border)" }} />
+      {/* Separator */}
+      <div className="hidden sm:block" style={{ width: "1px", height: "22px", background: "var(--color-border)" }} />
 
       {/* Org name */}
-      <span className="text-[11px] text-text-sec">{orgName}</span>
+      <span className="hidden sm:block text-[11.5px] text-text-sec truncate max-w-[220px]">{orgName}</span>
 
-      {/* Right side — matches .tb-right */}
-      <div className="ml-auto flex items-center gap-2">
-        {/* Notification — matches .tb-notif */}
+      {/* Right side */}
+      <div className="ml-auto flex items-center gap-[10px]">
         <NotificationBell />
 
-        {/* GL Code — matches .tb-gl */}
         {employeeCode && (
-          <div className="font-mono text-[9px] text-amber-d" style={{ padding: "3px 8px", background: "rgba(186,117,23,.08)", border: "0.5px solid rgba(186,117,23,.2)", borderRadius: "4px" }}>
+          <div className="hidden lg:block font-mono text-[9.5px] text-amber-d" style={{ padding: "5px 10px", background: "rgba(186,117,23,.08)", border: "0.5px solid rgba(186,117,23,.2)", borderRadius: "6px" }}>
             {employeeCode}
           </div>
         )}
 
-        {/* User pill — matches .tb-user */}
-        <div className="flex items-center gap-[6px] bg-bg-card rounded-[5px]" style={{ border: "0.5px solid var(--color-border)", padding: "3px 9px" }}>
-          <div className="rounded-full flex items-center justify-center text-[8px] font-bold text-rust-d" style={{ width: "20px", height: "20px", background: "rgba(153,60,29,.25)" }}>
+        {/* User pill */}
+        <div className="flex items-center gap-[8px] bg-bg-card rounded-lg" style={{ border: "0.5px solid var(--color-border)", padding: "5px 11px" }}>
+          <div className="rounded-full flex items-center justify-center text-[8.5px] font-bold text-rust-d" style={{ width: "22px", height: "22px", background: "rgba(153,60,29,.25)" }}>
             {initials}
           </div>
-          <span className="text-[11px] text-text-sec">{displayName}</span>
+          <span className="hidden sm:block text-[11.5px] text-text-sec">{displayName}</span>
         </div>
 
-        {/* Dashboard button */}
-        <button
-          onClick={() => setShowSettings(false)}
-          className={`text-[10px] bg-transparent border rounded-[5px] cursor-pointer transition-all hover:border-rust-mid hover:text-rust-d flex items-center gap-1
-            ${!showSettings
-              ? "border-rust-mid text-rust-d font-semibold bg-[rgba(153,60,29,.1)]"
-              : "border-border text-text-ter hover:text-text-sec"
-            }`}
-          style={{ padding: "4px 9px" }}
-        >
-          Dashboard
-        </button>
+        {/* View toggle */}
+        <div className="flex items-center gap-[3px] bg-bg-card rounded-lg p-[3px]" style={{ border: "0.5px solid var(--color-border)" }}>
+          <button
+            onClick={() => setShowSettings(false)}
+            className={`text-[10.5px] border-none rounded-md cursor-pointer transition-all
+              ${!showSettings
+                ? "text-rust-d font-semibold bg-[rgba(153,60,29,.14)]"
+                : "text-text-ter hover:text-text-sec bg-transparent"
+              }`}
+            style={{ padding: "5px 11px" }}
+          >
+            Dashboard
+          </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            className={`text-[10.5px] border-none rounded-md cursor-pointer transition-all
+              ${showSettings
+                ? "text-rust-d font-semibold bg-[rgba(153,60,29,.14)]"
+                : "text-text-ter hover:text-text-sec bg-transparent"
+              }`}
+            style={{ padding: "5px 11px" }}
+          >
+            ⚙ Settings
+          </button>
+        </div>
 
-        {/* Settings button */}
-        <button
-          onClick={() => setShowSettings(true)}
-          className={`text-[10px] bg-transparent border rounded-[5px] cursor-pointer transition-all hover:border-rust-mid hover:text-rust-d flex items-center gap-1
-            ${showSettings
-              ? "border-rust-mid text-rust-d font-semibold bg-[rgba(153,60,29,.1)]"
-              : "border-border text-text-ter hover:text-text-sec"
-            }`}
-          style={{ padding: "4px 9px" }}
-        >
-          ⚙ Settings
-        </button>
-
-        {/* Sign out — matches .tb-signout */}
+        {/* Sign out */}
         <form action={logoutAction}>
           <button
             type="submit"
-            className="text-[10px] bg-transparent border border-border rounded-[5px] text-text-ter cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all flex items-center gap-1"
-            style={{ padding: "4px 9px" }}
+            className="text-[10.5px] bg-transparent border border-border rounded-lg text-text-ter cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all flex items-center gap-[5px]"
+            style={{ padding: "6px 11px" }}
           >
-            <RiLogoutBoxRLine /> Sign out
+            <RiLogoutBoxRLine /> <span className="hidden sm:inline">Sign out</span>
           </button>
         </form>
       </div>
