@@ -2,7 +2,7 @@
 
 import { getToken } from "@/lib/session";
 import { validateSptIntervalM } from "@/lib/utils";
-import { createProject, updateProject, createBorehole, createPayment, assignBorehole, updateBoreholeLocation, globalSearchProjects, requestJoinProject, getPendingProjectJoinRequests, approveProjectJoinRequest, rejectProjectJoinRequest } from "@/lib/api/endpoints";
+import { createProject, updateProject, createBorehole, createPayment, createRazorpayOrder, verifyPayment, assignBorehole, updateBoreholeLocation, globalSearchProjects, requestJoinProject, getPendingProjectJoinRequests, approveProjectJoinRequest, rejectProjectJoinRequest } from "@/lib/api/endpoints";
 import { revalidatePath } from "next/cache";
 
 export async function createProjectAction(formData: FormData) {
@@ -114,6 +114,44 @@ export async function createPaymentAction(formData: FormData) {
     return { success: true, payment };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to create payment";
+    return { error: message };
+  }
+}
+
+/** Step 1 of Razorpay checkout: create a server-priced order + PENDING payment. */
+export async function createRazorpayOrderAction(projectId: string, boringsPurchased: number) {
+  const token = await getToken();
+  if (!token) return { error: "Not authenticated" as const };
+
+  if (!projectId || !Number.isInteger(boringsPurchased) || boringsPurchased < 1) {
+    return { error: "Project and boring count are required." as const };
+  }
+
+  try {
+    const order = await createRazorpayOrder({ projectId, boringsPurchased }, token);
+    return { success: true as const, order };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to create payment order";
+    return { error: message };
+  }
+}
+
+/** Step 2 of Razorpay checkout: verify the signature server-side. On success
+ *  the API marks the payment SUCCESS and unlocks the project. */
+export async function verifyRazorpayPaymentAction(
+  paymentId: string,
+  razorpayPaymentId: string,
+  razorpaySignature: string
+) {
+  const token = await getToken();
+  if (!token) return { error: "Not authenticated" as const };
+
+  try {
+    await verifyPayment(paymentId, { razorpayPaymentId, razorpaySignature }, token);
+    revalidatePath("/dashboard");
+    return { success: true as const };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Payment verification failed";
     return { error: message };
   }
 }

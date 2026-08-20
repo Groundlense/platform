@@ -21,6 +21,7 @@ const permissions_decorator_1 = require("../auth/decorators/permissions.decorato
 const current_user_decorator_1 = require("../auth/decorators/current-user.decorator");
 const payments_service_1 = require("./payments.service");
 const create_payment_dto_1 = require("./dto/create-payment.dto");
+const create_order_dto_1 = require("./dto/create-order.dto");
 const verify_payment_dto_1 = require("./dto/verify-payment.dto");
 let PaymentsController = class PaymentsController {
     paymentsService;
@@ -29,6 +30,9 @@ let PaymentsController = class PaymentsController {
     }
     create(user, dto) {
         return this.paymentsService.create(user, dto);
+    }
+    createOrder(user, dto) {
+        return this.paymentsService.createOrder(user, dto);
     }
     verify(paymentId, dto, user) {
         return this.paymentsService.verify(paymentId, dto, user);
@@ -47,6 +51,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, create_payment_dto_1.CreatePaymentDto]),
     __metadata("design:returntype", void 0)
 ], PaymentsController.prototype, "create", null);
+__decorate([
+    (0, permissions_decorator_1.Permissions)('PROJECT_EDIT'),
+    (0, common_1.Post)('payments/order'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, create_order_dto_1.CreateOrderDto]),
+    __metadata("design:returntype", void 0)
+], PaymentsController.prototype, "createOrder", null);
 __decorate([
     (0, permissions_decorator_1.Permissions)('PROJECT_EDIT'),
     (0, common_1.Patch)('payments/:id/verify'),

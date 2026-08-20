@@ -254,6 +254,15 @@ export async function createPayment(data: Record<string, unknown>, token: string
   return apiPost<any>("/payments", data, token);
 }
 
+/** Creates a Razorpay order server-side; returns { paymentId, orderId, amount, currency, keyId }. */
+export async function createRazorpayOrder(data: { projectId: string; boringsPurchased: number }, token: string) {
+  return apiPost<{ paymentId: string; orderId: string; amount: number; currency: string; keyId: string }>(
+    "/payments/order",
+    data,
+    token
+  );
+}
+
 export async function verifyPayment(paymentId: string, data: Record<string, unknown>, token: string) {
   return apiPatch(`/payments/${paymentId}/verify`, data, token);
 }

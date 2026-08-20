@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createProjectAction, createPaymentAction } from "@/app/actions/projects";
-import { formatCurrency, validateSptIntervalM, PRICE_PER_BORING } from "@/lib/utils";
+import { createProjectAction } from "@/app/actions/projects";
+import { startRazorpayCheckout } from "@/lib/razorpay";
+import { formatCurrency, validateSptIntervalM, PRICE_PER_BORING, BORING_PACKS, getBoringPricing, type BoringPricing } from "@/lib/utils";
 
 interface GeotechOrg {
   id: string;
@@ -54,6 +55,7 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, epcOrgs, u
   // Created project + payment status
   const [project, setProject] = useState<any>(null);
   const [paymentRecorded, setPaymentRecorded] = useState(false);
+  const [paying, setPaying] = useState(false);
   const [projectCode, setProjectCode] = useState("");
   const [useSearchQuery, setUseSearchQuery] = useState(true);
   const [partnerSearchQuery, setPartnerSearchQuery] = useState("");
@@ -75,7 +77,8 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, epcOrgs, u
 
   if (!open) return null;
 
-  const total = bhCount * PRICE_PER_BORING;
+  const pricing = getBoringPricing(bhCount);
+  const total = pricing.total;
 
   const resetAndClose = () => {
     setStep(1);
@@ -179,21 +182,22 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, epcOrgs, u
     });
   };
 
+  // Razorpay checkout: order (server-priced) → modal → signature verification.
   const handlePay = () => {
-    if (isPending || !project) return;
+    if (paying || !project) return;
     setError(null);
-    const fd = new FormData();
-    fd.set("projectId", project.id);
-    fd.set("boringsPurchased", String(bhCount));
-    fd.set("amountPaid", String(total));
-    startTransition(async () => {
-      const res = await createPaymentAction(fd);
-      if ("error" in res && res.error) {
-        setError(res.error);
-      } else {
+    setPaying(true);
+    startRazorpayCheckout(project.id, bhCount, project.name || name, {
+      onSuccess: () => {
+        setPaying(false);
         setPaymentRecorded(true);
         router.refresh();
-      }
+      },
+      onError: (message) => {
+        setPaying(false);
+        setError(message);
+      },
+      onDismiss: () => setPaying(false),
     });
   };
 
@@ -264,8 +268,9 @@ export default function NewProjectModal({ open, onClose, geotechOrgs, epcOrgs, u
           {step === 4 && (
             <Step4
               bhCount={bhCount}
-              total={total}
-              isPending={isPending}
+              setBhCount={setBhCount}
+              pricing={pricing}
+              isPending={paying}
               paymentRecorded={paymentRecorded}
               onPay={handlePay}
               onPayLater={resetAndClose}
@@ -401,6 +406,47 @@ function Step1({
   );
 }
 
+/* Pack cards shared by Step 2 (boring setup) and Step 4 (payment).
+   Clicking a card sets the boring count to that pack's size. */
+function PackGrid({ pricing, onSelect }: { pricing: BoringPricing; onSelect: (n: number) => void }) {
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {BORING_PACKS.map((pack) => {
+        const active = pricing.pack?.name === pack.name;
+        return (
+          <button
+            key={pack.name}
+            type="button"
+            onClick={() => onSelect(pack.minBorings)}
+            className={`text-left rounded-lg cursor-pointer transition-all border ${
+              active
+                ? "border-green-d bg-bg-raised"
+                : "border-border bg-bg-raised hover:border-rust-mid"
+            }`}
+            style={{ padding: "10px" }}
+          >
+            <span
+              className={`inline-block text-[8px] font-semibold rounded-full mb-1 px-[6px] py-[2px] ${
+                active ? "bg-green-d text-bg-surface" : "bg-rust-mid text-text-pri"
+              }`}
+            >
+              {pack.discountPct}% OFF
+            </span>
+            <span className="block text-[10px] font-semibold text-text-pri mb-[2px]">{pack.name}</span>
+            <span className="block text-[9px] text-text-ter mb-1">{pack.minBorings} borings</span>
+            <span className="block text-[8.5px] text-text-ter line-through">{formatCurrency(PRICE_PER_BORING)}</span>
+            <span className={`block text-[13px] font-semibold ${active ? "text-green-d" : "text-amber-d"}`}>
+              {formatCurrency(pack.pricePerBoring)}
+              <span className="text-[8.5px] font-normal text-text-ter"> /boring</span>
+            </span>
+            {active && <span className="block text-[8.5px] text-green-d mt-1">✓ Applied</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* Step 2 — Boring setup (count drives the real payment amount) */
 const SPT_INTERVAL_OPTIONS = ["1.5", "3", "5"];
 
@@ -413,6 +459,7 @@ function Step2({ bhCount, setBhCount, sptInterval, setSptInterval }: {
   const [customSpt, setCustomSpt] = useState(!SPT_INTERVAL_OPTIONS.includes(sptInterval));
   // Only flag once something is typed — the Create button still blocks an empty value.
   const customSptError = customSpt && sptInterval !== "" ? validateSptIntervalM(sptInterval) : null;
+  const pricing = getBoringPricing(bhCount);
   return (
     <div className="animate-fade-in">
       <div className="section-lbl">Boring setup</div>
@@ -423,7 +470,18 @@ function Step2({ bhCount, setBhCount, sptInterval, setSptInterval }: {
           <button onClick={() => setBhCount(Math.max(1, bhCount - 1))} className="w-8 h-8 rounded-[7px] bg-bg-raised border border-border text-text-pri text-[16px] cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all">−</button>
           <span className="font-display text-[28px] font-semibold text-text-pri min-w-[40px] text-center">{bhCount}</span>
           <button onClick={() => setBhCount(bhCount + 1)} className="w-8 h-8 rounded-[7px] bg-bg-raised border border-border text-text-pri text-[16px] cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all">+</button>
-          <span className="text-[11px] text-text-ter ml-2">@ {formatCurrency(PRICE_PER_BORING)} each = <span className="text-amber-d font-medium">{formatCurrency(bhCount * PRICE_PER_BORING)}</span></span>
+        </div>
+      </div>
+
+      {/* Volume packs — selecting one sets the boring count to its threshold */}
+      <div className="bg-bg-card border border-border rounded-lg mb-3" style={{ padding: "14px" }}>
+        <div className="flex items-baseline justify-between mb-2">
+          <div className="text-[10px] text-text-sec uppercase tracking-wider">Volume packs</div>
+          <div className="text-[9px] text-text-ter">Save up to 40% on bigger projects</div>
+        </div>
+        <PackGrid pricing={pricing} onSelect={setBhCount} />
+        <div className="text-[9px] text-text-ter mt-2 leading-relaxed">
+          Pack rates apply automatically once your boring count reaches the pack size — no code needed.
         </div>
       </div>
 
@@ -592,14 +650,16 @@ function Step3({
 }
 
 /* Step 4 — Payment (records a real PENDING payment; Razorpay checkout not yet integrated) */
-function Step4({ bhCount, total, isPending, paymentRecorded, onPay, onPayLater }: {
+function Step4({ bhCount, setBhCount, pricing, isPending, paymentRecorded, onPay, onPayLater }: {
   bhCount: number;
-  total: number;
+  setBhCount: (n: number) => void;
+  pricing: BoringPricing;
   isPending: boolean;
   paymentRecorded: boolean;
   onPay: () => void;
   onPayLater: () => void;
 }) {
+  const total = pricing.total;
   return (
     <div className="animate-fade-in">
       <div className="section-lbl">Payment</div>
@@ -609,23 +669,54 @@ function Step4({ bhCount, total, isPending, paymentRecorded, onPay, onPayLater }
         <div className="text-[10px] text-text-ter uppercase tracking-[0.5px] mb-[6px]">Total amount for this project</div>
         <div className="font-display text-[32px] text-rust-d">{formatCurrency(total)}</div>
         <div className="text-[10px] text-text-ter mt-[6px] leading-relaxed">
-          {bhCount} borings × {formatCurrency(PRICE_PER_BORING)}
+          {bhCount} borings ×{" "}
+          {pricing.pack && (
+            <span className="line-through opacity-60">{formatCurrency(PRICE_PER_BORING)}</span>
+          )}{" "}
+          <span className={pricing.pack ? "text-green-d font-medium" : undefined}>{formatCurrency(pricing.pricePerBoring)}</span>
+          {pricing.pack && (
+            <span className="text-green-d"> · {pricing.pack.name} ({pricing.pack.discountPct}% off)</span>
+          )}
         </div>
+        {pricing.pack && (
+          <div
+            className="inline-block text-[10px] text-green-d font-medium rounded-full mt-2"
+            style={{ padding: "3px 10px", background: "rgba(59,109,17,.12)", border: "1px solid rgba(59,109,17,.3)" }}
+          >
+            You save {formatCurrency(pricing.savings)}
+          </div>
+        )}
       </div>
+
+      {/* Volume packs — still switchable before paying; the order is priced server-side from the count */}
+      {!paymentRecorded && (
+        <div className="bg-bg-card border border-border rounded-lg mb-[14px]" style={{ padding: "12px 14px" }}>
+          <div className="flex items-baseline justify-between mb-2">
+            <div className="text-[10px] text-text-sec uppercase tracking-wider">Volume packs</div>
+            <div className="text-[9px] text-text-ter">Pick a pack to change your boring count</div>
+          </div>
+          <PackGrid pricing={pricing} onSelect={setBhCount} />
+        </div>
+      )}
 
       {/* Payment summary — matches .pay-summary */}
       <div className="bg-bg-card border border-border rounded-lg mb-[14px]" style={{ padding: "14px" }}>
         <div className="flex justify-between text-[12px] text-text-sec border-b border-border" style={{ padding: "5px 0" }}>
-          <span>Borings ({bhCount}x)</span><span className="font-mono">{formatCurrency(total)}</span>
+          <span>Borings ({bhCount} × {formatCurrency(PRICE_PER_BORING)})</span><span className="font-mono">{formatCurrency(pricing.subtotal)}</span>
         </div>
+        {pricing.pack && (
+          <div className="flex justify-between text-[12px] text-green-d border-b border-border" style={{ padding: "5px 0" }}>
+            <span>{pricing.pack.name} — {pricing.pack.discountPct}% off</span><span className="font-mono">−{formatCurrency(pricing.savings)}</span>
+          </div>
+        )}
         <div className="flex justify-between text-[13px] text-text-pri font-medium" style={{ padding: "9px 0 0" }}>
           <span>Total</span><span className="font-mono text-rust-d">{formatCurrency(total)}</span>
         </div>
       </div>
 
       {paymentRecorded ? (
-        <div className="info-banner info-banner-amber mb-[14px]">
-          <span>⏳</span> Payment recorded as PENDING — complete via Razorpay checkout (coming soon).
+        <div className="info-banner info-banner-green mb-[14px]">
+          <span>✓</span> Payment successful — project activated. Live boring data is now unlocked.
         </div>
       ) : (
         <>
@@ -635,7 +726,7 @@ function Step4({ bhCount, total, isPending, paymentRecorded, onPay, onPayLater }
 
           <div className="grid grid-cols-2 gap-2">
             <button onClick={onPay} disabled={isPending} className="bg-rust-mid border-none rounded-[7px] text-[12px] font-medium text-text-pri cursor-pointer hover:bg-rust transition-colors disabled:opacity-60 disabled:cursor-default" style={{ padding: "10px" }}>
-              {isPending ? "Recording…" : `Pay & activate · ${formatCurrency(total)}`}
+              {isPending ? "Opening checkout…" : `Pay & activate · ${formatCurrency(total)}`}
             </button>
             <button onClick={onPayLater} disabled={isPending} className="bg-transparent border border-border-mid rounded-[7px] text-[12px] text-text-sec cursor-pointer hover:border-rust-mid hover:text-rust-d transition-all disabled:opacity-60" style={{ padding: "10px" }}>
               Save · Pay later

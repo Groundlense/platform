@@ -726,8 +726,8 @@ export default function OverviewPage() {
           The <span className={hlClass}>first year</span> is not.
         </h2>
         <p className={subClass}>
-          A limited pre-launch rate for projects committed in the first year. Locked in for the
-          entire project duration.
+          One transparent rate per boring — and volume packs that reward bigger programmes with up
+          to 40% off, locked in for the entire project duration.
         </p>
 
         <div className="mt-10 rounded-2xl overflow-hidden bg-gradient-to-br from-[#993C1D] to-[#D85A30] relative px-5 py-10 md:px-10 md:py-12 text-center">
@@ -739,39 +739,73 @@ export default function OverviewPage() {
           </div>
           <div className="relative z-10">
             <div className="font-mono text-[11px] text-[#FAC775] tracking-[0.25em] uppercase mb-6">
-              Pre-Launch Offer · Limited to Year 1 Bookings
+              Simple Per-Boring Pricing · Volume Packs up to 40% Off
             </div>
             <div className="flex items-end justify-center gap-9 flex-wrap mb-6">
               <div className="text-center">
                 <div className="font-mono text-[10px] text-white/55 tracking-[0.18em] uppercase mb-1.5">
-                  Regular Price
+                  Standard Rate
                 </div>
-                <div className="font-display text-4xl md:text-5xl font-semibold text-white/50 relative inline-block tracking-tight">
+                <div className="font-display text-4xl md:text-5xl font-semibold text-white/60 inline-block tracking-tight">
                   ₹15,000
-                  <span className="absolute -left-[8%] -right-[8%] top-[48%] h-[3px] bg-[#A32D2D] -rotate-[8deg] rounded"></span>
+                  <span className="text-[0.5em] text-white/50 font-normal italic"> / boring</span>
                 </div>
               </div>
               <div className="font-display text-4xl text-white/65 font-light self-center mb-4">→</div>
               <div className="text-center">
                 <div className="font-mono text-[11px] text-[#FAC775] tracking-[0.18em] uppercase mb-1.5 font-semibold">
-                  Pre-Launch Price
+                  With Packs, as low as
                 </div>
                 <div className="font-display text-6xl md:text-7xl lg:text-8xl font-bold text-[#F5F3EE] leading-none tracking-tight">
-                  ₹10,000
+                  ₹9,000
                   <span className="text-[0.55em] text-white/70 font-normal italic"> / boring</span>
                 </div>
               </div>
             </div>
             <div className="inline-block bg-white/10 border border-white/20 px-4.5 py-2.5 rounded-full text-[12.5px] text-[#F5F3EE] font-medium backdrop-blur-md">
-              Book your <strong className="text-[#FAC775] font-bold">next upcoming project</strong>{' '}
-              and lock the ₹10,000 rate
+              Bundle <strong className="text-[#FAC775] font-bold">20 or more borings</strong> and
+              the pack discount applies automatically
             </div>
           </div>
         </div>
 
+        {/* Volume packs */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+          {[
+            { name: 'Starter Pack', borings: '20 borings', pct: '10% off', price: '₹13,500', body: 'For single-site investigations — bridges, buildings, plants.', featured: false },
+            { name: 'Growth Pack', borings: '50 borings', pct: '20% off', price: '₹12,000', body: 'For multi-site packages and mid-size infrastructure tenders.', featured: false },
+            { name: 'Mega Pack', borings: '100 borings', pct: '40% off', price: '₹9,000', body: 'For highway, rail and transmission corridors at full scale.', featured: true },
+          ].map((pack, i) => (
+            <div
+              key={i}
+              className={`px-6 py-7 rounded-xl text-center border ${
+                pack.featured
+                  ? 'bg-[#2A2220] border-[#D85A30]/60 shadow-[0_0_40px_rgba(216,90,48,.15)]'
+                  : 'bg-[#222120] border-white/5'
+              }`}
+            >
+              <div
+                className={`inline-block font-mono text-[10px] tracking-[0.14em] uppercase font-semibold px-3 py-1 rounded-full mb-3 ${
+                  pack.featured ? 'bg-[#D85A30] text-[#F5F3EE]' : 'bg-[#33312F] text-[#FAC775]'
+                }`}
+              >
+                {pack.pct}
+              </div>
+              <div className="font-display text-lg text-[#F5F3EE] font-semibold mb-1">{pack.name}</div>
+              <div className="font-mono text-[10px] text-[#B4B2A9] tracking-[0.16em] uppercase mb-4">{pack.borings}</div>
+              <div className="text-[13px] text-white/35 line-through mb-0.5">₹15,000</div>
+              <div className={`font-display text-4xl font-bold leading-none tracking-tight mb-1 ${pack.featured ? 'text-[#F0997B]' : 'text-[#F5F3EE]'}`}>
+                {pack.price}
+              </div>
+              <div className="text-[11px] text-[#B4B2A9] italic mb-4">per boring</div>
+              <div className="text-[12.5px] text-[#B4B2A9] leading-relaxed font-light">{pack.body}</div>
+            </div>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-11">
           {[
-            { icon: '📅', title: 'Year-1 Lock-In', body: "Projects committed in the pre-launch year get the ₹10,000 rate for the project's full duration — no escalation." },
+            { icon: '📅', title: 'Rate Lock-In', body: "Your pack rate is locked for the project's full duration — no escalation, no renegotiation." },
             { icon: '🗄️', title: 'Permanent Storage', body: 'Every boring you collect stays in your Groundlense vault — retrievable for future projects on the same alignment.' },
             { icon: '📄', title: 'Full Certification', body: 'Certified IS 1892 PDF, tamper certificate, NABL lab linkage, location and depth verification — all included.' },
           ].map((item, i) => (
