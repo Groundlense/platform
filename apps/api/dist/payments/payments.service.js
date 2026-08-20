@@ -47,12 +47,79 @@ const common_1 = require("@nestjs/common");
 const crypto = __importStar(require("crypto"));
 const database_service_1 = require("../database/database.service");
 const project_access_service_1 = require("../common/access/project-access.service");
+const PRICE_PER_BORING_INR = 15000;
+const BORING_PACKS_INR = [
+    { minBorings: 20, pricePerBoring: 13500 },
+    { minBorings: 50, pricePerBoring: 12000 },
+    { minBorings: 100, pricePerBoring: 9000 },
+];
+function pricePerBoringInr(count) {
+    let price = PRICE_PER_BORING_INR;
+    for (const pack of BORING_PACKS_INR) {
+        if (count >= pack.minBorings)
+            price = pack.pricePerBoring;
+    }
+    return price;
+}
 let PaymentsService = class PaymentsService {
     db;
     access;
     constructor(db, access) {
         this.db = db;
         this.access = access;
+    }
+    async createOrder(user, dto) {
+        await this.access.assertProjectAccess(user, dto.projectId);
+        const keyId = process.env.RAZORPAY_KEY_ID;
+        const keySecret = process.env.RAZORPAY_KEY_SECRET;
+        if (!keyId || !keySecret) {
+            throw new common_1.BadRequestException('Payments are not configured (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET missing)');
+        }
+        const amountInr = dto.boringsPurchased * pricePerBoringInr(dto.boringsPurchased);
+        const res = await fetch('https://api.razorpay.com/v1/orders', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64'),
+            },
+            body: JSON.stringify({
+                amount: amountInr * 100,
+                currency: 'INR',
+                receipt: `gl_${dto.projectId.slice(0, 30)}`,
+                notes: {
+                    projectId: dto.projectId,
+                    boringsPurchased: String(dto.boringsPurchased),
+                },
+            }),
+        });
+        if (!res.ok) {
+            const body = await res.json().catch(() => null);
+            throw new common_1.BadRequestException(body?.error?.description || `Razorpay order creation failed (${res.status})`);
+        }
+        const order = (await res.json());
+        const payment = await this.db.payment.create({
+            data: {
+                projectId: dto.projectId,
+                companyId: user.organizationId,
+                initiatedByUserId: user.id,
+                planType: 'PER_BORING',
+                boringsPurchased: dto.boringsPurchased,
+                amountPaid: amountInr,
+                razorpayOrderId: order.id,
+                status: 'PENDING',
+            },
+        });
+        await this.db.project.update({
+            where: { id: dto.projectId },
+            data: { totalBoringsPlanned: dto.boringsPurchased },
+        }).catch(() => { });
+        return {
+            paymentId: payment.id,
+            orderId: order.id,
+            amount: order.amount,
+            currency: order.currency,
+            keyId,
+        };
     }
     async create(user, dto) {
         await this.access.assertProjectAccess(user, dto.projectId);

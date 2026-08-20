@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createPaymentAction } from "@/app/actions/projects";
-import { formatCurrency, PRICE_PER_BORING } from "@/lib/utils";
+import { startRazorpayCheckout } from "@/lib/razorpay";
+import { formatCurrency, getBoringPricing } from "@/lib/utils";
 
 interface ProjectRowProps {
   project: any;
@@ -20,7 +20,7 @@ const STATUS_MAP: Record<string, { color: string; label: string }> = {
 
 export default function ProjectRow({ project }: ProjectRowProps) {
   const router = useRouter();
-  const [isPaying, startPayment] = useTransition();
+  const [isPaying, setIsPaying] = useState(false);
   const [payMessage, setPayMessage] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
 
@@ -49,31 +49,32 @@ export default function ProjectRow({ project }: ProjectRowProps) {
       : totalBoreholes > 0
         ? totalBoreholes
         : null;
-  const payAmount = boringsPlanned != null ? boringsPlanned * PRICE_PER_BORING : null;
+  const payPricing = boringsPlanned != null ? getBoringPricing(boringsPlanned) : null;
+  const payAmount = payPricing?.total ?? null;
 
-  // Razorpay checkout is not wired up yet — this button is a placeholder.
-  const handlePayNowPlaceholder = (e: React.MouseEvent) => {
+  // Razorpay checkout: order (server-priced) → modal → signature verification.
+  // On success the API marks the payment SUCCESS and unlocks the project.
+  const handlePayNow = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setPayMessage("Payment gateway coming soon.");
-  };
-
-  // Locked projects keep the real "record a PENDING payment" action.
-  const handlePayNowLocked = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (payAmount == null || boringsPlanned == null || isPaying) return;
+    if (isPaying) return;
+    if (boringsPlanned == null) {
+      setPayError("Add boreholes (or a planned count) first to determine the amount.");
+      return;
+    }
     setPayError(null);
-    const fd = new FormData();
-    fd.set("projectId", project.id);
-    fd.set("boringsPurchased", String(boringsPlanned));
-    fd.set("amountPaid", String(payAmount));
-    startPayment(async () => {
-      const res = await createPaymentAction(fd);
-      if ("error" in res && res.error) {
-        setPayError(res.error);
-      } else {
-        setPayMessage("Payment recorded as PENDING — Razorpay checkout coming soon");
+    setPayMessage(null);
+    setIsPaying(true);
+    startRazorpayCheckout(project.id, boringsPlanned, project.name, {
+      onSuccess: () => {
+        setIsPaying(false);
+        setPayMessage("✓ Payment successful — project activated.");
         router.refresh();
-      }
+      },
+      onError: (message) => {
+        setIsPaying(false);
+        setPayError(message);
+      },
+      onDismiss: () => setIsPaying(false),
     });
   };
 
@@ -154,17 +155,17 @@ export default function ProjectRow({ project }: ProjectRowProps) {
       {/* ── Actions ── */}
       <div className="flex items-center justify-end gap-2 shrink-0">
         <button
-          onClick={isLocked ? handlePayNowLocked : handlePayNowPlaceholder}
+          onClick={handlePayNow}
           disabled={isPaying}
           title={
-            boringsPlanned != null
-              ? `${boringsPlanned} borings × ${formatCurrency(PRICE_PER_BORING)}`
-              : "Razorpay checkout coming soon"
+            boringsPlanned != null && payPricing != null
+              ? `${boringsPlanned} borings × ${formatCurrency(payPricing.pricePerBoring)}${payPricing.pack ? ` · ${payPricing.pack.name} (${payPricing.pack.discountPct}% off)` : ""}`
+              : "Add boreholes first to determine the amount"
           }
           className="text-[10px] rounded-md text-amber-d cursor-pointer transition-all whitespace-nowrap hover:brightness-125 disabled:opacity-60"
           style={{ padding: "5px 10px", background: "rgba(186,117,23,.1)", border: "1px solid rgba(186,117,23,.24)" }}
         >
-          {isPaying ? "Recording…" : payAmount != null ? `Pay · ${formatCurrency(payAmount)}` : "Pay now"}
+          {isPaying ? "Opening checkout…" : payAmount != null ? `Pay · ${formatCurrency(payAmount)}` : "Pay now"}
         </button>
         {!isLocked && (
           <span

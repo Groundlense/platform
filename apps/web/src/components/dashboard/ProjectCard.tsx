@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createPaymentAction } from "@/app/actions/projects";
-import { formatCurrency, PRICE_PER_BORING } from "@/lib/utils";
+import { startRazorpayCheckout } from "@/lib/razorpay";
+import { formatCurrency, getBoringPricing } from "@/lib/utils";
 
 interface ProjectCardProps {
   project: any;
@@ -20,7 +20,7 @@ const STATUS_MAP: Record<string, { cls: string; text: string }> = {
 
 export default function ProjectCard({ project }: ProjectCardProps) {
   const router = useRouter();
-  const [isPaying, startPayment] = useTransition();
+  const [isPaying, setIsPaying] = useState(false);
   const [payMessage, setPayMessage] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
 
@@ -70,30 +70,32 @@ export default function ProjectCard({ project }: ProjectCardProps) {
       : totalBoreholes > 0
         ? totalBoreholes
         : null;
-  const payAmount = boringsPlanned != null ? boringsPlanned * PRICE_PER_BORING : null;
+  const payPricing = boringsPlanned != null ? getBoringPricing(boringsPlanned) : null;
+  const payAmount = payPricing?.total ?? null;
 
-  // Razorpay checkout is not wired up yet — this button is a placeholder.
-  const handlePayNowPlaceholder = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setPayMessage("Payment gateway coming soon.");
-  };
-
+  // Razorpay checkout: order (server-priced) → modal → signature verification.
+  // On success the API marks the payment SUCCESS and unlocks the project.
   const handlePayNow = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (payAmount == null || boringsPlanned == null || isPaying) return;
+    if (isPaying) return;
+    if (boringsPlanned == null) {
+      setPayError("Add boreholes (or a planned count) first to determine the amount.");
+      return;
+    }
     setPayError(null);
-    const fd = new FormData();
-    fd.set("projectId", project.id);
-    fd.set("boringsPurchased", String(boringsPlanned));
-    fd.set("amountPaid", String(payAmount));
-    startPayment(async () => {
-      const res = await createPaymentAction(fd);
-      if ("error" in res && res.error) {
-        setPayError(res.error);
-      } else {
-        setPayMessage("Payment recorded as PENDING — complete via Razorpay checkout (coming soon)");
+    setPayMessage(null);
+    setIsPaying(true);
+    startRazorpayCheckout(project.id, boringsPlanned, project.name, {
+      onSuccess: () => {
+        setIsPaying(false);
+        setPayMessage("✓ Payment successful — project activated.");
         router.refresh();
-      }
+      },
+      onError: (message) => {
+        setIsPaying(false);
+        setPayError(message);
+      },
+      onDismiss: () => setIsPaying(false),
     });
   };
 
@@ -124,7 +126,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
               className="text-[11px] bg-rust-mid border-none rounded-md text-text-pri cursor-pointer hover:bg-rust transition-colors disabled:opacity-60 disabled:cursor-default"
               style={{ padding: "7px 16px", marginTop: "4px" }}
             >
-              {isPaying ? "Recording…" : `Pay now · ${formatCurrency(payAmount)}`}
+              {isPaying ? "Opening checkout…" : `Pay now · ${formatCurrency(payAmount)}`}
             </button>
           ) : null}
           {payError && (
@@ -211,16 +213,17 @@ export default function ProjectCard({ project }: ProjectCardProps) {
         <div className="flex items-center gap-[6px]">
           {!isLocked && (
             <button
-              onClick={handlePayNowPlaceholder}
+              onClick={handlePayNow}
+              disabled={isPaying}
               title={
-                boringsPlanned != null
-                  ? `${boringsPlanned} borings × ${formatCurrency(PRICE_PER_BORING)}`
-                  : "Razorpay checkout coming soon"
+                boringsPlanned != null && payPricing != null
+                  ? `${boringsPlanned} borings × ${formatCurrency(payPricing.pricePerBoring)}${payPricing.pack ? ` · ${payPricing.pack.name} (${payPricing.pack.discountPct}% off)` : ""}`
+                  : "Add boreholes first to determine the amount"
               }
-              className="text-[10px] py-[5px] px-[11px] rounded-md text-amber-d cursor-pointer transition-all whitespace-nowrap hover:brightness-125"
+              className="text-[10px] py-[5px] px-[11px] rounded-md text-amber-d cursor-pointer transition-all whitespace-nowrap hover:brightness-125 disabled:opacity-60"
               style={{ background: "rgba(186,117,23,.12)", border: "1px solid rgba(186,117,23,.28)" }}
             >
-              {payAmount != null ? `Pay now · ${formatCurrency(payAmount)}` : "Pay now"}
+              {isPaying ? "Opening checkout…" : payAmount != null ? `Pay now · ${formatCurrency(payAmount)}` : "Pay now"}
             </button>
           )}
           <span className="text-[10px] py-[5px] px-[11px] rounded-md text-rust-d cursor-pointer transition-all opacity-0 group-hover:opacity-100 whitespace-nowrap"

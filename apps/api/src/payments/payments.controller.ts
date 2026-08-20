@@ -14,6 +14,7 @@ import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreateOrderDto } from './dto/create-order.dto';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
 
 @ApiTags('Payments')
@@ -27,6 +28,13 @@ export class PaymentsController {
   @Post('payments')
   create(@CurrentUser() user: any, @Body() dto: CreatePaymentDto) {
     return this.paymentsService.create(user, dto);
+  }
+
+  // Creates a Razorpay order (server-priced) and returns checkout params.
+  @Permissions('PROJECT_EDIT')
+  @Post('payments/order')
+  createOrder(@CurrentUser() user: any, @Body() dto: CreateOrderDto) {
+    return this.paymentsService.createOrder(user, dto);
   }
 
   @Permissions('PROJECT_EDIT')

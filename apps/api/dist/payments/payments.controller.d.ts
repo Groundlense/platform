@@ -1,5 +1,6 @@
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreateOrderDto } from './dto/create-order.dto';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
 export declare class PaymentsController {
     private readonly paymentsService;
@@ -18,6 +19,13 @@ export declare class PaymentsController {
         razorpayPaymentId: string | null;
         invoiceUrl: string | null;
         paidAt: Date | null;
+    }>;
+    createOrder(user: any, dto: CreateOrderDto): Promise<{
+        paymentId: string;
+        orderId: string;
+        amount: number;
+        currency: string;
+        keyId: string;
     }>;
     verify(paymentId: string, dto: VerifyPaymentDto, user: any): Promise<{
         id: string;
