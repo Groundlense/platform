@@ -651,10 +651,42 @@ export class BoreholesService {
       fileName: `${this.safeFileName(borehole.boreholeCode)}-export.json`,
       payload: {
         exportedAt: new Date().toISOString(),
-        borehole: data,
+        borehole: data && {
+          ...data,
+          finalDepth: this.provenDepth(data.finalDepth, data.intervals),
+        },
         integrity,
       },
     };
+  }
+
+  /**
+   * The depth a borehole's own records prove.
+   *
+   * finalDepth is only written when a worker terminates a boring, so a
+   * borehole that was paused and later drilled deeper keeps the depth from
+   * the earlier pause. The deepest recorded interval is proven ground either
+   * way, so exports report the deeper of the two and can never understate a
+   * hole. Returns one of the stored Decimals untouched (never a recomputed
+   * value) so the exported precision and JSON type stay exactly as they are.
+   */
+  private provenDepth(
+    finalDepth: unknown,
+    intervals: { toDepth: unknown }[] = [],
+  ) {
+    let deepest = finalDepth ?? null;
+
+    for (const interval of intervals) {
+      const toDepth = interval?.toDepth;
+      if (toDepth == null) {
+        continue;
+      }
+      if (deepest === null || Number(toDepth) > Number(deepest)) {
+        deepest = toDepth;
+      }
+    }
+
+    return deepest;
   }
 
   async exportBoreholeCsv(boreholeId: string, user: any) {
@@ -734,7 +766,14 @@ export class BoreholesService {
 
     return {
       exportedAt: new Date().toISOString(),
-      project,
+      project:
+        project && {
+          ...project,
+          boreholes: project.boreholes.map((bh) => ({
+            ...bh,
+            finalDepth: this.provenDepth(bh.finalDepth, bh.intervals),
+          })),
+        },
       integrity,
     };
   }

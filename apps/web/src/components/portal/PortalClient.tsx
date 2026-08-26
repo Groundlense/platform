@@ -108,6 +108,16 @@ function parseNum(v: any): number | null {
   return isNaN(n) ? null : n;
 }
 
+// Deepest of any number of depth candidates. A borehole cannot be un-drilled,
+// so a reported depth is only ever the deepest evidence available, and a value
+// recorded before more drilling happened can never cap a later one.
+function depthOf(...candidates: (number | null | undefined)[]): number | null {
+  const known = candidates.filter(
+    (v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0
+  );
+  return known.length > 0 ? Math.max(...known) : null;
+}
+
 // ── UTM → WGS84 Decimal Degrees conversion ──
 // Accepts easting (e.g. 521847) and northing (e.g. 3148203) in UTM.
 // zone/southern are the uploader's explicit, stated declaration (Excel
@@ -548,7 +558,11 @@ export default function PortalClient({
         longitude: bh.longitude != null ? String(bh.longitude) : null,
         groundLevelRL: parseNum(bh.groundLevelRL),
         plannedDepth: parseNum(bh.plannedDepth),
-        finalDepth: parseNum(bh.finalDepth) ?? (maxIntervalDepth > 0 ? maxIntervalDepth : null),
+        // finalDepth is only written when a worker terminates, so a borehole
+        // that was paused and then drilled deeper keeps the shallower value.
+        // The deepest recorded interval is proven ground either way, so the
+        // reported depth is the deeper of the two — never the stale one.
+        finalDepth: depthOf(parseNum(bh.finalDepth), maxIntervalDepth),
         waterTable,
         intervals,
         media,
