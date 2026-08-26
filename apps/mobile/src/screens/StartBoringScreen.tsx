@@ -110,40 +110,59 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
 
   const loadResumeContext = async () => {
     try {
-      // Prefer the server's session history when reachable
-      let sessions: any[] = [];
-      try {
-        const serverSessions = await api.getBoreholeSessions(borehole.id);
-        if (Array.isArray(serverSessions) && serverSessions.length > 0) {
-          sessions = serverSessions;
-        }
-      } catch (apiErr) {
-        // Offline — fall back to the locally stored sessions
-      }
-      if (sessions.length === 0) {
-        sessions = await storage.getBoringSessions(borehole.id);
+      // Settled independently: one request failing must not discard the depth
+      // the other one already proved.
+      const [sessionsRes, intervalsRes] = await Promise.allSettled([
+        api.getBoreholeSessions(borehole.id),
+        api.getBoreholeIntervals(borehole.id),
+      ]);
+      const serverSessions =
+        sessionsRes.status === 'fulfilled' ? sessionsRes.value : [];
+      const serverIntervals =
+        intervalsRes.status === 'fulfilled' ? intervalsRes.value : [];
+      const online = sessionsRes.status === 'fulfilled';
+
+      const localSessions = await storage.getBoringSessions(borehole.id);
+      const localIntervals = await storage.getIntervals(borehole.id);
+
+      // Drilled depth only ever increases — a hole cannot be un-drilled — so
+      // every source is merged by taking the deepest value instead of trusting
+      // one over another. That keeps the resume correct whether the deeper
+      // data is still queued on this device or was pushed from another one.
+      const depths: number[] = [];
+
+      const asList = (v: any) => (Array.isArray(v) ? v : []);
+
+      // A session's endDepth is only written when the worker terminates. While
+      // a session is open it still holds the start depth (the UPCOMING test),
+      // which is neither drilled nor tested ground — reading it would skip a
+      // test on resume, so only ended sessions count here.
+      for (const s of [...asList(serverSessions), ...localSessions]) {
+        const ended = !!s?.endedAt || (s?.status && s.status !== 'IN_PROGRESS');
+        if (!ended) continue;
+        const d = toNum(s?.endDepth);
+        if (d !== null) depths.push(d);
       }
 
-      const sorted = [...sessions].sort(
+      // Deepest interval actually drilled and tested — the real source of truth.
+      for (const iv of [...asList(serverIntervals), ...localIntervals]) {
+        const d = toNum(iv?.toDepth);
+        if (d !== null) depths.push(d);
+      }
+
+      const depth = depths.length > 0 ? Math.max(...depths) : 0;
+
+      // Session count and "last session" are presentational only: prefer the
+      // server's history when reachable, else what this device recorded.
+      const history =
+        online && asList(serverSessions).length > 0 ? serverSessions : localSessions;
+      const sorted = [...history].sort(
         (a, b) => new Date(a.startedAt || 0).getTime() - new Date(b.startedAt || 0).getTime()
       );
-      const last = sorted.length > 0 ? sorted[sorted.length - 1] : null;
-
-      let depth = toNum(last?.endDepth);
-
-      // No session record — fall back to the deepest locally recorded interval
-      if (depth === null) {
-        const intervals = await storage.getIntervals(borehole.id);
-        const maxTo = intervals.reduce((max: number, iv: any) => {
-          const to = toNum(iv?.toDepth);
-          return to !== null && to > max ? to : max;
-        }, 0);
-        depth = maxTo > 0 ? maxTo : null;
-      }
 
       setSessionCount(sorted.length);
-      setLastSession(last);
-      setResumeDepth(depth !== null && depth > 0 ? depth : 0);
+      setLastSession(sorted.length > 0 ? sorted[sorted.length - 1] : null);
+      setResumeDepth(depth > 0 ? depth : 0);
     } catch (err) {
       console.warn('Could not load resume context', err);
     }

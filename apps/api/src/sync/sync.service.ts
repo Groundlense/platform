@@ -322,8 +322,16 @@ export class SyncService {
       }
     }
 
-    if (payload.finalDepth != null) {
-      data.finalDepth = payload.finalDepth;
+    // Queued operations can arrive out of order — an old pause syncing after
+    // a deeper closure — and a shallower value would then overwrite ground
+    // already proven. Depth only ever deepens.
+    const finalDepth = Number(payload.finalDepth);
+    if (payload.finalDepth != null && Number.isFinite(finalDepth)) {
+      const known =
+        borehole.finalDepth != null ? Number(borehole.finalDepth) : null;
+      if (known === null || finalDepth > known) {
+        data.finalDepth = finalDepth;
+      }
     }
 
     if (payload.rigType) {
@@ -445,10 +453,40 @@ export class SyncService {
       } as any,
     });
 
+    await this.advanceOpenSessionDepth(boreholeId, Number(fields.toDepth));
+
     // Hash from the persisted values (Decimal-scale safe) and cascade to
     // any later intervals already on the server, so out-of-order replays
     // re-link prevHash -> sha256Hash for the whole tail of the chain.
     await this.integrity.rehashChain(boreholeId, intervalNo);
+  }
+
+  /**
+   * An open session's endDepth is seeded with its startDepth and was only
+   * rewritten when the worker terminated, so a session interrupted mid-boring
+   * reported ground shallower than what had actually been drilled — and a
+   * resume then restarted from that stale depth. Carry it forward as intervals
+   * arrive. Only ever deepens, so a replayed or out-of-order interval cannot
+   * walk the session back up the hole.
+   */
+  private async advanceOpenSessionDepth(boreholeId: string, toDepth: number) {
+    if (!Number.isFinite(toDepth) || toDepth <= 0) {
+      return;
+    }
+
+    const open = await this.db.boringSession.findFirst({
+      where: { boreholeId, endedAt: null },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true, endDepth: true },
+    });
+    if (!open || Number(open.endDepth) >= toDepth) {
+      return;
+    }
+
+    await this.db.boringSession.update({
+      where: { id: open.id },
+      data: { endDepth: toDepth },
+    });
   }
 
   private async applySampleCreate(op: SyncOperationItemDto, userId: string) {

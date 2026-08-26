@@ -230,12 +230,20 @@ export default function BoringClosureScreen({ route, navigation }: { route: any;
 
       await storage.saveBoreholes(projectId, updated);
 
-      // Queue Sync Operation
+      // Queue Sync Operation. The closure's own depth travels with it: the
+      // deepest interval on the locked record is the borehole's real proven
+      // depth, and without it the server keeps whatever finalDepth an earlier
+      // pause left behind — reporting a hole shallower than it was drilled.
+      const closureDepth = Number(summary?.finalDepth);
       await syncManager.queueOperation(
         'BORING',
         borehole.id,
         'UPDATE',
-        { status: 'COMPLETED', completedAt: new Date() }
+        {
+          status: 'COMPLETED',
+          completedAt: new Date(),
+          ...(Number.isFinite(closureDepth) ? { finalDepth: closureDepth } : {}),
+        }
       );
 
       // Kick off sync in the background — the closure is already saved and
