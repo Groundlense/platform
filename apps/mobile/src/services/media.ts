@@ -134,9 +134,21 @@ export const media = {
     // a photo without coordinates is still a valid photo.
     const gpsPromise = location.getCurrentPosition({ silent: true });
 
+    // maxWidth/maxHeight are what keep this from crashing the app on
+    // high-megapixel phones. Requesting a re-encode (quality) forces the
+    // library to decode the capture into an uncompressed bitmap first, and at
+    // full sensor resolution a 48 MP shot needs ~190 MB of native heap — far
+    // past the process limit, so Android kills the app ("keeps stopping")
+    // rather than raising anything JS could catch. With a bound set, the
+    // decode downsamples to the target instead, so peak memory depends on
+    // these numbers and not on the phone's camera. 1920 px keeps enough
+    // detail to read soil texture and core condition, and lands the file
+    // small enough for the 2G/3G uploads these are queued for.
     const result = await launchCamera({
       mediaType: 'photo',
       quality: 0.7,
+      maxWidth: 1920,
+      maxHeight: 1920,
       saveToPhotos: false,
       cameraType: 'back',
     });

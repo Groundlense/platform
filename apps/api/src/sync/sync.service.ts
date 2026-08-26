@@ -468,6 +468,9 @@ export class SyncService {
    * resume then restarted from that stale depth. Carry it forward as intervals
    * arrive. Only ever deepens, so a replayed or out-of-order interval cannot
    * walk the session back up the hole.
+   *
+   * Already-synced intervals never hit this path again; findByBorehole
+   * overlays the proven depth on read so those holes resume correctly too.
    */
   private async advanceOpenSessionDepth(boreholeId: string, toDepth: number) {
     if (!Number.isFinite(toDepth) || toDepth <= 0) {
