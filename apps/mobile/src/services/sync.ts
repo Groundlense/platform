@@ -182,6 +182,49 @@ function mergeServerWithLocal(
   return merged;
 }
 
+/**
+ * Interval merge keyed by intervalNo. Client ids (`interval-<bh>-<n>`) and
+ * server UUIDs for the same SPT used to miss each other, so a later pull
+ * could keep a shallower server row and throw away a deeper local one.
+ */
+function mergeIntervals(
+  serverItems: any[],
+  localItems: any[],
+  queue: SyncOperation[],
+  boreholeId: string
+): any[] {
+  const byNo = new Map<number, any>();
+
+  for (const iv of serverItems) {
+    const no = Number(iv?.intervalNo);
+    if (!Number.isInteger(no)) continue;
+    byNo.set(no, iv);
+  }
+
+  for (const iv of localItems) {
+    const no = Number(iv?.intervalNo);
+    if (!Number.isInteger(no)) continue;
+    const existing = byNo.get(no);
+    if (!existing) {
+      byNo.set(no, iv);
+      continue;
+    }
+    if (isLocallyPending(iv, queue, boreholeId)) {
+      byNo.set(no, { ...existing, ...iv });
+      continue;
+    }
+    const localTo = Number(iv?.toDepth);
+    const serverTo = Number(existing?.toDepth);
+    if (Number.isFinite(localTo) && (!Number.isFinite(serverTo) || localTo > serverTo)) {
+      byNo.set(no, iv);
+    }
+  }
+
+  return [...byNo.values()].sort(
+    (a, b) => (Number(a.intervalNo) || 0) - (Number(b.intervalNo) || 0)
+  );
+}
+
 // Dedupes overlapping sync triggers (15s interval, foreground event, manual
 // screen submits): concurrent callers share the same in-flight round instead
 // of racing each other's sockets and queue writes.
@@ -404,7 +447,7 @@ export const syncManager = {
                   const serverIntervals = await api.getBoreholeIntervals(bh.id);
                   if (Array.isArray(serverIntervals)) {
                     const localIntervals = await storage.getIntervals(bh.id);
-                    const mergedIntervals = mergeServerWithLocal(
+                    const mergedIntervals = mergeIntervals(
                       serverIntervals,
                       localIntervals,
                       pendingQueue,

@@ -167,7 +167,9 @@ export default function SampleCollectionScreen({ route, navigation }: { route: a
       // re-submitting this interval (back-navigation) replaces the local
       // row instead of duplicating it.
       const intervals = await storage.getIntervals(borehole.id);
-      const nextIntervals = intervals.filter((iv: any) => iv.id !== intervalRecord.id);
+      const nextIntervals = intervals.filter(
+        (iv: any) => iv.id !== intervalRecord.id && iv.intervalNo !== intervalNo
+      );
       nextIntervals.push(intervalRecord);
       await storage.saveIntervals(borehole.id, nextIntervals);
 
