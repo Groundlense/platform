@@ -24,6 +24,13 @@ function toNum(val: any): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function asList(v: any): any[] {
+  if (Array.isArray(v)) return v;
+  if (Array.isArray(v?.data)) return v.data;
+  if (Array.isArray(v?.intervals)) return v.intervals;
+  return [];
+}
+
 function fmtDateTime(iso: any): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -44,6 +51,9 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
   const [resumeDepth, setResumeDepth] = useState(0);
   const [sessionCount, setSessionCount] = useState(0);
   const [lastSession, setLastSession] = useState<any>(null);
+  const [resumeReady, setResumeReady] = useState(false);
+  const [openSessionId, setOpenSessionId] = useState<string | null>(null);
+  const [nextRecordedInterval, setNextRecordedInterval] = useState<number | null>(null);
 
   // Project-level SPT spacing (set at project setup, locked once boring starts)
   const [sptIntervalM, setSptIntervalM] = useState(1.5);
@@ -110,8 +120,6 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
 
   const loadResumeContext = async () => {
     try {
-      // Settled independently: one request failing must not discard the depth
-      // the other one already proved.
       const [sessionsRes, intervalsRes] = await Promise.allSettled([
         api.getBoreholeSessions(borehole.id),
         api.getBoreholeIntervals(borehole.id),
@@ -125,18 +133,11 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
       const localSessions = await storage.getBoringSessions(borehole.id);
       const localIntervals = await storage.getIntervals(borehole.id);
 
-      // Drilled depth only ever increases — a hole cannot be un-drilled — so
-      // every source is merged by taking the deepest value instead of trusting
-      // one over another. That keeps the resume correct whether the deeper
-      // data is still queued on this device or was pushed from another one.
       const depths: number[] = [];
+      let maxIntervalNo = 0;
 
-      const asList = (v: any) => (Array.isArray(v) ? v : []);
-
-      // A session's endDepth is only written when the worker terminates. While
-      // a session is open it still holds the start depth (the UPCOMING test),
-      // which is neither drilled nor tested ground — reading it would skip a
-      // test on resume, so only ended sessions count here.
+      // Ended sessions only — an open session's endDepth is still its start
+      // depth (the upcoming test), which would skip or repeat a real SPT.
       for (const s of [...asList(serverSessions), ...localSessions]) {
         const ended = !!s?.endedAt || (s?.status && s.status !== 'IN_PROGRESS');
         if (!ended) continue;
@@ -144,27 +145,35 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
         if (d !== null) depths.push(d);
       }
 
-      // Deepest interval actually drilled and tested — the real source of truth.
+      // Highest recorded SPT wins. Interval number is the reliable index:
+      // after SPT 15 the next is 16, even if a paused session still says 15.0 m.
       for (const iv of [...asList(serverIntervals), ...localIntervals]) {
         const d = toNum(iv?.toDepth);
         if (d !== null) depths.push(d);
+        const no = Number(iv?.intervalNo);
+        if (Number.isInteger(no) && no > maxIntervalNo) maxIntervalNo = no;
       }
 
       const depth = depths.length > 0 ? Math.max(...depths) : 0;
 
-      // Session count and "last session" are presentational only: prefer the
-      // server's history when reachable, else what this device recorded.
       const history =
         online && asList(serverSessions).length > 0 ? serverSessions : localSessions;
-      const sorted = [...history].sort(
+      const sorted = [...asList(history)].sort(
         (a, b) => new Date(a.startedAt || 0).getTime() - new Date(b.startedAt || 0).getTime()
+      );
+      const open = [...sorted].reverse().find(
+        (s) => !s?.endedAt && (!s?.status || s.status === 'IN_PROGRESS')
       );
 
       setSessionCount(sorted.length);
       setLastSession(sorted.length > 0 ? sorted[sorted.length - 1] : null);
       setResumeDepth(depth > 0 ? depth : 0);
+      setNextRecordedInterval(maxIntervalNo > 0 ? maxIntervalNo + 1 : null);
+      setOpenSessionId(open?.id ?? null);
     } catch (err) {
       console.warn('Could not load resume context', err);
+    } finally {
+      setResumeReady(true);
     }
   };
 
@@ -172,11 +181,17 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
   // (the bottom of the interval about to be drilled). A fresh boring never
   // tests at 0.0 m — the first SPT happens one interval down (e.g. 1.5 m).
   // A resumed boring continues at the next grid depth after the deepest
-  // recorded data.
+  // recorded data. Prefer max(intervalNo)+1 when intervals exist so a stale
+  // 15.0 m pause cannot send the worker back to SPT 11 after SPT 15.
   const startDepth = resuming
-    ? Math.round((Math.floor(resumeDepth / sptIntervalM + 1e-9) + 1) * sptIntervalM * 100) / 100
+    ? nextRecordedInterval != null
+      ? Math.round(nextRecordedInterval * sptIntervalM * 100) / 100
+      : Math.round((Math.floor(resumeDepth / sptIntervalM + 1e-9) + 1) * sptIntervalM * 100) / 100
     : sptIntervalM;
-  const nextIntervalNo = Math.max(1, Math.round(startDepth / sptIntervalM));
+  const nextIntervalNo =
+    nextRecordedInterval != null
+      ? nextRecordedInterval
+      : Math.max(1, Math.round(startDepth / sptIntervalM));
 
   // Real camera capture — queued locally, uploaded on sync once the first
   // interval of this session exists on the server.
@@ -225,6 +240,7 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
 
   const handleStartBoring = async () => {
     if (starting) return;
+    if (!resumeReady) return;
 
     // Far from the planned point? Confirm before starting — the deviation
     // is recorded either way, never hidden.
@@ -246,17 +262,21 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
 
     setStarting(true);
     try {
-      // Freshest available arrival position (watch fix, else one-shot)
       const arrivalFix = gpsFix ?? (await location.getCurrentPosition({ silent: true, lang }));
-      // Try to open a real server session; fall back to a local-only record offline
-      let sessionId = `sess-${Date.now()}`;
-      try {
-        const serverSession = await api.startBoringSession(borehole.id, startDepth);
-        if (serverSession?.id) {
-          sessionId = serverSession.id;
+
+      // Reuse the open session. Starting a second one here used to seed
+      // endDepth at this screen's startDepth (e.g. SPT 11 / 16.5 m) while
+      // SPT 12–15 were already recorded — the next reopen then jumped back.
+      let sessionId = openSessionId || `sess-${Date.now()}`;
+      if (!openSessionId) {
+        try {
+          const serverSession = await api.startBoringSession(borehole.id, startDepth);
+          if (serverSession?.id) {
+            sessionId = serverSession.id;
+          }
+        } catch (apiErr) {
+          // Offline — keep the locally generated session id
         }
-      } catch (apiErr) {
-        // Offline — keep the locally generated session id
       }
 
       const cachedBoreholes = await storage.getBoreholes(projectId);
@@ -273,53 +293,46 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
       });
       await storage.saveBoreholes(projectId, updated);
 
-      // Record the boring session locally (works offline)
-      const newSession = {
-        id: sessionId,
-        boreholeId: borehole.id,
-        startDepth,
-        weather,
-        startedAt: new Date().toISOString(),
-        status: 'IN_PROGRESS',
-      };
-      const sessions = await storage.getBoringSessions(borehole.id);
-      sessions.push(newSession);
-      await storage.saveBoringSessions(borehole.id, sessions);
-
-      // Queue sync actions — the worker's real arrival GPS travels with the
-      // status update so the portal can show planned-vs-actual deviation.
-      // startedAt is the actual moment boring began (not the RigSetup date,
-      // which only carries a date with no time) — overwrites that placeholder.
-      await syncManager.queueOperation(
-        'BORING',
-        borehole.id,
-        'UPDATE',
-        {
-          status: 'IN_PROGRESS',
+      if (!openSessionId) {
+        const newSession = {
+          id: sessionId,
+          boreholeId: borehole.id,
+          startDepth,
           weather,
-          startedAt: newSession.startedAt,
-          ...(arrivalFix
-            ? {
-                actualLat: arrivalFix.lat,
-                actualLng: arrivalFix.lng,
-                actualAccuracyM: arrivalFix.accuracyM ?? undefined,
-              }
-            : {}),
-        },
-        sessionId
-      );
+          startedAt: new Date().toISOString(),
+          status: 'IN_PROGRESS',
+        };
+        const sessions = await storage.getBoringSessions(borehole.id);
+        sessions.push(newSession);
+        await storage.saveBoringSessions(borehole.id, sessions);
 
-      // The rig photo (if captured) is already in the photo queue and
-      // uploads automatically on sync once the first interval syncs.
+        await syncManager.queueOperation(
+          'BORING',
+          borehole.id,
+          'UPDATE',
+          {
+            status: 'IN_PROGRESS',
+            weather,
+            startedAt: newSession.startedAt,
+            ...(arrivalFix
+              ? {
+                  actualLat: arrivalFix.lat,
+                  actualLng: arrivalFix.lng,
+                  actualAccuracyM: arrivalFix.accuracyM ?? undefined,
+                }
+              : {}),
+          },
+          sessionId
+        );
+      }
 
-      // Navigate to SPT entry loop screen
       navigation.replace('SPTEntry', {
         borehole: updated.find((bh: any) => bh.id === borehole.id) || borehole,
         projectId,
         sessionId,
         currentDepth: startDepth,
         intervalNo: nextIntervalNo,
-        sessionNumber: sessionCount + 1,
+        sessionNumber: sessionCount + (openSessionId ? 0 : 1),
       });
     } catch (err) {
       Alert.alert('Error', 'Failed to start boring');
@@ -535,11 +548,19 @@ export default function StartBoringScreen({ route, navigation }: { route: any; n
         {/* Photos of this borehole — queued + synced, tap for geo-tag details */}
         <PhotoGallery borehole={borehole} lang={lang} />
 
-        <TouchableOpacity style={styles.startBtn} onPress={handleStartBoring} disabled={starting}>
+        <TouchableOpacity
+          style={styles.startBtn}
+          onPress={handleStartBoring}
+          disabled={starting || !resumeReady}
+        >
           <Text style={styles.startBtnText}>
-            ▶ {resuming
-              ? `${t('resume', lang)} — ${lang === 'hi' ? 'अगला SPT' : 'next SPT'} ${startDepth.toFixed(1)}m`
-              : `${t('startBoringBtn', lang)} — ${lang === 'hi' ? 'पहला SPT' : 'first SPT'} ${startDepth.toFixed(1)}m`}
+            {!resumeReady
+              ? lang === 'hi' ? 'गहराई पढ़ी जा रही है…' : 'Reading last recorded depth…'
+              : `▶ ${
+                  resuming
+                    ? `${t('resume', lang)} — ${lang === 'hi' ? 'अगला SPT' : 'next SPT'} ${startDepth.toFixed(1)}m (SPT ${nextIntervalNo})`
+                    : `${t('startBoringBtn', lang)} — ${lang === 'hi' ? 'पहला SPT' : 'first SPT'} ${startDepth.toFixed(1)}m`
+                }`}
           </Text>
         </TouchableOpacity>
       </ScrollView>
